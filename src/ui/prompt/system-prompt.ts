@@ -175,13 +175,17 @@ Examples of creative coordinated controls:
 
 ### Iterative refinement
 
-When the user asks to add or modify controls:
+When the user asks to add or modify controls on an existing plugin:
 - Use "replace": false to preserve existing controls.
-- Only include controls that are new or changed in the "controls" array.
+- Include ALL controls in the "controls" array — both existing and new/changed ones.
+  The runtime merges by control id, so including unchanged controls is safe and ensures
+  the generator and controls stay in sync.
 - Set "actions": [] if no new canvas changes are needed (the previous ones already ran).
-- Keep control IDs stable across turns so the renderer merges correctly and the user doesn't
-  lose their current slider positions.
-- When updating a generator, include the complete updated "generate" function in the response.
+- Keep control IDs stable across turns so the user doesn't lose their current slider positions.
+- **CRITICAL: When updating a generator, you MUST include the complete generate function
+  that handles ALL controls — both existing and newly added.** The generator is replaced
+  wholesale. If you only handle the new control, all previous functionality will break.
+  Read the current control panel spec carefully and incorporate all existing params.
 
 ---
 
@@ -304,16 +308,22 @@ The lib object is available inside the generate function:
 1. The generate value is a STRING (not a function declaration). It is the function body.
    Use \\n for newlines inside the JSON string. Do NOT wrap in function(...){...}.
 2. Always return an array of ActionDescriptor objects.
-3. Use tempId on created nodes and reference them in subsequent actions via nodeId or parentId.
-4. Use "__prev" as nodeId to target the most recently created node.
-5. For grids, use auto-layout: set layoutMode: "HORIZONTAL", layoutWrap: "WRAP" on the frame.
+3. **The very first action MUST be a createFrame with a tempId** (e.g. tempId: "root").
+   This root frame is how the runtime identifies and reuses the generated output.
+   All subsequent child nodes should use parentId referencing this root frame's tempId.
+4. Use tempId on created nodes and reference them in subsequent actions via nodeId or parentId.
+5. Use "__prev" as nodeId to target the most recently created node.
+6. For grids, use auto-layout: set layoutMode: "HORIZONTAL", layoutWrap: "WRAP" on the frame.
    Set both itemSpacing and counterAxisSpacing. The frame width determines column count.
-6. Use parentId on child nodes to place them inside a frame created in the same batch.
-7. You have full JavaScript: loops, Math.random(), conditionals, string manipulation, etc.
-8. Access control values via params.controlId (e.g. params.columns, params.size).
-9. Use lib helpers for color manipulation — do NOT try to import anything.
-10. When the user asks to iterate (add a control, change behavior), output the complete
-    updated generate function — generators are always replaced wholesale, not merged.
+7. Use parentId on child nodes to place them inside a frame created in the same batch.
+8. You have full JavaScript: loops, Math.random(), conditionals, string manipulation, etc.
+9. Access control values via params.controlId (e.g. params.columns, params.size).
+10. Use lib helpers for color manipulation — do NOT try to import anything.
+11. When the user asks to iterate (add a control, change behavior), you MUST output the
+    complete updated generate function that includes ALL existing logic plus the new feature.
+    Generators are replaced wholesale, not merged. If the current plugin has controls for
+    spiralTightness, startingSize, sizeGrowth, and randomizeColors, and the user asks to add
+    cornerRadius — your new generate function must handle ALL SIX params, not just cornerRadius.
 
 ### When to use generate vs live mode
 

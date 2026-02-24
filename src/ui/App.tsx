@@ -94,6 +94,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [selectionContext, setSelectionContext] = useState<SelectionContext | null>(null);
   const createdNodeIdsRef = useRef<string[]>([]);
+  const rootFrameIdRef = useRef<string | undefined>(undefined);
 
   // Keep a ref to the latest messages so the submit callback always sees
   // current history without needing to be in its dependency array.
@@ -108,12 +109,32 @@ function App() {
     return onMainMessage((msg) => {
       if (msg.type === 'SELECTION_CONTEXT') {
         setSelectionContext(msg.payload);
+
+        // Restore plugin memory: if the selected node has stored plugin spec data,
+        // parse and restore the UI controls/generator without an LLM call.
+        if (msg.payload.pluginSpec) {
+          try {
+            const restored = JSON.parse(msg.payload.pluginSpec) as UISpec;
+            setCurrentUISpec(restored);
+            // The selected node IS the root frame — track it for in-place reuse.
+            if (msg.payload.nodes.length > 0) {
+              rootFrameIdRef.current = msg.payload.nodes[0].id;
+              createdNodeIdsRef.current = [msg.payload.nodes[0].id];
+            }
+            addMessage('assistant', 'Restored plugin controls from selected frame.');
+          } catch {
+            console.warn('[app] failed to parse stored pluginSpec');
+          }
+        }
       } else if (msg.type === 'EXECUTION_RESULT') {
-        const { errorCount, errors, tempIdMap, createdNodeIds } = msg.payload;
+        const { errorCount, errors, tempIdMap, createdNodeIds, rootFrameId } = msg.payload;
         if (errorCount > 0) {
           addMessage('error', `${errorCount} action(s) failed:\n${errors.join('\n')}`);
         }
         createdNodeIdsRef.current = createdNodeIds;
+        if (rootFrameId) {
+          rootFrameIdRef.current = rootFrameId;
+        }
         // Rewrite tempId references in the current UI spec with real node IDs.
         if (tempIdMap && Object.keys(tempIdMap).length > 0) {
           setCurrentUISpec(prev => prev ? rewriteTempIds(prev, tempIdMap) : prev);
@@ -155,6 +176,50 @@ function App() {
       return;
     }
 
+    const existingFrameId = rootFrameIdRef.current;
+
+    if (existingFrameId) {
+      // Reuse the existing frame: delete its children, then re-populate.
+      // Find the generator's root createFrame action and replace it with a
+      // deleteChildren + property updates on the existing frame.
+      const rootIdx = resolved.findIndex(
+        a => a.method === 'createFrame' && !a.parentId,
+      );
+
+      if (rootIdx !== -1) {
+        const rootAction = resolved[rootIdx];
+        const rootTempId = rootAction.tempId;
+
+        // Build cleanup: delete children of the existing frame.
+        const cleanupActions: ActionDescriptor[] = [{
+          method: 'deleteChildren',
+          nodeId: existingFrameId,
+          args: {},
+        }];
+
+        // Keep layout/property actions that target the root frame, but rewrite
+        // them to use the real frame ID instead of the tempId.
+        const rewrittenActions = resolved.slice(rootIdx + 1).map((a) => {
+          const rewritten = { ...a };
+          if (rootTempId) {
+            if (rewritten.nodeId === rootTempId) rewritten.nodeId = existingFrameId;
+            if (rewritten.parentId === rootTempId) rewritten.parentId = existingFrameId;
+          }
+          return rewritten;
+        });
+
+        postToMain({
+          type: 'EXECUTE_ACTIONS',
+          payload: {
+            actions: [...cleanupActions, ...rewrittenActions],
+            pluginSpec: JSON.stringify(currentUISpec),
+          },
+        });
+        return;
+      }
+    }
+
+    // No existing frame — full cleanup and create from scratch.
     const cleanupActions: ActionDescriptor[] = createdNodeIdsRef.current.map((id) => ({
       method: 'deleteNode',
       nodeId: id,
@@ -163,7 +228,10 @@ function App() {
 
     postToMain({
       type: 'EXECUTE_ACTIONS',
-      payload: { actions: [...cleanupActions, ...resolved] },
+      payload: {
+        actions: [...cleanupActions, ...resolved],
+        pluginSpec: JSON.stringify(currentUISpec),
+      },
     });
   }, [addMessage, currentUISpec]);
 
@@ -219,40 +287,10 @@ function App() {
       addMessage('assistant', `Done — ${actions.length} action(s), ${normalizedUi.controls.length} control(s)${genLabel} generated.`);
     }
 
-    // Dispatch actions to the main thread for execution.
-    if (actions.length > 0) {
-      postToMain({
-        type: 'EXECUTE_ACTIONS',
-        payload: { actions: actions as ActionDescriptor[] },
-      });
-    } else if (normalizedUi.mode === 'apply') {
-      // Auto-execute on first load using generator or template with defaults.
-      const defaults = collectControlDefaults(normalizedUi.controls);
-
-      if (normalizedUi.generate) {
-        try {
-          const fn = compileGenerator(normalizedUi.generate);
-          const generated = executeGenerator(fn, defaults);
-          postToMain({
-            type: 'EXECUTE_ACTIONS',
-            payload: { actions: generated },
-          });
-        } catch (err) {
-          addMessage('error', `Generator error: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      } else if (normalizedUi.actionTemplate?.length) {
-        const resolved = resolveTemplate(normalizedUi.actionTemplate, defaults);
-        postToMain({
-          type: 'EXECUTE_ACTIONS',
-          payload: { actions: resolved },
-        });
-      }
-    }
-
-    // Update the rendered UI spec.
-    setCurrentUISpec(prev => {
+    // Compute the merged UISpec first so auto-execution uses the full spec.
+    const mergedUi: UISpec = (() => {
+      const prev = uiSpec;
       if (!prev || normalizedUi.replace) return normalizedUi;
-      // Merge: replace controls by id, append new ones.
       const existingById = new Map(prev.controls.map(c => [c.id, c]));
       for (const c of normalizedUi.controls) existingById.set(c.id, c);
       return {
@@ -263,7 +301,78 @@ function App() {
         actionTemplate: normalizedUi.actionTemplate ?? prev.actionTemplate,
         controls: Array.from(existingById.values()),
       };
-    });
+    })();
+
+    // Only reset frame tracking when the LLM is building from scratch.
+    if (normalizedUi.replace) {
+      rootFrameIdRef.current = undefined;
+    }
+
+    const specJson = JSON.stringify(mergedUi);
+    const existingFrameId = rootFrameIdRef.current;
+
+    // Dispatch actions to the main thread for execution.
+    if (actions.length > 0) {
+      postToMain({
+        type: 'EXECUTE_ACTIONS',
+        payload: { actions: actions as ActionDescriptor[], pluginSpec: specJson },
+      });
+    } else if (mergedUi.mode === 'apply' && mergedUi.generate) {
+      // Auto-execute using the merged generator with default control values.
+      const defaults = collectControlDefaults(mergedUi.controls);
+
+      try {
+        const fn = compileGenerator(mergedUi.generate);
+        const generated = executeGenerator(fn, defaults);
+
+        if (existingFrameId) {
+          // Reuse the existing frame: strip createFrame, deleteChildren, rewrite tempIds.
+          const rootIdx = generated.findIndex(a => a.method === 'createFrame' && !a.parentId);
+          if (rootIdx !== -1) {
+            const rootTempId = generated[rootIdx].tempId;
+            const cleanupActions: ActionDescriptor[] = [{
+              method: 'deleteChildren',
+              nodeId: existingFrameId,
+              args: {},
+            }];
+            const rewrittenActions = generated.slice(rootIdx + 1).map((a) => {
+              const rewritten = { ...a };
+              if (rootTempId) {
+                if (rewritten.nodeId === rootTempId) rewritten.nodeId = existingFrameId;
+                if (rewritten.parentId === rootTempId) rewritten.parentId = existingFrameId;
+              }
+              return rewritten;
+            });
+            postToMain({
+              type: 'EXECUTE_ACTIONS',
+              payload: { actions: [...cleanupActions, ...rewrittenActions], pluginSpec: specJson },
+            });
+          } else {
+            postToMain({
+              type: 'EXECUTE_ACTIONS',
+              payload: { actions: generated, pluginSpec: specJson },
+            });
+          }
+        } else {
+          postToMain({
+            type: 'EXECUTE_ACTIONS',
+            payload: { actions: generated, pluginSpec: specJson },
+          });
+        }
+      } catch (err) {
+        addMessage('error', `Generator error: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    } else if (mergedUi.mode === 'apply' && mergedUi.actionTemplate?.length) {
+      const defaults = collectControlDefaults(mergedUi.controls);
+      const resolved = resolveTemplate(mergedUi.actionTemplate, defaults);
+      postToMain({
+        type: 'EXECUTE_ACTIONS',
+        payload: { actions: resolved, pluginSpec: specJson },
+      });
+    }
+
+    // Update the rendered UI spec with the merged result.
+    setCurrentUISpec(mergedUi);
 
     setIsLoading(false);
   }, [addMessage, selectionContext, currentUISpec]);

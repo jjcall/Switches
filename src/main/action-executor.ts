@@ -499,6 +499,17 @@ async function dispatchAction(action: ActionDescriptor, tempMap: TempNodeMap): P
       return null;
     }
 
+    case 'deleteChildren': {
+      const node = await resolveNode(nodeId, tempMap);
+      if ('children' in node) {
+        const parent = node as FrameNode;
+        for (let ci = parent.children.length - 1; ci >= 0; ci--) {
+          parent.children[ci].remove();
+        }
+      }
+      return null;
+    }
+
     default:
       throw new Error(`Unknown action method: "${method}"`);
   }
@@ -509,11 +520,18 @@ async function dispatchAction(action: ActionDescriptor, tempMap: TempNodeMap): P
 /**
  * Executes a batch of LLM-generated actions inside a single undo group.
  * Individual action failures are caught and collected — execution continues.
+ *
+ * When pluginSpec is provided, it is persisted on the first top-level frame
+ * created in the batch via setPluginData, enabling plugin memory.
  */
-export async function executeActions(actions: ActionDescriptor[]): Promise<ExecutionResult> {
+export async function executeActions(
+  actions: ActionDescriptor[],
+  pluginSpec?: string,
+): Promise<ExecutionResult> {
   const errors: string[] = [];
   const createdNodeIds: string[] = [];
   let executedCount = 0;
+  let rootFrameId: string | undefined;
 
   const tempMap: TempNodeMap = new Map();
   lastCreatedNode = null;
@@ -525,13 +543,32 @@ export async function executeActions(actions: ActionDescriptor[]): Promise<Execu
     try {
       const created = await dispatchAction(action, tempMap);
       executedCount++;
-      // Only track top-level created nodes (no parentId) for cleanup.
-      // Deleting a parent automatically removes its children.
-      if (created && !action.parentId) createdNodeIds.push(created.id);
+      if (created && !action.parentId) {
+        createdNodeIds.push(created.id);
+        if (!rootFrameId && created.type === 'FRAME') {
+          rootFrameId = created.id;
+        }
+      }
+      // Track the frame targeted by deleteChildren as root for reuse scenarios.
+      if (action.method === 'deleteChildren' && action.nodeId && !rootFrameId) {
+        rootFrameId = action.nodeId;
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       errors.push(`[${i}] ${action.method}: ${msg}`);
       console.error(`[action-executor] action[${i}] ${action.method} failed:`, msg);
+    }
+  }
+
+  // Persist plugin spec on the root frame so it can be restored on re-selection.
+  if (pluginSpec && rootFrameId) {
+    try {
+      const rootNode = await figma.getNodeByIdAsync(rootFrameId);
+      if (rootNode && 'setPluginData' in rootNode) {
+        (rootNode as SceneNode).setPluginData('pluginSpec', pluginSpec);
+      }
+    } catch (err) {
+      console.warn('[action-executor] failed to persist pluginSpec:', err);
     }
   }
 
@@ -550,6 +587,7 @@ export async function executeActions(actions: ActionDescriptor[]): Promise<Execu
     errors,
     createdNodeIds,
     tempIdMap,
+    rootFrameId,
   };
 }
 

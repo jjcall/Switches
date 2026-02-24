@@ -597,14 +597,25 @@
         }
         return null;
       }
+      case "deleteChildren": {
+        const node = await resolveNode(nodeId, tempMap);
+        if ("children" in node) {
+          const parent = node;
+          for (let ci = parent.children.length - 1; ci >= 0; ci--) {
+            parent.children[ci].remove();
+          }
+        }
+        return null;
+      }
       default:
         throw new Error(`Unknown action method: "${method}"`);
     }
   }
-  async function executeActions(actions) {
+  async function executeActions(actions, pluginSpec) {
     const errors = [];
     const createdNodeIds = [];
     let executedCount = 0;
+    let rootFrameId;
     const tempMap = /* @__PURE__ */ new Map();
     lastCreatedNode = null;
     figma.commitUndo();
@@ -613,11 +624,29 @@
       try {
         const created = await dispatchAction(action, tempMap);
         executedCount++;
-        if (created && !action.parentId) createdNodeIds.push(created.id);
+        if (created && !action.parentId) {
+          createdNodeIds.push(created.id);
+          if (!rootFrameId && created.type === "FRAME") {
+            rootFrameId = created.id;
+          }
+        }
+        if (action.method === "deleteChildren" && action.nodeId && !rootFrameId) {
+          rootFrameId = action.nodeId;
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         errors.push(`[${i}] ${action.method}: ${msg}`);
         console.error(`[action-executor] action[${i}] ${action.method} failed:`, msg);
+      }
+    }
+    if (pluginSpec && rootFrameId) {
+      try {
+        const rootNode = await figma.getNodeByIdAsync(rootFrameId);
+        if (rootNode && "setPluginData" in rootNode) {
+          rootNode.setPluginData("pluginSpec", pluginSpec);
+        }
+      } catch (err) {
+        console.warn("[action-executor] failed to persist pluginSpec:", err);
       }
     }
     figma.commitUndo();
@@ -631,7 +660,8 @@
       errorCount: errors.length,
       errors,
       createdNodeIds,
-      tempIdMap
+      tempIdMap,
+      rootFrameId
     };
   }
   async function applyControlChange(action, value) {
@@ -673,8 +703,8 @@
     });
   }
   function handleExecuteActions(msg) {
-    const { actions } = msg.payload;
-    executeActions(actions).then((result) => {
+    const { actions, pluginSpec } = msg.payload;
+    executeActions(actions, pluginSpec).then((result) => {
       const response = {
         type: "EXECUTION_RESULT",
         payload: result
@@ -731,6 +761,17 @@
   }
   function sendSelectionContext() {
     const payload = serializeSelection(figma.currentPage.selection);
+    const selection = figma.currentPage.selection;
+    for (const node of selection) {
+      try {
+        const spec = node.getPluginData("pluginSpec");
+        if (spec) {
+          payload.pluginSpec = spec;
+          break;
+        }
+      } catch (e) {
+      }
+    }
     const message = {
       type: "SELECTION_CONTEXT",
       payload

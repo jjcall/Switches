@@ -104,6 +104,8 @@ export interface LetterSpacing {
 export interface SelectionContext {
   nodes: NodeDescriptor[];
   truncated: boolean;
+  /** Stored plugin spec JSON from a previously generated frame (if selected). */
+  pluginSpec?: string;
 }
 
 // ─── Message types ────────────────────────────────────────────────────────────
@@ -137,6 +139,8 @@ export interface ExecuteActionsMessage {
   type: 'EXECUTE_ACTIONS';
   payload: {
     actions: ActionDescriptor[];
+    /** Serialized UISpec JSON to persist on the root frame via setPluginData. */
+    pluginSpec?: string;
   };
 }
 
@@ -168,6 +172,8 @@ export interface ExecutionResult {
   createdNodeIds: string[];
   /** Maps tempId strings used in the action batch to real Figma node IDs. */
   tempIdMap?: Record<string, string>;
+  /** The ID of the top-level frame created by a generator, for frame reuse on re-apply. */
+  rootFrameId?: string;
 }
 
 /** Iframe → main: asks the main thread to proxy a Claude API call. */

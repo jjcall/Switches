@@ -25554,13 +25554,17 @@ Examples of creative coordinated controls:
 
 ### Iterative refinement
 
-When the user asks to add or modify controls:
+When the user asks to add or modify controls on an existing plugin:
 - Use "replace": false to preserve existing controls.
-- Only include controls that are new or changed in the "controls" array.
+- Include ALL controls in the "controls" array \u2014 both existing and new/changed ones.
+  The runtime merges by control id, so including unchanged controls is safe and ensures
+  the generator and controls stay in sync.
 - Set "actions": [] if no new canvas changes are needed (the previous ones already ran).
-- Keep control IDs stable across turns so the renderer merges correctly and the user doesn't
-  lose their current slider positions.
-- When updating a generator, include the complete updated "generate" function in the response.
+- Keep control IDs stable across turns so the user doesn't lose their current slider positions.
+- **CRITICAL: When updating a generator, you MUST include the complete generate function
+  that handles ALL controls \u2014 both existing and newly added.** The generator is replaced
+  wholesale. If you only handle the new control, all previous functionality will break.
+  Read the current control panel spec carefully and incorporate all existing params.
 
 ---
 
@@ -25683,16 +25687,22 @@ The lib object is available inside the generate function:
 1. The generate value is a STRING (not a function declaration). It is the function body.
    Use \\n for newlines inside the JSON string. Do NOT wrap in function(...){...}.
 2. Always return an array of ActionDescriptor objects.
-3. Use tempId on created nodes and reference them in subsequent actions via nodeId or parentId.
-4. Use "__prev" as nodeId to target the most recently created node.
-5. For grids, use auto-layout: set layoutMode: "HORIZONTAL", layoutWrap: "WRAP" on the frame.
+3. **The very first action MUST be a createFrame with a tempId** (e.g. tempId: "root").
+   This root frame is how the runtime identifies and reuses the generated output.
+   All subsequent child nodes should use parentId referencing this root frame's tempId.
+4. Use tempId on created nodes and reference them in subsequent actions via nodeId or parentId.
+5. Use "__prev" as nodeId to target the most recently created node.
+6. For grids, use auto-layout: set layoutMode: "HORIZONTAL", layoutWrap: "WRAP" on the frame.
    Set both itemSpacing and counterAxisSpacing. The frame width determines column count.
-6. Use parentId on child nodes to place them inside a frame created in the same batch.
-7. You have full JavaScript: loops, Math.random(), conditionals, string manipulation, etc.
-8. Access control values via params.controlId (e.g. params.columns, params.size).
-9. Use lib helpers for color manipulation \u2014 do NOT try to import anything.
-10. When the user asks to iterate (add a control, change behavior), output the complete
-    updated generate function \u2014 generators are always replaced wholesale, not merged.
+7. Use parentId on child nodes to place them inside a frame created in the same batch.
+8. You have full JavaScript: loops, Math.random(), conditionals, string manipulation, etc.
+9. Access control values via params.controlId (e.g. params.columns, params.size).
+10. Use lib helpers for color manipulation \u2014 do NOT try to import anything.
+11. When the user asks to iterate (add a control, change behavior), you MUST output the
+    complete updated generate function that includes ALL existing logic plus the new feature.
+    Generators are replaced wholesale, not merged. If the current plugin has controls for
+    spiralTightness, startingSize, sizeGrowth, and randomizeColors, and the user asks to add
+    cornerRadius \u2014 your new generate function must handle ALL SIX params, not just cornerRadius.
 
 ### When to use generate vs live mode
 
@@ -36314,6 +36324,7 @@ ${text.slice(0, 300)}` };
     const [isLoading, setIsLoading] = (0, import_react38.useState)(false);
     const [selectionContext, setSelectionContext] = (0, import_react38.useState)(null);
     const createdNodeIdsRef = (0, import_react38.useRef)([]);
+    const rootFrameIdRef = (0, import_react38.useRef)(void 0);
     const messagesRef = (0, import_react38.useRef)(messages);
     messagesRef.current = messages;
     (0, import_react38.useEffect)(() => {
@@ -36321,13 +36332,29 @@ ${text.slice(0, 300)}` };
       return onMainMessage((msg) => {
         if (msg.type === "SELECTION_CONTEXT") {
           setSelectionContext(msg.payload);
+          if (msg.payload.pluginSpec) {
+            try {
+              const restored = JSON.parse(msg.payload.pluginSpec);
+              setCurrentUISpec(restored);
+              if (msg.payload.nodes.length > 0) {
+                rootFrameIdRef.current = msg.payload.nodes[0].id;
+                createdNodeIdsRef.current = [msg.payload.nodes[0].id];
+              }
+              addMessage("assistant", "Restored plugin controls from selected frame.");
+            } catch {
+              console.warn("[app] failed to parse stored pluginSpec");
+            }
+          }
         } else if (msg.type === "EXECUTION_RESULT") {
-          const { errorCount, errors, tempIdMap, createdNodeIds } = msg.payload;
+          const { errorCount, errors, tempIdMap, createdNodeIds, rootFrameId } = msg.payload;
           if (errorCount > 0) {
             addMessage("error", `${errorCount} action(s) failed:
 ${errors.join("\n")}`);
           }
           createdNodeIdsRef.current = createdNodeIds;
+          if (rootFrameId) {
+            rootFrameIdRef.current = rootFrameId;
+          }
           if (tempIdMap && Object.keys(tempIdMap).length > 0) {
             setCurrentUISpec((prev) => prev ? rewriteTempIds(prev, tempIdMap) : prev);
           }
@@ -36359,6 +36386,37 @@ ${errors.join("\n")}`);
         addMessage("error", "Apply mode requires either a generate function or an actionTemplate.");
         return;
       }
+      const existingFrameId = rootFrameIdRef.current;
+      if (existingFrameId) {
+        const rootIdx = resolved.findIndex(
+          (a) => a.method === "createFrame" && !a.parentId
+        );
+        if (rootIdx !== -1) {
+          const rootAction = resolved[rootIdx];
+          const rootTempId = rootAction.tempId;
+          const cleanupActions2 = [{
+            method: "deleteChildren",
+            nodeId: existingFrameId,
+            args: {}
+          }];
+          const rewrittenActions = resolved.slice(rootIdx + 1).map((a) => {
+            const rewritten = { ...a };
+            if (rootTempId) {
+              if (rewritten.nodeId === rootTempId) rewritten.nodeId = existingFrameId;
+              if (rewritten.parentId === rootTempId) rewritten.parentId = existingFrameId;
+            }
+            return rewritten;
+          });
+          postToMain({
+            type: "EXECUTE_ACTIONS",
+            payload: {
+              actions: [...cleanupActions2, ...rewrittenActions],
+              pluginSpec: JSON.stringify(currentUISpec)
+            }
+          });
+          return;
+        }
+      }
       const cleanupActions = createdNodeIdsRef.current.map((id3) => ({
         method: "deleteNode",
         nodeId: id3,
@@ -36366,7 +36424,10 @@ ${errors.join("\n")}`);
       }));
       postToMain({
         type: "EXECUTE_ACTIONS",
-        payload: { actions: [...cleanupActions, ...resolved] }
+        payload: {
+          actions: [...cleanupActions, ...resolved],
+          pluginSpec: JSON.stringify(currentUISpec)
+        }
       });
     }, [addMessage, currentUISpec]);
     const handleSubmit = (0, import_react38.useCallback)(async (text) => {
@@ -36403,33 +36464,8 @@ ${errors.join("\n")}`);
         const genLabel = normalizedUi.generate ? " + generator" : "";
         addMessage("assistant", `Done \u2014 ${actions.length} action(s), ${normalizedUi.controls.length} control(s)${genLabel} generated.`);
       }
-      if (actions.length > 0) {
-        postToMain({
-          type: "EXECUTE_ACTIONS",
-          payload: { actions }
-        });
-      } else if (normalizedUi.mode === "apply") {
-        const defaults = collectControlDefaults(normalizedUi.controls);
-        if (normalizedUi.generate) {
-          try {
-            const fn = compileGenerator(normalizedUi.generate);
-            const generated = executeGenerator(fn, defaults);
-            postToMain({
-              type: "EXECUTE_ACTIONS",
-              payload: { actions: generated }
-            });
-          } catch (err) {
-            addMessage("error", `Generator error: ${err instanceof Error ? err.message : String(err)}`);
-          }
-        } else if (normalizedUi.actionTemplate?.length) {
-          const resolved = resolveTemplate(normalizedUi.actionTemplate, defaults);
-          postToMain({
-            type: "EXECUTE_ACTIONS",
-            payload: { actions: resolved }
-          });
-        }
-      }
-      setCurrentUISpec((prev) => {
+      const mergedUi = (() => {
+        const prev = uiSpec;
         if (!prev || normalizedUi.replace) return normalizedUi;
         const existingById = new Map(prev.controls.map((c) => [c.id, c]));
         for (const c of normalizedUi.controls) existingById.set(c.id, c);
@@ -36441,7 +36477,67 @@ ${errors.join("\n")}`);
           actionTemplate: normalizedUi.actionTemplate ?? prev.actionTemplate,
           controls: Array.from(existingById.values())
         };
-      });
+      })();
+      if (normalizedUi.replace) {
+        rootFrameIdRef.current = void 0;
+      }
+      const specJson = JSON.stringify(mergedUi);
+      const existingFrameId = rootFrameIdRef.current;
+      if (actions.length > 0) {
+        postToMain({
+          type: "EXECUTE_ACTIONS",
+          payload: { actions, pluginSpec: specJson }
+        });
+      } else if (mergedUi.mode === "apply" && mergedUi.generate) {
+        const defaults = collectControlDefaults(mergedUi.controls);
+        try {
+          const fn = compileGenerator(mergedUi.generate);
+          const generated = executeGenerator(fn, defaults);
+          if (existingFrameId) {
+            const rootIdx = generated.findIndex((a) => a.method === "createFrame" && !a.parentId);
+            if (rootIdx !== -1) {
+              const rootTempId = generated[rootIdx].tempId;
+              const cleanupActions = [{
+                method: "deleteChildren",
+                nodeId: existingFrameId,
+                args: {}
+              }];
+              const rewrittenActions = generated.slice(rootIdx + 1).map((a) => {
+                const rewritten = { ...a };
+                if (rootTempId) {
+                  if (rewritten.nodeId === rootTempId) rewritten.nodeId = existingFrameId;
+                  if (rewritten.parentId === rootTempId) rewritten.parentId = existingFrameId;
+                }
+                return rewritten;
+              });
+              postToMain({
+                type: "EXECUTE_ACTIONS",
+                payload: { actions: [...cleanupActions, ...rewrittenActions], pluginSpec: specJson }
+              });
+            } else {
+              postToMain({
+                type: "EXECUTE_ACTIONS",
+                payload: { actions: generated, pluginSpec: specJson }
+              });
+            }
+          } else {
+            postToMain({
+              type: "EXECUTE_ACTIONS",
+              payload: { actions: generated, pluginSpec: specJson }
+            });
+          }
+        } catch (err) {
+          addMessage("error", `Generator error: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      } else if (mergedUi.mode === "apply" && mergedUi.actionTemplate?.length) {
+        const defaults = collectControlDefaults(mergedUi.controls);
+        const resolved = resolveTemplate(mergedUi.actionTemplate, defaults);
+        postToMain({
+          type: "EXECUTE_ACTIONS",
+          payload: { actions: resolved, pluginSpec: specJson }
+        });
+      }
+      setCurrentUISpec(mergedUi);
       setIsLoading(false);
     }, [addMessage, selectionContext, currentUISpec]);
     const hasSpec = currentUISpec !== null && currentUISpec.controls.length > 0;

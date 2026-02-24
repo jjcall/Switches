@@ -1,6 +1,7 @@
 /// <reference types="@figma/plugin-typings" />
 
 import type {
+  ActionDescriptor,
   IframeToMainMessage,
   PluginReadyMessage,
   ControlChangeMessage,
@@ -53,8 +54,8 @@ function handleControlChange(msg: ControlChangeMessage): void {
 }
 
 function handleExecuteActions(msg: ExecuteActionsMessage): void {
-  const { actions } = msg.payload;
-  executeActions(actions).then((result) => {
+  const { actions, pluginSpec } = msg.payload;
+  executeActions(actions, pluginSpec).then((result) => {
     const response: ExecutionResultMessage = {
       type: 'EXECUTION_RESULT',
       payload: result,
@@ -120,6 +121,21 @@ async function handleClaudeRequest(msg: ClaudeRequestMessage): Promise<void> {
 /** Serializes the current page selection and sends it to the iframe. */
 export function sendSelectionContext(): void {
   const payload = serializeSelection(figma.currentPage.selection);
+
+  // Check if any selected node carries stored plugin spec data.
+  const selection = figma.currentPage.selection;
+  for (const node of selection) {
+    try {
+      const spec = node.getPluginData('pluginSpec');
+      if (spec) {
+        payload.pluginSpec = spec;
+        break;
+      }
+    } catch {
+      // getPluginData not supported on this node type — skip.
+    }
+  }
+
   const message: SelectionContextMessage = {
     type: 'SELECTION_CONTEXT',
     payload,
