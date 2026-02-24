@@ -52,18 +52,6 @@ function useShellResize() {
   }, []);
 }
 
-// ─── Loading indicator ────────────────────────────────────────────────────────
-
-function LoadingDots() {
-  return (
-    <div className="loading-dots" aria-label="Loading">
-      <span />
-      <span />
-      <span />
-    </div>
-  );
-}
-
 // ─── Empty state ──────────────────────────────────────────────────────────────
 
 function EmptyState({ hasSelection }: { hasSelection: boolean }) {
@@ -384,17 +372,16 @@ function App() {
 
   return (
     <div className="shell">
-      {/* Render zone */}
+      {/* Controls zone */}
       <div className="render-zone">
-        {isLoading && <LoadingDots />}
-        {!isLoading && !hasSpec && <EmptyState hasSelection={hasSelection} />}
-        {!isLoading && hasSpec && <UIRenderer spec={currentUISpec!} onApply={handleApply} />}
+        {!hasSpec && !isLoading && <EmptyState hasSelection={hasSelection} />}
+        {hasSpec && <UIRenderer spec={currentUISpec!} onApply={handleApply} />}
       </div>
 
       {/* Chat area */}
       <div className="chat-area">
         <ChatHistory messages={messages} />
-        <ChatInput onSubmit={handleSubmit} disabled={isLoading} />
+        <ChatInput onSubmit={handleSubmit} disabled={isLoading} isLoading={isLoading} />
       </div>
     </div>
   );

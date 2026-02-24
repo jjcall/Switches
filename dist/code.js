@@ -349,6 +349,7 @@
   }
   async function execCreateText(args, tempMap, tempId, parentId) {
     const node = figma.createText();
+    await figma.loadFontAsync(node.fontName);
     if (typeof args.x === "number") node.x = args.x;
     if (typeof args.y === "number") node.y = args.y;
     if (typeof args.fontSize === "number") node.fontSize = args.fontSize;
@@ -358,13 +359,64 @@
     if (tempId) tempMap.set(tempId, node);
     return node;
   }
-  function execSetProperty(node, args) {
+  var TEXT_PROPS_REQUIRING_FONT = /* @__PURE__ */ new Set([
+    "fontSize",
+    "letterSpacing",
+    "lineHeight",
+    "fontName",
+    "textCase",
+    "textDecoration",
+    "characters",
+    "paragraphSpacing",
+    "paragraphIndent",
+    "textAlignHorizontal",
+    "textAlignVertical",
+    "textAutoResize"
+  ]);
+  async function loadNodeFonts(node) {
+    if (node.type !== "TEXT") return;
+    const textNode = node;
+    const fontName = textNode.fontName;
+    if (fontName !== figma.mixed) {
+      await figma.loadFontAsync(fontName);
+    } else {
+      const len = textNode.characters.length;
+      const loaded = /* @__PURE__ */ new Set();
+      for (let i = 0; i < len; i++) {
+        const fn = textNode.getRangeFontName(i, i + 1);
+        const key = `${fn.family}::${fn.style}`;
+        if (!loaded.has(key)) {
+          loaded.add(key);
+          await figma.loadFontAsync(fn);
+        }
+      }
+    }
+  }
+  async function execSetProperty(node, args) {
     var _a;
     const prop = String((_a = args.property) != null ? _a : "");
     if (!prop) throw new Error('setProperty requires a "property" arg.');
     const value = "value" in args ? args.value : void 0;
     if (value === void 0) throw new Error(`setProperty: no "value" provided for property "${prop}".`);
-    node[prop] = value;
+    if (TEXT_PROPS_REQUIRING_FONT.has(prop) && node.type === "TEXT") {
+      await loadNodeFonts(node);
+    }
+    const coerced = coercePropertyValue(prop, value);
+    node[prop] = coerced;
+  }
+  function coercePropertyValue(prop, value) {
+    if (typeof value !== "number") return value;
+    switch (prop) {
+      case "letterSpacing":
+        return { value, unit: "PIXELS" };
+      case "lineHeight":
+        return { value, unit: "PIXELS" };
+      case "paragraphSpacing":
+      case "paragraphIndent":
+        return value;
+      default:
+        return value;
+    }
   }
   function execSetFill(node, args) {
     var _a;
@@ -377,12 +429,39 @@
       node.fills = [{ type: "SOLID", color: { r, g, b }, opacity: 1 }];
       return;
     }
+    if (typeof args.value === "number") {
+      const geoNode = node;
+      const property2 = typeof args.property === "string" ? args.property : null;
+      if (property2 === "opacity") {
+        const fills2 = geoNode.fills.map((f) => __spreadValues({}, f));
+        if (fills2.length > 0) {
+          fills2[0].opacity = args.value;
+          geoNode.fills = fills2;
+        }
+        return;
+      }
+      const v = args.value;
+      const clamped = Math.max(0, Math.min(1, v));
+      const fills = geoNode.fills.map((f) => __spreadValues({}, f));
+      if (fills.length > 0 && fills[0].type === "SOLID") {
+        fills[0].color = { r: clamped, g: clamped, b: clamped };
+        geoNode.fills = fills;
+      } else {
+        geoNode.fills = [{ type: "SOLID", color: { r: clamped, g: clamped, b: clamped }, opacity: 1 }];
+      }
+      return;
+    }
     const property = typeof args.property === "string" ? args.property : null;
     if (property !== null && "value" in args) {
       const geoNode = node;
       const fills = geoNode.fills.map((f) => __spreadValues({}, f));
       if (fills.length > 0) {
-        fills[0][property] = args.value;
+        const fill = fills[0];
+        if (property === "color" && typeof args.value === "object" && args.value !== null) {
+          fill.color = __spreadValues(__spreadValues({}, fill.color), args.value);
+        } else {
+          fill[property] = args.value;
+        }
         geoNode.fills = fills;
       }
       return;
@@ -553,7 +632,7 @@
       }
       case "setProperty": {
         const node = await resolveNode(nodeId, tempMap);
-        execSetProperty(node, a);
+        await execSetProperty(node, a);
         return null;
       }
       case "setFill": {
@@ -612,6 +691,7 @@
     }
   }
   async function executeActions(actions, pluginSpec) {
+    var _a;
     const errors = [];
     const createdNodeIds = [];
     let executedCount = 0;
@@ -639,11 +719,12 @@
         console.error(`[action-executor] action[${i}] ${action.method} failed:`, msg);
       }
     }
-    if (pluginSpec && rootFrameId) {
+    const persistTargetId = rootFrameId != null ? rootFrameId : actions.length > 0 ? actions[0].nodeId : void 0;
+    if (pluginSpec && persistTargetId) {
       try {
-        const rootNode = await figma.getNodeByIdAsync(rootFrameId);
-        if (rootNode && "setPluginData" in rootNode) {
-          rootNode.setPluginData("pluginSpec", pluginSpec);
+        const targetNode = (_a = tempMap.get(persistTargetId)) != null ? _a : await figma.getNodeByIdAsync(persistTargetId);
+        if (targetNode && "setPluginData" in targetNode) {
+          targetNode.setPluginData("pluginSpec", pluginSpec);
         }
       } catch (err) {
         console.warn("[action-executor] failed to persist pluginSpec:", err);

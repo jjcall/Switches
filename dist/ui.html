@@ -517,7 +517,7 @@ body {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 8px;
+  padding: 8px 12px;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -568,52 +568,35 @@ body {
   color: rgba(255, 255, 255, 0.35);
   max-width: 180px;
 }
-.loading-dots {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 20px 0;
-  flex: 1;
-}
-.loading-dots span {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.4);
-  animation: loading-pulse 1.2s ease-in-out infinite;
-}
-.loading-dots span:nth-child(2) {
-  animation-delay: 0.2s;
-}
-.loading-dots span:nth-child(3) {
-  animation-delay: 0.4s;
-}
-@keyframes loading-pulse {
-  0%, 80%, 100% {
-    opacity: 0.3;
-    transform: scale(0.85);
-  }
-  40% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
 .ui-renderer {
   padding-bottom: 8px;
 }
 .chat-area {
   flex-shrink: 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0 12px 12px;
   background: #1e1e1e;
 }
 .chat-history {
-  max-height: 180px;
+  position: relative;
+  max-height: 200px;
   overflow-y: auto;
-  padding: 6px 8px 0;
+  padding: 8px 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+  -webkit-mask-image:
+    linear-gradient(
+      to bottom,
+      transparent 0%,
+      black 24px);
+  mask-image:
+    linear-gradient(
+      to bottom,
+      transparent 0%,
+      black 24px);
 }
 .chat-history::-webkit-scrollbar {
   width: 4px;
@@ -625,50 +608,60 @@ body {
   background: rgba(255, 255, 255, 0.1);
   border-radius: 2px;
 }
-.chat-message {
+.chat-bubble {
   display: flex;
-  flex-direction: column;
-  gap: 1px;
+  max-width: 92%;
 }
-.chat-message-sender {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.3);
-  line-height: 1;
+.chat-bubble--user {
+  align-self: flex-end;
 }
-.chat-message-content {
-  font-size: 11px;
+.chat-bubble--assistant,
+.chat-bubble--error {
+  align-self: flex-start;
+}
+.chat-bubble-text {
+  display: inline-block;
+  font-size: 12px;
   line-height: 1.45;
-  color: rgba(255, 255, 255, 0.75);
   white-space: pre-wrap;
   word-break: break-word;
+  padding: 8px 12px;
+  border-radius: 14px;
 }
-.chat-message--user .chat-message-sender {
-  color: rgba(100, 180, 255, 0.6);
+.chat-bubble--user .chat-bubble-text {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+  border-bottom-right-radius: 4px;
 }
-.chat-message--user .chat-message-content {
-  color: rgba(255, 255, 255, 0.85);
+.chat-bubble--assistant .chat-bubble-text {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  padding-left: 0;
+  padding-right: 0;
 }
-.chat-message--error .chat-message-sender {
-  color: rgba(255, 100, 100, 0.7);
+.chat-bubble--error .chat-bubble-text {
+  background: rgba(255, 80, 80, 0.1);
+  color: rgba(255, 130, 130, 0.9);
+  border-bottom-left-radius: 4px;
 }
-.chat-message--error .chat-message-content {
-  color: rgba(255, 130, 130, 0.85);
-}
-.chat-input-wrapper {
+.chat-input-box {
+  position: relative;
   display: flex;
-  align-items: flex-end;
-  gap: 6px;
-  padding: 6px 8px;
-  background: #2c2c2c;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 12px 14px;
+  transition: border-color 0.2s, background 0.2s;
 }
-.chat-input-field {
+.chat-input-box:focus-within {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+}
+.chat-input-textarea {
   flex: 1;
-  min-height: 22px;
-  max-height: 88px;
+  min-height: 20px;
+  max-height: 240px;
   resize: none;
   overflow-y: auto;
   font-family:
@@ -676,51 +669,89 @@ body {
     system-ui,
     -apple-system,
     sans-serif;
-  font-size: 12px;
-  line-height: 1.4;
-  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.9);
   background: transparent;
   border: none;
   outline: none;
-  padding: 2px 0;
+  padding: 0;
   scrollbar-width: none;
 }
-.chat-input-field::-webkit-scrollbar {
+.chat-input-textarea::-webkit-scrollbar {
   display: none;
 }
-.chat-input-field::placeholder {
-  color: rgba(255, 255, 255, 0.25);
+.chat-input-textarea::placeholder {
+  color: rgba(255, 255, 255, 0.3);
 }
-.chat-input-field:disabled {
+.chat-input-textarea:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
+.chat-input-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 10px;
+  gap: 8px;
+}
 .chat-input-send {
   flex-shrink: 0;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
   border: none;
-  border-radius: 5px;
-  color: rgba(255, 255, 255, 0.6);
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.3);
+  cursor: default;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    transform 0.1s;
   padding: 0;
 }
-.chat-input-send:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.18);
+.chat-input-send--active {
+  background: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+}
+.chat-input-send--active:hover {
+  background: rgba(255, 255, 255, 0.22);
   color: #fff;
 }
-.chat-input-send:active:not(:disabled) {
-  background: rgba(255, 255, 255, 0.24);
-  transform: scale(0.94);
+.chat-input-send--active:active {
+  transform: scale(0.92);
 }
 .chat-input-send:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
+  cursor: default;
+}
+.chat-input-box--loading {
+  min-height: 52px;
+  justify-content: center;
+  align-items: center;
+}
+.chat-input-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.45);
+}
+.chat-input-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-top-color: rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+  animation: chat-spin 0.7s linear infinite;
+}
+@keyframes chat-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
   </style>
@@ -3171,7 +3202,7 @@ body {
           var HostPortal = 4;
           var HostComponent = 5;
           var HostText = 6;
-          var Fragment5 = 7;
+          var Fragment6 = 7;
           var Mode = 8;
           var ContextConsumer = 9;
           var ContextProvider = 10;
@@ -4328,7 +4359,7 @@ body {
                 return "DehydratedFragment";
               case ForwardRef:
                 return getWrappedName$1(type, type.render, "ForwardRef");
-              case Fragment5:
+              case Fragment6:
                 return "Fragment";
               case HostComponent:
                 return type;
@@ -12757,7 +12788,7 @@ body {
               }
             }
             function updateFragment2(returnFiber, current2, fragment, lanes, key) {
-              if (current2 === null || current2.tag !== Fragment5) {
+              if (current2 === null || current2.tag !== Fragment6) {
                 var created = createFiberFromFragment(fragment, returnFiber.mode, lanes, key);
                 created.return = returnFiber;
                 return created;
@@ -13160,7 +13191,7 @@ body {
                 if (child.key === key) {
                   var elementType = element.type;
                   if (elementType === REACT_FRAGMENT_TYPE) {
-                    if (child.tag === Fragment5) {
+                    if (child.tag === Fragment6) {
                       deleteRemainingChildren(returnFiber, child.sibling);
                       var existing = useFiber(child, element.props.children);
                       existing.return = returnFiber;
@@ -18636,7 +18667,7 @@ body {
                 var _resolvedProps2 = workInProgress2.elementType === type ? _unresolvedProps2 : resolveDefaultProps(type, _unresolvedProps2);
                 return updateForwardRef(current2, workInProgress2, type, _resolvedProps2, renderLanes2);
               }
-              case Fragment5:
+              case Fragment6:
                 return updateFragment(current2, workInProgress2, renderLanes2);
               case Mode:
                 return updateMode(current2, workInProgress2, renderLanes2);
@@ -18908,7 +18939,7 @@ body {
               case SimpleMemoComponent:
               case FunctionComponent:
               case ForwardRef:
-              case Fragment5:
+              case Fragment6:
               case Mode:
               case Profiler:
               case ContextConsumer:
@@ -23169,7 +23200,7 @@ body {
             return fiber;
           }
           function createFiberFromFragment(elements, mode, lanes, key) {
-            var fiber = createFiber(Fragment5, elements, key, mode);
+            var fiber = createFiber(Fragment6, elements, key, mode);
             fiber.lanes = lanes;
             return fiber;
           }
@@ -25244,14 +25275,19 @@ body {
   // src/ui/chat/ChatInput.tsx
   var import_react = __toESM(require_react());
   var import_jsx_runtime = __toESM(require_jsx_runtime());
-  function ChatInput({ onSubmit, disabled = false, placeholder = "Describe what you want\u2026" }) {
+  function ChatInput({
+    onSubmit,
+    disabled = false,
+    isLoading = false,
+    placeholder = "Describe your idea\u2026"
+  }) {
     const [value, setValue] = (0, import_react.useState)("");
     const textareaRef = (0, import_react.useRef)(null);
     (0, import_react.useEffect)(() => {
       const el = textareaRef.current;
       if (!el) return;
       el.style.height = "auto";
-      el.style.height = `${Math.min(el.scrollHeight, 88)}px`;
+      el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
     }, [value]);
     const submit = () => {
       const trimmed = value.trim();
@@ -25268,12 +25304,16 @@ body {
         submit();
       }
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "chat-input-wrapper", children: [
+    const canSend = !disabled && value.trim().length > 0;
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: `chat-input-box${isLoading ? " chat-input-box--loading" : ""}`, children: isLoading ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "chat-input-loading", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "chat-input-spinner" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Working\u2026" })
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         "textarea",
         {
           ref: textareaRef,
-          className: "chat-input-field",
+          className: "chat-input-textarea",
           value,
           onChange: (e) => setValue(e.target.value),
           onKeyDown,
@@ -25282,17 +25322,17 @@ body {
           rows: 1
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "chat-input-toolbar", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         "button",
         {
-          className: "chat-input-send",
+          className: `chat-input-send${canSend ? " chat-input-send--active" : ""}`,
           onClick: submit,
-          disabled: disabled || !value.trim(),
+          disabled: !canSend,
           "aria-label": "Send",
-          children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("svg", { width: "14", height: "14", viewBox: "0 0 14 14", fill: "none", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
             "path",
             {
-              d: "M7 12V2M7 2L2.5 6.5M7 2L11.5 6.5",
+              d: "M8 13V3M8 3L3.5 7.5M8 3L12.5 7.5",
               stroke: "currentColor",
               strokeWidth: "1.5",
               strokeLinecap: "round",
@@ -25300,8 +25340,8 @@ body {
             }
           ) })
         }
-      )
-    ] });
+      ) })
+    ] }) });
   }
 
   // src/ui/chat/ChatHistory.tsx
@@ -25314,10 +25354,7 @@ body {
     }, [messages]);
     if (messages.length === 0) return null;
     return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "chat-history", children: [
-      messages.map((msg) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: `chat-message chat-message--${msg.role}`, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "chat-message-sender", children: msg.role === "user" ? "You" : msg.role === "error" ? "Error" : "Plugin" }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "chat-message-content", children: msg.content })
-      ] }, msg.id)),
+      messages.map((msg) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: `chat-bubble chat-bubble--${msg.role}`, children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "chat-bubble-text", children: msg.content }) }, msg.id)),
       /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { ref: bottomRef })
     ] });
   }
@@ -36299,13 +36336,6 @@ ${text.slice(0, 300)}` };
       );
     }, []);
   }
-  function LoadingDots() {
-    return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "loading-dots", "aria-label": "Loading", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", {}),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", {}),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", {})
-    ] });
-  }
   function EmptyState({ hasSelection }) {
     return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "render-zone-empty", children: [
       /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("svg", { className: "render-zone-empty-icon", width: "24", height: "24", viewBox: "0 0 24 24", fill: "none", children: [
@@ -36544,13 +36574,12 @@ ${errors.join("\n")}`);
     const hasSelection = selectionContext !== null && selectionContext.nodes.length > 0;
     return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "shell", children: [
       /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "render-zone", children: [
-        isLoading && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(LoadingDots, {}),
-        !isLoading && !hasSpec && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(EmptyState, { hasSelection }),
-        !isLoading && hasSpec && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(UIRenderer, { spec: currentUISpec, onApply: handleApply })
+        !hasSpec && !isLoading && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(EmptyState, { hasSelection }),
+        hasSpec && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(UIRenderer, { spec: currentUISpec, onApply: handleApply })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "chat-area", children: [
         /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(ChatHistory, { messages }),
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(ChatInput, { onSubmit: handleSubmit, disabled: isLoading })
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(ChatInput, { onSubmit: handleSubmit, disabled: isLoading, isLoading })
       ] })
     ] });
   }

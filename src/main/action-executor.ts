@@ -185,6 +185,7 @@ async function execCreateFrame(args: Args, tempMap: TempNodeMap, tempId?: string
 
 async function execCreateText(args: Args, tempMap: TempNodeMap, tempId?: string, parentId?: string): Promise<SceneNode> {
   const node = figma.createText();
+  await figma.loadFontAsync(node.fontName as FontName);
   if (typeof args.x === 'number') node.x = args.x;
   if (typeof args.y === 'number') node.y = args.y;
   if (typeof args.fontSize === 'number') node.fontSize = args.fontSize;
@@ -195,18 +196,62 @@ async function execCreateText(args: Args, tempMap: TempNodeMap, tempId?: string,
   return node;
 }
 
-function execSetProperty(node: SceneNode, args: Args): void {
+const TEXT_PROPS_REQUIRING_FONT = new Set([
+  'fontSize', 'letterSpacing', 'lineHeight', 'fontName', 'textCase',
+  'textDecoration', 'characters', 'paragraphSpacing', 'paragraphIndent',
+  'textAlignHorizontal', 'textAlignVertical', 'textAutoResize',
+]);
+
+async function loadNodeFonts(node: SceneNode): Promise<void> {
+  if (node.type !== 'TEXT') return;
+  const textNode = node as TextNode;
+  const fontName = textNode.fontName;
+  if (fontName !== figma.mixed) {
+    await figma.loadFontAsync(fontName);
+  } else {
+    const len = textNode.characters.length;
+    const loaded = new Set<string>();
+    for (let i = 0; i < len; i++) {
+      const fn = textNode.getRangeFontName(i, i + 1) as FontName;
+      const key = `${fn.family}::${fn.style}`;
+      if (!loaded.has(key)) {
+        loaded.add(key);
+        await figma.loadFontAsync(fn);
+      }
+    }
+  }
+}
+
+async function execSetProperty(node: SceneNode, args: Args): Promise<void> {
   const prop = String(args.property ?? '');
   if (!prop) throw new Error('setProperty requires a "property" arg.');
 
-  // Determine the value: prefer args.value, fall back to the numeric/bool args
-  // the LLM sometimes provides at the top level.
   const value = 'value' in args ? args.value : undefined;
   if (value === undefined) throw new Error(`setProperty: no "value" provided for property "${prop}".`);
 
-  // Use type assertion — the property names come from LLM output which we trust
-  // for MVP (per PRD). Invalid properties will throw at runtime and be caught.
-  (node as unknown as Record<string, unknown>)[prop] = value;
+  if (TEXT_PROPS_REQUIRING_FONT.has(prop) && node.type === 'TEXT') {
+    await loadNodeFonts(node);
+  }
+
+  const coerced = coercePropertyValue(prop, value);
+  (node as unknown as Record<string, unknown>)[prop] = coerced;
+}
+
+/** Figma expects certain text properties as {value, unit} objects, not bare numbers. */
+function coercePropertyValue(prop: string, value: unknown): unknown {
+  if (typeof value !== 'number') return value;
+
+  switch (prop) {
+    case 'letterSpacing':
+      return { value, unit: 'PIXELS' };
+    case 'lineHeight':
+      return { value, unit: 'PIXELS' };
+    case 'paragraphSpacing':
+    case 'paragraphIndent':
+      return value;
+    default:
+      return value;
+  }
 }
 
 function execSetFill(node: SceneNode, args: Args): void {
@@ -222,13 +267,47 @@ function execSetFill(node: SceneNode, args: Args): void {
     return;
   }
 
+  // Numeric value: treat as grayscale lightness (0–1) applied to the first fill.
+  // Also handles property-specific patches like "color" or "opacity".
+  if (typeof args.value === 'number') {
+    const geoNode = node as GeometryMixin;
+    const property = typeof args.property === 'string' ? args.property : null;
+
+    if (property === 'opacity') {
+      const fills: Paint[] = (geoNode.fills as readonly Paint[]).map(f => ({ ...f }));
+      if (fills.length > 0) {
+        (fills[0] as Record<string, unknown>).opacity = args.value;
+        geoNode.fills = fills;
+      }
+      return;
+    }
+
+    // "color" property with a number, or bare numeric value → grayscale.
+    const v = args.value as number;
+    const clamped = Math.max(0, Math.min(1, v));
+    const fills: Paint[] = (geoNode.fills as readonly Paint[]).map(f => ({ ...f }));
+    if (fills.length > 0 && (fills[0] as SolidPaint).type === 'SOLID') {
+      (fills[0] as SolidPaint).color = { r: clamped, g: clamped, b: clamped };
+      geoNode.fills = fills;
+    } else {
+      geoNode.fills = [{ type: 'SOLID', color: { r: clamped, g: clamped, b: clamped }, opacity: 1 }];
+    }
+    return;
+  }
+
   // Property-patch: modify a single property on the first fill without replacing the array.
   const property = typeof args.property === 'string' ? args.property : null;
   if (property !== null && 'value' in args) {
     const geoNode = node as GeometryMixin;
     const fills: Paint[] = (geoNode.fills as readonly Paint[]).map(f => ({ ...f }));
     if (fills.length > 0) {
-      (fills[0] as Record<string, unknown>)[property] = args.value;
+      // Deep-clone the color sub-object to avoid mutating frozen Figma objects.
+      const fill = fills[0] as Record<string, unknown>;
+      if (property === 'color' && typeof args.value === 'object' && args.value !== null) {
+        fill.color = { ...(fill.color as object), ...(args.value as object) };
+      } else {
+        fill[property] = args.value;
+      }
       geoNode.fills = fills;
     }
     return;
@@ -445,7 +524,7 @@ async function dispatchAction(action: ActionDescriptor, tempMap: TempNodeMap): P
 
     case 'setProperty': {
       const node = await resolveNode(nodeId, tempMap);
-      execSetProperty(node, a);
+      await execSetProperty(node, a);
       return null;
     }
 
@@ -560,12 +639,15 @@ export async function executeActions(
     }
   }
 
-  // Persist plugin spec on the root frame so it can be restored on re-selection.
-  if (pluginSpec && rootFrameId) {
+  // Persist plugin spec so it can be restored on re-selection.
+  // Prefer the root frame; fall back to the first targeted node (live mode).
+  const persistTargetId = rootFrameId ?? (actions.length > 0 ? actions[0].nodeId : undefined);
+  if (pluginSpec && persistTargetId) {
     try {
-      const rootNode = await figma.getNodeByIdAsync(rootFrameId);
-      if (rootNode && 'setPluginData' in rootNode) {
-        (rootNode as SceneNode).setPluginData('pluginSpec', pluginSpec);
+      const targetNode = tempMap.get(persistTargetId)
+        ?? await figma.getNodeByIdAsync(persistTargetId);
+      if (targetNode && 'setPluginData' in targetNode) {
+        (targetNode as SceneNode).setPluginData('pluginSpec', pluginSpec);
       }
     } catch (err) {
       console.warn('[action-executor] failed to persist pluginSpec:', err);
