@@ -208,6 +208,13 @@ export type IframeToMainMessage =
 
 export interface UISpec {
   replace?: boolean;
+  /** Control interaction mode. live = immediate canvas updates, apply = update on Apply button only. */
+  mode?: 'live' | 'apply';
+  /** Template actions used for apply-mode regeneration (simple placeholder substitution). */
+  actionTemplate?: ActionDescriptor[];
+  /** JS function body that receives (params, lib) and returns ActionDescriptor[].
+   *  Preferred over actionTemplate when the plugin needs loops, randomness, or computation. */
+  generate?: string;
   controls: UIControl[];
 }
 

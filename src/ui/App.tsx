@@ -9,6 +9,8 @@ import type { SelectionContext, UISpec, UIControl, ActionDescriptor } from '../s
 import { callClaude } from './api/claude';
 import { composePrompt, parseLLMResponse } from './prompt/prompt-composer';
 import { UIRenderer } from './renderer/UIRenderer';
+import { resolveTemplate, collectControlDefaults } from './template';
+import { compileGenerator, executeGenerator } from './codegen';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -91,6 +93,7 @@ function App() {
   const [currentUISpec, setCurrentUISpec] = useState<UISpec | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [selectionContext, setSelectionContext] = useState<SelectionContext | null>(null);
+  const createdNodeIdsRef = useRef<string[]>([]);
 
   // Keep a ref to the latest messages so the submit callback always sees
   // current history without needing to be in its dependency array.
@@ -106,10 +109,11 @@ function App() {
       if (msg.type === 'SELECTION_CONTEXT') {
         setSelectionContext(msg.payload);
       } else if (msg.type === 'EXECUTION_RESULT') {
-        const { errorCount, errors, tempIdMap } = msg.payload;
+        const { errorCount, errors, tempIdMap, createdNodeIds } = msg.payload;
         if (errorCount > 0) {
           addMessage('error', `${errorCount} action(s) failed:\n${errors.join('\n')}`);
         }
+        createdNodeIdsRef.current = createdNodeIds;
         // Rewrite tempId references in the current UI spec with real node IDs.
         if (tempIdMap && Object.keys(tempIdMap).length > 0) {
           setCurrentUISpec(prev => prev ? rewriteTempIds(prev, tempIdMap) : prev);
@@ -130,6 +134,38 @@ function App() {
       { id: `${Date.now()}-${Math.random()}`, role, content },
     ]);
   }, []);
+
+  const handleApply = useCallback((values: Record<string, unknown>) => {
+    if (!currentUISpec || currentUISpec.mode !== 'apply') return;
+
+    let resolved: ActionDescriptor[];
+
+    if (currentUISpec.generate) {
+      try {
+        const fn = compileGenerator(currentUISpec.generate);
+        resolved = executeGenerator(fn, values);
+      } catch (err) {
+        addMessage('error', `Generator error: ${err instanceof Error ? err.message : String(err)}`);
+        return;
+      }
+    } else if (currentUISpec.actionTemplate?.length) {
+      resolved = resolveTemplate(currentUISpec.actionTemplate, values);
+    } else {
+      addMessage('error', 'Apply mode requires either a generate function or an actionTemplate.');
+      return;
+    }
+
+    const cleanupActions: ActionDescriptor[] = createdNodeIdsRef.current.map((id) => ({
+      method: 'deleteNode',
+      nodeId: id,
+      args: {},
+    }));
+
+    postToMain({
+      type: 'EXECUTE_ACTIONS',
+      payload: { actions: [...cleanupActions, ...resolved] },
+    });
+  }, [addMessage, currentUISpec]);
 
   // ── Submit ─────────────────────────────────────────────────────────────────
 
@@ -165,13 +201,22 @@ function App() {
 
     console.log('[llm] parsed:', JSON.stringify(parsed.data, null, 2));
 
-    const { actions, ui, message } = parsed.data;
+    const { actions, ui, message, generate } = parsed.data;
+    const normalizedUi: UISpec = ui.mode === 'apply'
+      ? {
+          ...ui,
+          mode: 'apply',
+          generate: generate ?? ui.generate,
+          actionTemplate: ui.actionTemplate ?? (generate ? undefined : (actions as ActionDescriptor[])),
+        }
+      : ui;
 
     // Show any explanatory message the LLM included.
     if (message) {
       addMessage('assistant', message);
     } else {
-      addMessage('assistant', `Done — ${actions.length} action(s), ${ui.controls.length} control(s) generated.`);
+      const genLabel = normalizedUi.generate ? ' + generator' : '';
+      addMessage('assistant', `Done — ${actions.length} action(s), ${normalizedUi.controls.length} control(s)${genLabel} generated.`);
     }
 
     // Dispatch actions to the main thread for execution.
@@ -180,15 +225,44 @@ function App() {
         type: 'EXECUTE_ACTIONS',
         payload: { actions: actions as ActionDescriptor[] },
       });
+    } else if (normalizedUi.mode === 'apply') {
+      // Auto-execute on first load using generator or template with defaults.
+      const defaults = collectControlDefaults(normalizedUi.controls);
+
+      if (normalizedUi.generate) {
+        try {
+          const fn = compileGenerator(normalizedUi.generate);
+          const generated = executeGenerator(fn, defaults);
+          postToMain({
+            type: 'EXECUTE_ACTIONS',
+            payload: { actions: generated },
+          });
+        } catch (err) {
+          addMessage('error', `Generator error: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      } else if (normalizedUi.actionTemplate?.length) {
+        const resolved = resolveTemplate(normalizedUi.actionTemplate, defaults);
+        postToMain({
+          type: 'EXECUTE_ACTIONS',
+          payload: { actions: resolved },
+        });
+      }
     }
 
     // Update the rendered UI spec.
     setCurrentUISpec(prev => {
-      if (!prev || ui.replace) return ui;
+      if (!prev || normalizedUi.replace) return normalizedUi;
       // Merge: replace controls by id, append new ones.
       const existingById = new Map(prev.controls.map(c => [c.id, c]));
-      for (const c of ui.controls) existingById.set(c.id, c);
-      return { ...prev, controls: Array.from(existingById.values()) };
+      for (const c of normalizedUi.controls) existingById.set(c.id, c);
+      return {
+        ...prev,
+        ...normalizedUi,
+        mode: normalizedUi.mode ?? prev.mode,
+        generate: normalizedUi.generate ?? prev.generate,
+        actionTemplate: normalizedUi.actionTemplate ?? prev.actionTemplate,
+        controls: Array.from(existingById.values()),
+      };
     });
 
     setIsLoading(false);
@@ -205,7 +279,7 @@ function App() {
       <div className="render-zone">
         {isLoading && <LoadingDots />}
         {!isLoading && !hasSpec && <EmptyState hasSelection={hasSelection} />}
-        {!isLoading && hasSpec && <UIRenderer spec={currentUISpec!} />}
+        {!isLoading && hasSpec && <UIRenderer spec={currentUISpec!} onApply={handleApply} />}
       </div>
 
       {/* Chat area */}

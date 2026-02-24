@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { postToMain } from '../messaging';
 import {
   Slider,
@@ -14,20 +14,31 @@ import {
 } from '../components';
 import type { SpringConfig } from '../components';
 import type { UIControl, UISpec, ActionDescriptor } from '../../shared/message-types';
+import { collectControlDefaults } from '../template';
 
 // ─── Control renderer ─────────────────────────────────────────────────────────
 
+type ControlMode = 'live' | 'apply';
+type ControlValues = Record<string, unknown>;
+
 interface ControlProps {
   control: UIControl;
+  mode: ControlMode;
   onControlChange: (controlId: string, value: unknown, action: ActionDescriptor | undefined, actions: ActionDescriptor[] | undefined) => void;
+  onControlValueChange: (controlId: string, value: unknown) => void;
 }
 
-function ControlRenderer({ control, onControlChange }: ControlProps) {
+function ControlRenderer({ control, mode, onControlChange, onControlValueChange }: ControlProps) {
   const { id, type, label = '', props = {}, action } = control;
 
   const onChange = useCallback(
-    (value: unknown) => onControlChange(id, value, action, control.actions),
-    [id, action, control.actions, onControlChange],
+    (value: unknown) => {
+      onControlValueChange(id, value);
+      if (mode === 'live') {
+        onControlChange(id, value, action, control.actions);
+      }
+    },
+    [id, action, control.actions, mode, onControlChange, onControlValueChange],
   );
 
   switch (type) {
@@ -181,7 +192,9 @@ function ControlRenderer({ control, onControlChange }: ControlProps) {
               <ControlRenderer
                 key={child.id}
                 control={child}
+                mode={mode}
                 onControlChange={onControlChange}
+                onControlValueChange={onControlValueChange}
               />
             ))}
           </div>
@@ -202,9 +215,17 @@ function ControlRenderer({ control, onControlChange }: ControlProps) {
 
 interface UIRendererProps {
   spec: UISpec;
+  onApply?: (values: Record<string, unknown>) => void;
 }
 
-export function UIRenderer({ spec }: UIRendererProps) {
+export function UIRenderer({ spec, onApply }: UIRendererProps) {
+  const mode: ControlMode = spec.mode === 'apply' ? 'apply' : 'live';
+  const [controlValues, setControlValues] = useState<ControlValues>(() => collectControlDefaults(spec.controls));
+
+  useEffect(() => {
+    setControlValues(collectControlDefaults(spec.controls));
+  }, [spec]);
+
   const handleControlChange = useCallback(
     (controlId: string, value: unknown, action: ActionDescriptor | undefined, actions: ActionDescriptor[] | undefined) => {
       if (!action && !actions?.length) return;
@@ -216,6 +237,10 @@ export function UIRenderer({ spec }: UIRendererProps) {
     [],
   );
 
+  const handleControlValueChange = useCallback((controlId: string, value: unknown) => {
+    setControlValues(prev => ({ ...prev, [controlId]: value }));
+  }, []);
+
   if (!spec.controls || spec.controls.length === 0) return null;
 
   return (
@@ -224,9 +249,20 @@ export function UIRenderer({ spec }: UIRendererProps) {
         <ControlRenderer
           key={control.id}
           control={control}
+          mode={mode}
           onControlChange={handleControlChange}
+          onControlValueChange={handleControlValueChange}
         />
       ))}
+      {mode === 'apply' && onApply && (
+        <button
+          className="dialkit-button"
+          style={{ width: '100%' }}
+          onClick={() => onApply(controlValues)}
+        >
+          Apply
+        </button>
+      )}
     </div>
   );
 }

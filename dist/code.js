@@ -292,9 +292,13 @@
       const type = String((_a = effect.type) != null ? _a : "DROP_SHADOW");
       if (type === "DROP_SHADOW" || type === "INNER_SHADOW") {
         const offsetRaw = effect.offset;
+        const color = toRGBA(effect.color);
+        if (typeof effect.opacity === "number") {
+          color.a = effect.opacity;
+        }
         return {
           type,
-          color: toRGBA(effect.color),
+          color,
           offset: {
             x: typeof (offsetRaw == null ? void 0 : offsetRaw.x) === "number" ? offsetRaw.x : 0,
             y: typeof (offsetRaw == null ? void 0 : offsetRaw.y) === "number" ? offsetRaw.y : 4
@@ -316,37 +320,40 @@
       return { type: "LAYER_BLUR", radius: 0, visible: false };
     });
   }
-  async function execCreateRectangle(args, tempMap, tempId) {
+  async function execCreateRectangle(args, tempMap, tempId, parentId) {
     const node = figma.createRectangle();
     if (typeof args.x === "number") node.x = args.x;
     if (typeof args.y === "number") node.y = args.y;
     if (typeof args.width === "number" && typeof args.height === "number") {
       node.resize(args.width, args.height);
     }
-    const parent = await resolveParent(void 0, tempMap);
+    if (typeof args.cornerRadius === "number") {
+      node.cornerRadius = args.cornerRadius;
+    }
+    const parent = await resolveParent(parentId, tempMap);
     parent.appendChild(node);
     if (tempId) tempMap.set(tempId, node);
     return node;
   }
-  async function execCreateFrame(args, tempMap, tempId) {
+  async function execCreateFrame(args, tempMap, tempId, parentId) {
     const node = figma.createFrame();
     if (typeof args.x === "number") node.x = args.x;
     if (typeof args.y === "number") node.y = args.y;
     if (typeof args.width === "number" && typeof args.height === "number") {
       node.resize(args.width, args.height);
     }
-    const parent = await resolveParent(void 0, tempMap);
+    const parent = await resolveParent(parentId, tempMap);
     parent.appendChild(node);
     if (tempId) tempMap.set(tempId, node);
     return node;
   }
-  async function execCreateText(args, tempMap, tempId) {
+  async function execCreateText(args, tempMap, tempId, parentId) {
     const node = figma.createText();
     if (typeof args.x === "number") node.x = args.x;
     if (typeof args.y === "number") node.y = args.y;
     if (typeof args.fontSize === "number") node.fontSize = args.fontSize;
     if (typeof args.characters === "string") node.characters = args.characters;
-    const parent = await resolveParent(void 0, tempMap);
+    const parent = await resolveParent(parentId, tempMap);
     parent.appendChild(node);
     if (tempId) tempMap.set(tempId, node);
     return node;
@@ -469,6 +476,8 @@
         target.offset.x = args.value;
       } else if (property === "offsetY") {
         target.offset.y = args.value;
+      } else if (property === "opacity") {
+        target.color.a = args.value;
       } else {
         target[property] = args.value;
       }
@@ -492,9 +501,11 @@
       return;
     }
     if (typeof args.layoutMode === "string") frame.layoutMode = args.layoutMode;
+    if (typeof args.layoutWrap === "string") frame.layoutWrap = args.layoutWrap;
     if (typeof args.primaryAxisSizingMode === "string") frame.primaryAxisSizingMode = args.primaryAxisSizingMode;
     if (typeof args.counterAxisSizingMode === "string") frame.counterAxisSizingMode = args.counterAxisSizingMode;
     if (typeof args.itemSpacing === "number") frame.itemSpacing = args.itemSpacing;
+    if (typeof args.counterAxisSpacing === "number") frame.counterAxisSpacing = args.counterAxisSpacing;
     if (typeof args.paddingTop === "number") frame.paddingTop = args.paddingTop;
     if (typeof args.paddingRight === "number") frame.paddingRight = args.paddingRight;
     if (typeof args.paddingBottom === "number") frame.paddingBottom = args.paddingBottom;
@@ -517,16 +528,29 @@
   function execDeleteNode(node) {
     node.remove();
   }
+  var lastCreatedNode = null;
   async function dispatchAction(action, tempMap) {
-    const { method, nodeId, args, tempId } = action;
+    const { method, args, tempId } = action;
+    let { nodeId, parentId } = action;
     const a = args != null ? args : {};
+    if (nodeId === "__prev" && lastCreatedNode) nodeId = lastCreatedNode.id;
+    if (parentId === "__prev" && lastCreatedNode) parentId = lastCreatedNode.id;
     switch (method) {
-      case "createRectangle":
-        return execCreateRectangle(a, tempMap, tempId);
-      case "createFrame":
-        return execCreateFrame(a, tempMap, tempId);
-      case "createText":
-        return execCreateText(a, tempMap, tempId);
+      case "createRectangle": {
+        const created = await execCreateRectangle(a, tempMap, tempId, parentId);
+        lastCreatedNode = created;
+        return created;
+      }
+      case "createFrame": {
+        const created = await execCreateFrame(a, tempMap, tempId, parentId);
+        lastCreatedNode = created;
+        return created;
+      }
+      case "createText": {
+        const created = await execCreateText(a, tempMap, tempId, parentId);
+        lastCreatedNode = created;
+        return created;
+      }
       case "setProperty": {
         const node = await resolveNode(nodeId, tempMap);
         execSetProperty(node, a);
@@ -566,8 +590,11 @@
         await execAppendChild(action, tempMap);
         return null;
       case "deleteNode": {
-        const node = await resolveNode(nodeId, tempMap);
-        execDeleteNode(node);
+        try {
+          const node = await resolveNode(nodeId, tempMap);
+          execDeleteNode(node);
+        } catch (e) {
+        }
         return null;
       }
       default:
@@ -579,13 +606,14 @@
     const createdNodeIds = [];
     let executedCount = 0;
     const tempMap = /* @__PURE__ */ new Map();
+    lastCreatedNode = null;
     figma.commitUndo();
     for (let i = 0; i < actions.length; i++) {
       const action = actions[i];
       try {
         const created = await dispatchAction(action, tempMap);
         executedCount++;
-        if (created) createdNodeIds.push(created.id);
+        if (created && !action.parentId) createdNodeIds.push(created.id);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         errors.push(`[${i}] ${action.method}: ${msg}`);

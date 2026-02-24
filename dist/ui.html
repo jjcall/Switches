@@ -219,6 +219,7 @@ body {
   flex: 1;
   padding: 0 12px;
   height: var(--dial-row-height);
+  min-height: var(--dial-row-height);
   font-family: inherit;
   font-size: 11px;
   font-weight: 500;
@@ -1832,7 +1833,7 @@ body {
             var dispatcher = resolveDispatcher();
             return dispatcher.useRef(initialValue);
           }
-          function useEffect12(create, deps) {
+          function useEffect13(create, deps) {
             var dispatcher = resolveDispatcher();
             return dispatcher.useEffect(create, deps);
           }
@@ -2615,7 +2616,7 @@ body {
           exports.useContext = useContext10;
           exports.useDebugValue = useDebugValue;
           exports.useDeferredValue = useDeferredValue;
-          exports.useEffect = useEffect12;
+          exports.useEffect = useEffect13;
           exports.useId = useId4;
           exports.useImperativeHandle = useImperativeHandle;
           exports.useInsertionEffect = useInsertionEffect4;
@@ -25406,15 +25407,27 @@ Respond with a single JSON object \u2014 no prose, no markdown fences:
   "actions": [ ... ],
   "ui": {
     "replace": <true|false>,
+    "mode": <"live"|"apply">,
     "controls": [ ... ]
-  }
+  },
+  "generate": "<JS function body string, optional>"
 }
 
 - "actions": canvas changes to execute NOW (once). Omit actions that were already executed in a
   previous turn \u2014 do not re-run them.
 - "ui.replace": set true on the first response or when rebuilding from scratch. Set false when
   adding or updating individual controls (the renderer merges by control id).
+- "ui.mode": the runtime chooses this automatically based on the task:
+  * Use "live" when modifying properties on existing nodes (e.g. shadow, fill, stroke, opacity).
+    Controls patch nodes immediately on every slider drag.
+  * Use "apply" when creating/generating multiple nodes (grids, patterns, layouts, carousels)
+    or when ANY control requires computation (randomness, loops, formulas, conditional logic).
+    Controls collect values locally and an Apply button re-executes the full batch.
+  The user should NEVER have to ask for a mode \u2014 you decide based on the nature of the request.
 - "ui.controls": the full or partial control list.
+- "generate": a JavaScript function body string for apply-mode plugins that need computation.
+  See the "Generator functions" section below. When "generate" is present, set "actions": []
+  (the generator auto-executes with default control values on first load).
 
 If you need to ask a clarifying question or cannot fulfill the request, return
 "actions": [], "ui": { "replace": false, "controls": [] }, and add a "message" key with your
@@ -25501,8 +25514,13 @@ Each control:
 
 ### How control actions work
 
-The "action" or "actions" on a control fire ONLY on user interaction (slider drag, toggle click,
-etc.) \u2014 never on load. When the control value changes, it is passed as args.value to each action.
+In **live mode** ("ui.mode": "live"), the "action" or "actions" on a control fire on each
+user interaction (slider drag, toggle click, etc.). The control value is passed as args.value.
+
+In **apply mode** ("ui.mode": "apply"), control changes DO NOT fire actions immediately.
+Instead, controls collect values locally and the user clicks Apply. On Apply, the runtime
+calls the "generate" function with current control values and executes the returned actions.
+Controls in apply mode do NOT need "action" or "actions" \u2014 the generator handles everything.
 
 CRITICAL RULES:
 
@@ -25515,6 +25533,12 @@ CRITICAL RULES:
 
 3. Set "props.defaultValue" on every control to match the initial value from the top-level
    action. This keeps the UI and canvas in sync on first render.
+
+4. Use apply mode + "generate" whenever the plugin creates or arranges multiple nodes, uses
+   randomness, loops, computed values, or any logic beyond simple property patching. Signs:
+   "grid", "pattern", "generate", "create N items", "layout", "arrange", "distribute",
+   "carousel", "randomize", "gradient", "spiral", "animate", or any scenario needing loops
+   or Math.random(). The user will NEVER ask for apply mode explicitly \u2014 you detect it.
 
 ### Coordinated actions (the power feature)
 
@@ -25536,6 +25560,7 @@ When the user asks to add or modify controls:
 - Set "actions": [] if no new canvas changes are needed (the previous ones already ran).
 - Keep control IDs stable across turns so the renderer merges correctly and the user doesn't
   lose their current slider positions.
+- When updating a generator, include the complete updated "generate" function in the response.
 
 ---
 
@@ -25618,7 +25643,65 @@ each plugin creatively for the user's specific request.
   }
 }
 
-Key points this illustrates:
+## Generator functions (the power feature for bespoke plugins)
+
+For apply-mode plugins, provide a "generate" field at the top level of the JSON response.
+This is a JavaScript function body string that receives two arguments:
+  - params: object keyed by control IDs with their current values
+  - lib: utility library (see below)
+
+The function MUST return an array of ActionDescriptor objects (same format as "actions").
+
+### Helper library (lib)
+
+The lib object is available inside the generate function:
+  - lib.hslToRgb(h, s, l) \u2014 h in degrees (0-360), s and l in 0-1. Returns { r, g, b } in 0-1.
+  - lib.randomColor() \u2014 returns a random vibrant { r, g, b } in 0-1.
+  - lib.randomInt(min, max) \u2014 random integer in [min, max].
+  - lib.lerp(a, b, t) \u2014 linear interpolation.
+  - lib.clamp(val, min, max) \u2014 clamp to range.
+  - lib.hexToRgb(hex) \u2014 "#FF0000" to { r, g, b } in 0-1.
+
+### Generator example: colorful circle grid
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "mode": "apply",
+    "controls": [
+      { "id": "columns", "type": "slider", "label": "Columns", "props": { "min": 2, "max": 12, "step": 1, "defaultValue": 6 } },
+      { "id": "size", "type": "slider", "label": "Circle Size", "props": { "min": 8, "max": 48, "step": 1, "defaultValue": 16 } },
+      { "id": "spacing", "type": "slider", "label": "Spacing", "props": { "min": 0, "max": 24, "step": 1, "defaultValue": 8 } }
+    ]
+  },
+  "generate": "const cols = params.columns || 6;\\nconst size = params.size || 16;\\nconst spacing = params.spacing || 8;\\nconst totalCells = cols * cols;\\nconst frameW = cols * (size + spacing) - spacing;\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'grid', args: { x: 100, y: 100, width: frameW, height: frameW, name: 'Circle Grid' } });\\nactions.push({ method: 'setLayoutProperties', nodeId: 'grid', args: { layoutMode: 'HORIZONTAL', layoutWrap: 'WRAP', itemSpacing: spacing, counterAxisSpacing: spacing } });\\nfor (let i = 0; i < totalCells; i++) {\\n  actions.push({ method: 'createRectangle', parentId: 'grid', args: { width: size, height: size, cornerRadius: size / 2 } });\\n  const color = lib.randomColor();\\n  actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [{ type: 'SOLID', color: color }] } });\\n}\\nreturn actions;"
+}
+
+### Key rules for generators
+
+1. The generate value is a STRING (not a function declaration). It is the function body.
+   Use \\n for newlines inside the JSON string. Do NOT wrap in function(...){...}.
+2. Always return an array of ActionDescriptor objects.
+3. Use tempId on created nodes and reference them in subsequent actions via nodeId or parentId.
+4. Use "__prev" as nodeId to target the most recently created node.
+5. For grids, use auto-layout: set layoutMode: "HORIZONTAL", layoutWrap: "WRAP" on the frame.
+   Set both itemSpacing and counterAxisSpacing. The frame width determines column count.
+6. Use parentId on child nodes to place them inside a frame created in the same batch.
+7. You have full JavaScript: loops, Math.random(), conditionals, string manipulation, etc.
+8. Access control values via params.controlId (e.g. params.columns, params.size).
+9. Use lib helpers for color manipulation \u2014 do NOT try to import anything.
+10. When the user asks to iterate (add a control, change behavior), output the complete
+    updated generate function \u2014 generators are always replaced wholesale, not merged.
+
+### When to use generate vs live mode
+
+- **Live mode** (no generate): Simple property manipulation on existing nodes.
+  Controls have "action"/"actions" that fire immediately. Good for shadows, fills, opacity, etc.
+- **Apply mode + generate**: Creating nodes, loops, randomness, computed layouts, patterns.
+  Controls have NO action/actions \u2014 the generator handles everything via the Apply button.
+
+Key points for the live-mode example above:
 - Top-level action uses "effects": [...] (full replace, runs once).
 - Control actions use "property" + "effectType" (patch form, runs per interaction).
 - defaultValue on each control matches the initial state.
@@ -25627,20 +25710,15 @@ Key points this illustrates:
 
 ## Constraints
 
-- Never output raw JS or eval-able code.
 - Only reference node IDs from the selection context, or tempIds assigned in the same batch.
 - Keep panels concise \u2014 3 to 8 controls is ideal. Use sections for grouping.
 - If the request can't be fulfilled with the selection, set actions to [] and explain in "message".
 - Do not add controls for properties that can't be live-updated (e.g. font loading).
 - When in doubt, produce fewer, better-chosen controls rather than a long list.
-- Keep total action count manageable. When creating many nodes (e.g. grids, patterns), prefer
-  using auto-layout frames with setLayoutProperties so the layout engine handles positioning,
-  rather than manually setting x/y on every child. If you must create many nodes, limit to ~20
-  create actions per batch to stay within the response size budget.
-- IMPORTANT: Control actions that target multiple nodes cannot work \u2014 each control action targets
-  a single nodeId. For batch operations across many nodes (e.g. "change all circle colors"),
-  use a single parent frame and modify the parent's properties, or acknowledge the limitation
-  in your message.
+- For generative plugins (grids, patterns, randomized content), ALWAYS use apply mode with
+  a "generate" function. The generator can use loops, Math.random(), and the lib helpers.
+- The "generate" field is a string containing JavaScript function body code. It is the ONLY
+  place where executable JS is allowed. Never put JS in "actions" or control "action" fields.
 `;
 
   // src/ui/prompt/prompt-composer.ts
@@ -25731,7 +25809,8 @@ ${text.slice(0, 300)}` };
       data: {
         actions: obj.actions,
         ui: obj.ui,
-        message: typeof obj.message === "string" ? obj.message : void 0
+        message: typeof obj.message === "string" ? obj.message : void 0,
+        generate: typeof obj.generate === "string" ? obj.generate : void 0
       }
     };
   }
@@ -26652,9 +26731,9 @@ ${text.slice(0, 300)}` };
 
   // node_modules/motion-dom/dist/es/animation/generators/utils/velocity.mjs
   var velocitySampleDuration = 5;
-  function calcGeneratorVelocity(resolveValue, t, current) {
+  function calcGeneratorVelocity(resolveValue2, t, current) {
     const prevT = Math.max(t - velocitySampleDuration, 0);
-    return velocityPerSecond(current - resolveValue(prevT), t - prevT);
+    return velocityPerSecond(current - resolveValue2(prevT), t - prevT);
   }
 
   // node_modules/motion-dom/dist/es/animation/generators/spring/defaults.mjs
@@ -35795,13 +35874,94 @@ ${text.slice(0, 300)}` };
     ] });
   }
 
+  // src/ui/template.ts
+  function getControlDefaultValue(control) {
+    const props = control.props ?? {};
+    switch (control.type) {
+      case "slider":
+      case "number":
+        return typeof props.defaultValue === "number" ? props.defaultValue : typeof props.min === "number" ? props.min : 0;
+      case "toggle":
+        return props.defaultValue === true;
+      case "select": {
+        const options = Array.isArray(props.options) ? props.options : [];
+        return typeof props.defaultValue === "string" ? props.defaultValue : options[0] ?? "";
+      }
+      case "segmented": {
+        const options = Array.isArray(props.options) ? props.options : [];
+        return typeof props.defaultValue === "string" ? props.defaultValue : options[0]?.value ?? "";
+      }
+      case "color":
+        return typeof props.defaultValue === "string" ? props.defaultValue : "#000000";
+      case "text":
+        return typeof props.defaultValue === "string" ? props.defaultValue : "";
+      case "button":
+        return null;
+      case "section":
+      default:
+        return void 0;
+    }
+  }
+  function collectControlDefaults(controls) {
+    const values = {};
+    const walk = (list) => {
+      for (const control of list) {
+        if (control.type !== "section") {
+          values[control.id] = getControlDefaultValue(control);
+        }
+        if (control.children?.length) walk(control.children);
+      }
+    };
+    walk(controls);
+    return values;
+  }
+  var PLACEHOLDER_RE = /\{\{(\w+)\}\}/g;
+  var FULL_PLACEHOLDER_RE = /^\{\{(\w+)\}\}$/;
+  function resolveValue(input, values) {
+    if (typeof input === "string") {
+      const full = input.match(FULL_PLACEHOLDER_RE);
+      if (full) {
+        return values[full[1]];
+      }
+      return input.replace(PLACEHOLDER_RE, (_m, key) => {
+        const v = values[key];
+        if (v === void 0 || v === null) return "";
+        return typeof v === "string" ? v : String(v);
+      });
+    }
+    if (Array.isArray(input)) {
+      return input.map((item) => resolveValue(item, values));
+    }
+    if (input && typeof input === "object") {
+      const out = {};
+      for (const [k, v] of Object.entries(input)) {
+        out[k] = resolveValue(v, values);
+      }
+      return out;
+    }
+    return input;
+  }
+  function resolveTemplate(actions, values) {
+    return actions.map((action) => ({
+      ...action,
+      nodeId: resolveValue(action.nodeId, values),
+      parentId: resolveValue(action.parentId, values),
+      args: resolveValue(action.args, values)
+    }));
+  }
+
   // src/ui/renderer/UIRenderer.tsx
   var import_jsx_runtime19 = __toESM(require_jsx_runtime());
-  function ControlRenderer({ control, onControlChange }) {
+  function ControlRenderer({ control, mode, onControlChange, onControlValueChange }) {
     const { id: id3, type, label = "", props = {}, action } = control;
     const onChange = (0, import_react37.useCallback)(
-      (value) => onControlChange(id3, value, action, control.actions),
-      [id3, action, control.actions, onControlChange]
+      (value) => {
+        onControlValueChange(id3, value);
+        if (mode === "live") {
+          onControlChange(id3, value, action, control.actions);
+        }
+      },
+      [id3, action, control.actions, mode, onControlChange, onControlValueChange]
     );
     switch (type) {
       case "slider": {
@@ -35967,7 +36127,9 @@ ${text.slice(0, 300)}` };
               ControlRenderer,
               {
                 control: child,
-                onControlChange
+                mode,
+                onControlChange,
+                onControlValueChange
               },
               child.id
             )) })
@@ -35981,7 +36143,12 @@ ${text.slice(0, 300)}` };
         ] });
     }
   }
-  function UIRenderer({ spec }) {
+  function UIRenderer({ spec, onApply }) {
+    const mode = spec.mode === "apply" ? "apply" : "live";
+    const [controlValues, setControlValues] = (0, import_react37.useState)(() => collectControlDefaults(spec.controls));
+    (0, import_react37.useEffect)(() => {
+      setControlValues(collectControlDefaults(spec.controls));
+    }, [spec]);
     const handleControlChange = (0, import_react37.useCallback)(
       (controlId, value, action, actions) => {
         if (!action && !actions?.length) return;
@@ -35992,15 +36159,108 @@ ${text.slice(0, 300)}` };
       },
       []
     );
+    const handleControlValueChange = (0, import_react37.useCallback)((controlId, value) => {
+      setControlValues((prev) => ({ ...prev, [controlId]: value }));
+    }, []);
     if (!spec.controls || spec.controls.length === 0) return null;
-    return /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("div", { className: "ui-renderer", style: { display: "flex", flexDirection: "column", gap: 6 }, children: spec.controls.map((control) => /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
-      ControlRenderer,
-      {
-        control,
-        onControlChange: handleControlChange
-      },
-      control.id
-    )) });
+    return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { className: "ui-renderer", style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+      spec.controls.map((control) => /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+        ControlRenderer,
+        {
+          control,
+          mode,
+          onControlChange: handleControlChange,
+          onControlValueChange: handleControlValueChange
+        },
+        control.id
+      )),
+      mode === "apply" && onApply && /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+        "button",
+        {
+          className: "dialkit-button",
+          style: { width: "100%" },
+          onClick: () => onApply(controlValues),
+          children: "Apply"
+        }
+      )
+    ] });
+  }
+
+  // src/ui/codegen.ts
+  function hslToRgb(h, s, l) {
+    h = (h % 360 + 360) % 360;
+    s = Math.max(0, Math.min(1, s));
+    l = Math.max(0, Math.min(1, l));
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const x = c * (1 - Math.abs(h / 60 % 2 - 1));
+    const m2 = l - c / 2;
+    let r1 = 0, g1 = 0, b1 = 0;
+    if (h < 60) {
+      r1 = c;
+      g1 = x;
+    } else if (h < 120) {
+      r1 = x;
+      g1 = c;
+    } else if (h < 180) {
+      g1 = c;
+      b1 = x;
+    } else if (h < 240) {
+      g1 = x;
+      b1 = c;
+    } else if (h < 300) {
+      r1 = x;
+      b1 = c;
+    } else {
+      r1 = c;
+      b1 = x;
+    }
+    return { r: r1 + m2, g: g1 + m2, b: b1 + m2 };
+  }
+  var generatorLib = {
+    hslToRgb,
+    randomColor() {
+      return hslToRgb(Math.random() * 360, 0.7 + Math.random() * 0.3, 0.5 + Math.random() * 0.15);
+    },
+    randomInt(min, max) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    },
+    lerp(a, b, t) {
+      return a + (b - a) * t;
+    },
+    clamp(val, min, max) {
+      return Math.max(min, Math.min(max, val));
+    },
+    hexToRgb(hex2) {
+      const h = hex2.replace("#", "");
+      const n = parseInt(h, 16);
+      return { r: (n >> 16 & 255) / 255, g: (n >> 8 & 255) / 255, b: (n & 255) / 255 };
+    }
+  };
+  function compileGenerator(code) {
+    let body = code.trim();
+    const fnMatch = body.match(
+      /^function\s+\w*\s*\(\s*(\w+)\s*(?:,\s*(\w+)\s*)?\)\s*\{([\s\S]*)\}\s*$/
+    );
+    if (fnMatch) {
+      const paramName = fnMatch[1];
+      const libName = fnMatch[2] || "lib";
+      const innerBody = fnMatch[3];
+      const aliases = [];
+      if (paramName !== "params") aliases.push(`const params = ${paramName};`);
+      if (libName !== "lib") aliases.push(`const lib = ${libName};`);
+      body = aliases.length > 0 ? aliases.join("\n") + "\n" + innerBody : innerBody;
+    }
+    const fn = new Function("params", "lib", body);
+    return fn;
+  }
+  function executeGenerator(fn, params) {
+    const result = fn(params, generatorLib);
+    if (!Array.isArray(result)) {
+      throw new Error(
+        `Generator must return an array of actions, got ${typeof result}`
+      );
+    }
+    return result;
   }
 
   // src/ui/App.tsx
@@ -36053,6 +36313,7 @@ ${text.slice(0, 300)}` };
     const [currentUISpec, setCurrentUISpec] = (0, import_react38.useState)(null);
     const [isLoading, setIsLoading] = (0, import_react38.useState)(false);
     const [selectionContext, setSelectionContext] = (0, import_react38.useState)(null);
+    const createdNodeIdsRef = (0, import_react38.useRef)([]);
     const messagesRef = (0, import_react38.useRef)(messages);
     messagesRef.current = messages;
     (0, import_react38.useEffect)(() => {
@@ -36061,11 +36322,12 @@ ${text.slice(0, 300)}` };
         if (msg.type === "SELECTION_CONTEXT") {
           setSelectionContext(msg.payload);
         } else if (msg.type === "EXECUTION_RESULT") {
-          const { errorCount, errors, tempIdMap } = msg.payload;
+          const { errorCount, errors, tempIdMap, createdNodeIds } = msg.payload;
           if (errorCount > 0) {
             addMessage("error", `${errorCount} action(s) failed:
 ${errors.join("\n")}`);
           }
+          createdNodeIdsRef.current = createdNodeIds;
           if (tempIdMap && Object.keys(tempIdMap).length > 0) {
             setCurrentUISpec((prev) => prev ? rewriteTempIds(prev, tempIdMap) : prev);
           }
@@ -36080,6 +36342,33 @@ ${errors.join("\n")}`);
         { id: `${Date.now()}-${Math.random()}`, role, content }
       ]);
     }, []);
+    const handleApply = (0, import_react38.useCallback)((values) => {
+      if (!currentUISpec || currentUISpec.mode !== "apply") return;
+      let resolved;
+      if (currentUISpec.generate) {
+        try {
+          const fn = compileGenerator(currentUISpec.generate);
+          resolved = executeGenerator(fn, values);
+        } catch (err) {
+          addMessage("error", `Generator error: ${err instanceof Error ? err.message : String(err)}`);
+          return;
+        }
+      } else if (currentUISpec.actionTemplate?.length) {
+        resolved = resolveTemplate(currentUISpec.actionTemplate, values);
+      } else {
+        addMessage("error", "Apply mode requires either a generate function or an actionTemplate.");
+        return;
+      }
+      const cleanupActions = createdNodeIdsRef.current.map((id3) => ({
+        method: "deleteNode",
+        nodeId: id3,
+        args: {}
+      }));
+      postToMain({
+        type: "EXECUTE_ACTIONS",
+        payload: { actions: [...cleanupActions, ...resolved] }
+      });
+    }, [addMessage, currentUISpec]);
     const handleSubmit = (0, import_react38.useCallback)(async (text) => {
       addMessage("user", text);
       setIsLoading(true);
@@ -36101,23 +36390,57 @@ ${errors.join("\n")}`);
         return;
       }
       console.log("[llm] parsed:", JSON.stringify(parsed.data, null, 2));
-      const { actions, ui, message } = parsed.data;
+      const { actions, ui, message, generate } = parsed.data;
+      const normalizedUi = ui.mode === "apply" ? {
+        ...ui,
+        mode: "apply",
+        generate: generate ?? ui.generate,
+        actionTemplate: ui.actionTemplate ?? (generate ? void 0 : actions)
+      } : ui;
       if (message) {
         addMessage("assistant", message);
       } else {
-        addMessage("assistant", `Done \u2014 ${actions.length} action(s), ${ui.controls.length} control(s) generated.`);
+        const genLabel = normalizedUi.generate ? " + generator" : "";
+        addMessage("assistant", `Done \u2014 ${actions.length} action(s), ${normalizedUi.controls.length} control(s)${genLabel} generated.`);
       }
       if (actions.length > 0) {
         postToMain({
           type: "EXECUTE_ACTIONS",
           payload: { actions }
         });
+      } else if (normalizedUi.mode === "apply") {
+        const defaults = collectControlDefaults(normalizedUi.controls);
+        if (normalizedUi.generate) {
+          try {
+            const fn = compileGenerator(normalizedUi.generate);
+            const generated = executeGenerator(fn, defaults);
+            postToMain({
+              type: "EXECUTE_ACTIONS",
+              payload: { actions: generated }
+            });
+          } catch (err) {
+            addMessage("error", `Generator error: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        } else if (normalizedUi.actionTemplate?.length) {
+          const resolved = resolveTemplate(normalizedUi.actionTemplate, defaults);
+          postToMain({
+            type: "EXECUTE_ACTIONS",
+            payload: { actions: resolved }
+          });
+        }
       }
       setCurrentUISpec((prev) => {
-        if (!prev || ui.replace) return ui;
+        if (!prev || normalizedUi.replace) return normalizedUi;
         const existingById = new Map(prev.controls.map((c) => [c.id, c]));
-        for (const c of ui.controls) existingById.set(c.id, c);
-        return { ...prev, controls: Array.from(existingById.values()) };
+        for (const c of normalizedUi.controls) existingById.set(c.id, c);
+        return {
+          ...prev,
+          ...normalizedUi,
+          mode: normalizedUi.mode ?? prev.mode,
+          generate: normalizedUi.generate ?? prev.generate,
+          actionTemplate: normalizedUi.actionTemplate ?? prev.actionTemplate,
+          controls: Array.from(existingById.values())
+        };
       });
       setIsLoading(false);
     }, [addMessage, selectionContext, currentUISpec]);
@@ -36127,7 +36450,7 @@ ${errors.join("\n")}`);
       /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "render-zone", children: [
         isLoading && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(LoadingDots, {}),
         !isLoading && !hasSpec && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(EmptyState, { hasSelection }),
-        !isLoading && hasSpec && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(UIRenderer, { spec: currentUISpec })
+        !isLoading && hasSpec && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(UIRenderer, { spec: currentUISpec, onApply: handleApply })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "chat-area", children: [
         /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(ChatHistory, { messages }),

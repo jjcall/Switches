@@ -96,6 +96,8 @@ export interface ParsedLLMResponse {
   actions: unknown[];
   ui: UISpec;
   message?: string;
+  /** JS function body string for generative plugins. */
+  generate?: string;
 }
 
 export interface ParseSuccess {
@@ -164,6 +166,7 @@ export function parseLLMResponse(text: string): ParseResult {
       actions: obj.actions,
       ui: obj.ui as UISpec,
       message: typeof obj.message === 'string' ? obj.message : undefined,
+      generate: typeof obj.generate === 'string' ? obj.generate : undefined,
     },
   };
 }

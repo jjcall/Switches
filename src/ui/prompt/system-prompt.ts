@@ -28,15 +28,27 @@ Respond with a single JSON object — no prose, no markdown fences:
   "actions": [ ... ],
   "ui": {
     "replace": <true|false>,
+    "mode": <"live"|"apply">,
     "controls": [ ... ]
-  }
+  },
+  "generate": "<JS function body string, optional>"
 }
 
 - "actions": canvas changes to execute NOW (once). Omit actions that were already executed in a
   previous turn — do not re-run them.
 - "ui.replace": set true on the first response or when rebuilding from scratch. Set false when
   adding or updating individual controls (the renderer merges by control id).
+- "ui.mode": the runtime chooses this automatically based on the task:
+  * Use "live" when modifying properties on existing nodes (e.g. shadow, fill, stroke, opacity).
+    Controls patch nodes immediately on every slider drag.
+  * Use "apply" when creating/generating multiple nodes (grids, patterns, layouts, carousels)
+    or when ANY control requires computation (randomness, loops, formulas, conditional logic).
+    Controls collect values locally and an Apply button re-executes the full batch.
+  The user should NEVER have to ask for a mode — you decide based on the nature of the request.
 - "ui.controls": the full or partial control list.
+- "generate": a JavaScript function body string for apply-mode plugins that need computation.
+  See the "Generator functions" section below. When "generate" is present, set "actions": []
+  (the generator auto-executes with default control values on first load).
 
 If you need to ask a clarifying question or cannot fulfill the request, return
 "actions": [], "ui": { "replace": false, "controls": [] }, and add a "message" key with your
@@ -123,8 +135,13 @@ Each control:
 
 ### How control actions work
 
-The "action" or "actions" on a control fire ONLY on user interaction (slider drag, toggle click,
-etc.) — never on load. When the control value changes, it is passed as args.value to each action.
+In **live mode** ("ui.mode": "live"), the "action" or "actions" on a control fire on each
+user interaction (slider drag, toggle click, etc.). The control value is passed as args.value.
+
+In **apply mode** ("ui.mode": "apply"), control changes DO NOT fire actions immediately.
+Instead, controls collect values locally and the user clicks Apply. On Apply, the runtime
+calls the "generate" function with current control values and executes the returned actions.
+Controls in apply mode do NOT need "action" or "actions" — the generator handles everything.
 
 CRITICAL RULES:
 
@@ -137,6 +154,12 @@ CRITICAL RULES:
 
 3. Set "props.defaultValue" on every control to match the initial value from the top-level
    action. This keeps the UI and canvas in sync on first render.
+
+4. Use apply mode + "generate" whenever the plugin creates or arranges multiple nodes, uses
+   randomness, loops, computed values, or any logic beyond simple property patching. Signs:
+   "grid", "pattern", "generate", "create N items", "layout", "arrange", "distribute",
+   "carousel", "randomize", "gradient", "spiral", "animate", or any scenario needing loops
+   or Math.random(). The user will NEVER ask for apply mode explicitly — you detect it.
 
 ### Coordinated actions (the power feature)
 
@@ -158,6 +181,7 @@ When the user asks to add or modify controls:
 - Set "actions": [] if no new canvas changes are needed (the previous ones already ran).
 - Keep control IDs stable across turns so the renderer merges correctly and the user doesn't
   lose their current slider positions.
+- When updating a generator, include the complete updated "generate" function in the response.
 
 ---
 
@@ -240,7 +264,65 @@ each plugin creatively for the user's specific request.
   }
 }
 
-Key points this illustrates:
+## Generator functions (the power feature for bespoke plugins)
+
+For apply-mode plugins, provide a "generate" field at the top level of the JSON response.
+This is a JavaScript function body string that receives two arguments:
+  - params: object keyed by control IDs with their current values
+  - lib: utility library (see below)
+
+The function MUST return an array of ActionDescriptor objects (same format as "actions").
+
+### Helper library (lib)
+
+The lib object is available inside the generate function:
+  - lib.hslToRgb(h, s, l) — h in degrees (0-360), s and l in 0-1. Returns { r, g, b } in 0-1.
+  - lib.randomColor() — returns a random vibrant { r, g, b } in 0-1.
+  - lib.randomInt(min, max) — random integer in [min, max].
+  - lib.lerp(a, b, t) — linear interpolation.
+  - lib.clamp(val, min, max) — clamp to range.
+  - lib.hexToRgb(hex) — "#FF0000" to { r, g, b } in 0-1.
+
+### Generator example: colorful circle grid
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "mode": "apply",
+    "controls": [
+      { "id": "columns", "type": "slider", "label": "Columns", "props": { "min": 2, "max": 12, "step": 1, "defaultValue": 6 } },
+      { "id": "size", "type": "slider", "label": "Circle Size", "props": { "min": 8, "max": 48, "step": 1, "defaultValue": 16 } },
+      { "id": "spacing", "type": "slider", "label": "Spacing", "props": { "min": 0, "max": 24, "step": 1, "defaultValue": 8 } }
+    ]
+  },
+  "generate": "const cols = params.columns || 6;\\nconst size = params.size || 16;\\nconst spacing = params.spacing || 8;\\nconst totalCells = cols * cols;\\nconst frameW = cols * (size + spacing) - spacing;\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'grid', args: { x: 100, y: 100, width: frameW, height: frameW, name: 'Circle Grid' } });\\nactions.push({ method: 'setLayoutProperties', nodeId: 'grid', args: { layoutMode: 'HORIZONTAL', layoutWrap: 'WRAP', itemSpacing: spacing, counterAxisSpacing: spacing } });\\nfor (let i = 0; i < totalCells; i++) {\\n  actions.push({ method: 'createRectangle', parentId: 'grid', args: { width: size, height: size, cornerRadius: size / 2 } });\\n  const color = lib.randomColor();\\n  actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [{ type: 'SOLID', color: color }] } });\\n}\\nreturn actions;"
+}
+
+### Key rules for generators
+
+1. The generate value is a STRING (not a function declaration). It is the function body.
+   Use \\n for newlines inside the JSON string. Do NOT wrap in function(...){...}.
+2. Always return an array of ActionDescriptor objects.
+3. Use tempId on created nodes and reference them in subsequent actions via nodeId or parentId.
+4. Use "__prev" as nodeId to target the most recently created node.
+5. For grids, use auto-layout: set layoutMode: "HORIZONTAL", layoutWrap: "WRAP" on the frame.
+   Set both itemSpacing and counterAxisSpacing. The frame width determines column count.
+6. Use parentId on child nodes to place them inside a frame created in the same batch.
+7. You have full JavaScript: loops, Math.random(), conditionals, string manipulation, etc.
+8. Access control values via params.controlId (e.g. params.columns, params.size).
+9. Use lib helpers for color manipulation — do NOT try to import anything.
+10. When the user asks to iterate (add a control, change behavior), output the complete
+    updated generate function — generators are always replaced wholesale, not merged.
+
+### When to use generate vs live mode
+
+- **Live mode** (no generate): Simple property manipulation on existing nodes.
+  Controls have "action"/"actions" that fire immediately. Good for shadows, fills, opacity, etc.
+- **Apply mode + generate**: Creating nodes, loops, randomness, computed layouts, patterns.
+  Controls have NO action/actions — the generator handles everything via the Apply button.
+
+Key points for the live-mode example above:
 - Top-level action uses "effects": [...] (full replace, runs once).
 - Control actions use "property" + "effectType" (patch form, runs per interaction).
 - defaultValue on each control matches the initial state.
@@ -249,18 +331,13 @@ Key points this illustrates:
 
 ## Constraints
 
-- Never output raw JS or eval-able code.
 - Only reference node IDs from the selection context, or tempIds assigned in the same batch.
 - Keep panels concise — 3 to 8 controls is ideal. Use sections for grouping.
 - If the request can't be fulfilled with the selection, set actions to [] and explain in "message".
 - Do not add controls for properties that can't be live-updated (e.g. font loading).
 - When in doubt, produce fewer, better-chosen controls rather than a long list.
-- Keep total action count manageable. When creating many nodes (e.g. grids, patterns), prefer
-  using auto-layout frames with setLayoutProperties so the layout engine handles positioning,
-  rather than manually setting x/y on every child. If you must create many nodes, limit to ~20
-  create actions per batch to stay within the response size budget.
-- IMPORTANT: Control actions that target multiple nodes cannot work — each control action targets
-  a single nodeId. For batch operations across many nodes (e.g. "change all circle colors"),
-  use a single parent frame and modify the parent's properties, or acknowledge the limitation
-  in your message.
+- For generative plugins (grids, patterns, randomized content), ALWAYS use apply mode with
+  a "generate" function. The generator can use loops, Math.random(), and the lib helpers.
+- The "generate" field is a string containing JavaScript function body code. It is the ONLY
+  place where executable JS is allowed. Never put JS in "actions" or control "action" fields.
 `;

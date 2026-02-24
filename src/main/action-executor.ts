@@ -119,9 +119,14 @@ function toEffects(rawEffects: unknown): Effect[] {
 
     if (type === 'DROP_SHADOW' || type === 'INNER_SHADOW') {
       const offsetRaw = effect.offset as Record<string, unknown> | undefined;
+      const color = toRGBA(effect.color);
+      // LLM sometimes puts opacity at the effect level; map it to color.a.
+      if (typeof effect.opacity === 'number') {
+        color.a = effect.opacity;
+      }
       return {
         type: type as 'DROP_SHADOW',
-        color: toRGBA(effect.color),
+        color,
         offset: {
           x: typeof offsetRaw?.x === 'number' ? offsetRaw.x : 0,
           y: typeof offsetRaw?.y === 'number' ? offsetRaw.y : 4,
@@ -149,39 +154,42 @@ function toEffects(rawEffects: unknown): Effect[] {
 
 // ─── Method implementations ───────────────────────────────────────────────────
 
-async function execCreateRectangle(args: Args, tempMap: TempNodeMap, tempId?: string): Promise<SceneNode> {
+async function execCreateRectangle(args: Args, tempMap: TempNodeMap, tempId?: string, parentId?: string): Promise<SceneNode> {
   const node = figma.createRectangle();
   if (typeof args.x === 'number') node.x = args.x;
   if (typeof args.y === 'number') node.y = args.y;
   if (typeof args.width === 'number' && typeof args.height === 'number') {
     node.resize(args.width as number, args.height as number);
   }
-  const parent = await resolveParent(undefined, tempMap);
+  if (typeof args.cornerRadius === 'number') {
+    node.cornerRadius = args.cornerRadius;
+  }
+  const parent = await resolveParent(parentId, tempMap);
   parent.appendChild(node);
   if (tempId) tempMap.set(tempId, node);
   return node;
 }
 
-async function execCreateFrame(args: Args, tempMap: TempNodeMap, tempId?: string): Promise<SceneNode> {
+async function execCreateFrame(args: Args, tempMap: TempNodeMap, tempId?: string, parentId?: string): Promise<SceneNode> {
   const node = figma.createFrame();
   if (typeof args.x === 'number') node.x = args.x;
   if (typeof args.y === 'number') node.y = args.y;
   if (typeof args.width === 'number' && typeof args.height === 'number') {
     node.resize(args.width as number, args.height as number);
   }
-  const parent = await resolveParent(undefined, tempMap);
+  const parent = await resolveParent(parentId, tempMap);
   parent.appendChild(node);
   if (tempId) tempMap.set(tempId, node);
   return node;
 }
 
-async function execCreateText(args: Args, tempMap: TempNodeMap, tempId?: string): Promise<SceneNode> {
+async function execCreateText(args: Args, tempMap: TempNodeMap, tempId?: string, parentId?: string): Promise<SceneNode> {
   const node = figma.createText();
   if (typeof args.x === 'number') node.x = args.x;
   if (typeof args.y === 'number') node.y = args.y;
   if (typeof args.fontSize === 'number') node.fontSize = args.fontSize;
   if (typeof args.characters === 'string') node.characters = args.characters;
-  const parent = await resolveParent(undefined, tempMap);
+  const parent = await resolveParent(parentId, tempMap);
   parent.appendChild(node);
   if (tempId) tempMap.set(tempId, node);
   return node;
@@ -338,6 +346,9 @@ function execSetEffect(node: SceneNode, args: Args): void {
       (target.offset as { x: number; y: number }).x = args.value as number;
     } else if (property === 'offsetY') {
       (target.offset as { x: number; y: number }).y = args.value as number;
+    } else if (property === 'opacity') {
+      // Figma effects don't have a top-level opacity; map to color.a.
+      (target.color as { r: number; g: number; b: number; a: number }).a = args.value as number;
     } else {
       target[property] = args.value;
     }
@@ -369,9 +380,11 @@ function execSetLayoutProperties(node: SceneNode, args: Args): void {
   }
 
   if (typeof args.layoutMode === 'string') frame.layoutMode = args.layoutMode as 'NONE' | 'HORIZONTAL' | 'VERTICAL';
+  if (typeof args.layoutWrap === 'string') frame.layoutWrap = args.layoutWrap as 'NO_WRAP' | 'WRAP';
   if (typeof args.primaryAxisSizingMode === 'string') frame.primaryAxisSizingMode = args.primaryAxisSizingMode as 'FIXED' | 'AUTO';
   if (typeof args.counterAxisSizingMode === 'string') frame.counterAxisSizingMode = args.counterAxisSizingMode as 'FIXED' | 'AUTO';
   if (typeof args.itemSpacing === 'number') frame.itemSpacing = args.itemSpacing;
+  if (typeof args.counterAxisSpacing === 'number') frame.counterAxisSpacing = args.counterAxisSpacing;
   if (typeof args.paddingTop === 'number') frame.paddingTop = args.paddingTop;
   if (typeof args.paddingRight === 'number') frame.paddingRight = args.paddingRight;
   if (typeof args.paddingBottom === 'number') frame.paddingBottom = args.paddingBottom;
@@ -400,19 +413,35 @@ function execDeleteNode(node: SceneNode): void {
 
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
 
+let lastCreatedNode: SceneNode | null = null;
+
 async function dispatchAction(action: ActionDescriptor, tempMap: TempNodeMap): Promise<SceneNode | null> {
-  const { method, nodeId, args, tempId } = action;
+  const { method, args, tempId } = action;
+  let { nodeId, parentId } = action;
   const a = (args ?? {}) as Args;
 
+  // __prev refers to the most recently created node in this batch.
+  if (nodeId === '__prev' && lastCreatedNode) nodeId = lastCreatedNode.id;
+  if (parentId === '__prev' && lastCreatedNode) parentId = lastCreatedNode.id;
+
   switch (method) {
-    case 'createRectangle':
-      return execCreateRectangle(a, tempMap, tempId);
+    case 'createRectangle': {
+      const created = await execCreateRectangle(a, tempMap, tempId, parentId);
+      lastCreatedNode = created;
+      return created;
+    }
 
-    case 'createFrame':
-      return execCreateFrame(a, tempMap, tempId);
+    case 'createFrame': {
+      const created = await execCreateFrame(a, tempMap, tempId, parentId);
+      lastCreatedNode = created;
+      return created;
+    }
 
-    case 'createText':
-      return execCreateText(a, tempMap, tempId);
+    case 'createText': {
+      const created = await execCreateText(a, tempMap, tempId, parentId);
+      lastCreatedNode = created;
+      return created;
+    }
 
     case 'setProperty': {
       const node = await resolveNode(nodeId, tempMap);
@@ -461,8 +490,12 @@ async function dispatchAction(action: ActionDescriptor, tempMap: TempNodeMap): P
       return null;
 
     case 'deleteNode': {
-      const node = await resolveNode(nodeId, tempMap);
-      execDeleteNode(node);
+      try {
+        const node = await resolveNode(nodeId, tempMap);
+        execDeleteNode(node);
+      } catch {
+        // Node already removed (e.g. parent was deleted first) — ignore.
+      }
       return null;
     }
 
@@ -483,6 +516,7 @@ export async function executeActions(actions: ActionDescriptor[]): Promise<Execu
   let executedCount = 0;
 
   const tempMap: TempNodeMap = new Map();
+  lastCreatedNode = null;
 
   figma.commitUndo();
 
@@ -491,7 +525,9 @@ export async function executeActions(actions: ActionDescriptor[]): Promise<Execu
     try {
       const created = await dispatchAction(action, tempMap);
       executedCount++;
-      if (created) createdNodeIds.push(created.id);
+      // Only track top-level created nodes (no parentId) for cleanup.
+      // Deleting a parent automatically removes its children.
+      if (created && !action.parentId) createdNodeIds.push(created.id);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       errors.push(`[${i}] ${action.method}: ${msg}`);
