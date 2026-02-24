@@ -75,62 +75,62 @@ Update the file after completing each sub-task, not just after completing an ent
   - [x] 2.8 Create `src/ui/components/index.ts`: barrel export with renamed aliases (Select, Section, ColorSwatch, SpringEditor, TextInput, Button)
   - [x] 2.9 Test harness in `App.tsx` renders all components with live state — build passes cleanly. Verify in Figma.
 
-- [ ] 3.0 Build the postMessage communication layer
-  - [ ] 3.1 Create `src/shared/message-types.ts` defining TypeScript interfaces for every message type:
+- [x] 3.0 Build the postMessage communication layer
+  - [x] 3.1 Create `src/shared/message-types.ts` defining TypeScript interfaces for every message type:
     - `SelectionContextMessage` — main → iframe, carries serialized selection data
     - `UIRenderMessage` — iframe → iframe (internal), carries the UI spec from LLM response
     - `ControlChangeMessage` — iframe → main, carries `{ controlId: string, value: any, action: string }` describing which figma.* update to apply
     - `ExecuteActionsMessage` — iframe → main, carries the `actions` array from LLM response
     - `ErrorMessage` — bidirectional, carries `{ source: string, message: string }`
     - `PluginReadyMessage` — iframe → main, signals the iframe has mounted
-  - [ ] 3.2 Create `src/main/message-handler.ts` — registers a `figma.ui.onmessage` listener that routes incoming messages by type to the appropriate handler (action executor, error logger, etc.)
-  - [ ] 3.3 Create helper functions in the iframe for sending messages to the main thread (`postToMain(message)` wrapper around `parent.postMessage({ pluginMessage: ... }, '*')`) and listening for messages from the main thread (`onMainMessage(callback)` wrapper around `window.addEventListener('message', ...)`)
-  - [ ] 3.4 Verify round-trip communication: iframe sends a `PluginReadyMessage` on mount → main thread receives it, sends back a `SelectionContextMessage` with dummy data → iframe receives and logs it. Confirm in Figma's developer console.
+  - [x] 3.2 Create `src/main/message-handler.ts` — registers a `figma.ui.onmessage` listener that routes incoming messages by type to the appropriate handler (action executor, error logger, etc.)
+  - [x] 3.3 Create helper functions in the iframe for sending messages to the main thread (`postToMain(message)` wrapper around `parent.postMessage({ pluginMessage: ... }, '*')`) and listening for messages from the main thread (`onMainMessage(callback)` wrapper around `window.addEventListener('message', ...)`)
+  - [x] 3.4 Verify round-trip communication: iframe sends a `PluginReadyMessage` on mount → main thread receives it, sends back a `SelectionContextMessage` with dummy data → iframe receives and logs it. Confirm in Figma's developer console.
 
-- [ ] 4.0 Build plugin shell UI
-  - [ ] 4.1 Build the shell layout in `App.tsx`: a flex-column container that fills the iframe, with a scrollable render zone (top, `flex: 1`) and a fixed chat area (bottom)
-  - [ ] 4.2 Build `src/ui/chat/ChatInput.tsx` — a text input with a send button. Enter key submits. Input clears after submission. Disabled while a request is in flight. Calls an `onSubmit(message: string)` prop.
-  - [ ] 4.3 Build `src/ui/chat/ChatHistory.tsx` — displays a scrollable list of chat messages (user messages and assistant responses). Each message shows the sender and content. Error messages display in a distinct error style. Auto-scrolls to the latest message.
-  - [ ] 4.4 Build an empty state for the render zone — show a brief hint like "Select something and describe what you want" centered in the render zone when no UI has been generated yet
-  - [ ] 4.5 Build a loading indicator — shown in the render zone (or between chat messages) while the LLM request is in flight. A simple pulsing dot or spinner styled to match the dark theme.
-  - [ ] 4.6 Wire up state management in `App.tsx`: maintain `messages[]` (chat history), `currentUISpec` (the latest UI spec from LLM), `isLoading` (request in flight), `selectionContext` (latest from main thread). Listen for `SelectionContextMessage` from main thread and update `selectionContext`.
-  - [ ] 4.7 Style the shell to match Figma's native plugin aesthetic: `#1e1e1e` background, `#2c2c2c` chat input background, `#fff` text at 85% opacity, Inter font, 12px body text, 11px labels, tight padding (8px).
+- [x] 4.0 Build plugin shell UI
+  - [x] 4.1 Build the shell layout in `App.tsx`: a flex-column container that fills the iframe, with a scrollable render zone (top, `flex: 1`) and a fixed chat area (bottom)
+  - [x] 4.2 Build `src/ui/chat/ChatInput.tsx` — a text input with a send button. Enter key submits. Input clears after submission. Disabled while a request is in flight. Calls an `onSubmit(message: string)` prop.
+  - [x] 4.3 Build `src/ui/chat/ChatHistory.tsx` — displays a scrollable list of chat messages (user messages and assistant responses). Each message shows the sender and content. Error messages display in a distinct error style. Auto-scrolls to the latest message.
+  - [x] 4.4 Build an empty state for the render zone — show a brief hint like "Select something and describe what you want" centered in the render zone when no UI has been generated yet
+  - [x] 4.5 Build a loading indicator — shown in the render zone (or between chat messages) while the LLM request is in flight. A simple pulsing dot or spinner styled to match the dark theme.
+  - [x] 4.6 Wire up state management in `App.tsx`: maintain `messages[]` (chat history), `currentUISpec` (the latest UI spec from LLM), `isLoading` (request in flight), `selectionContext` (latest from main thread). Listen for `SelectionContextMessage` from main thread and update `selectionContext`.
+  - [x] 4.7 Style the shell to match Figma's native plugin aesthetic: `#1e1e1e` background, `#2c2c2c` chat input background, `#fff` text at 85% opacity, Inter font, 12px body text, 11px labels, tight padding (8px).
 
-- [ ] 5.0 Build the selection serializer
-  - [ ] 5.1 Create `src/main/selection-serializer.ts` with a `serializeSelection(nodes: readonly SceneNode[]): SelectionContext` function
-  - [ ] 5.2 For each selected node, extract: `id`, `type`, `name`, `x`, `y`, `width`, `height`, `rotation`, `opacity`, `visible`
-  - [ ] 5.3 Extract fill properties: `fills` array (type, color, opacity for solid fills; gradient stops for gradient fills; image hash for image fills)
-  - [ ] 5.4 Extract stroke properties: `strokes` array (color, weight, alignment)
-  - [ ] 5.5 Extract effects: `effects` array (type, radius, offset, color for shadows/blurs)
-  - [ ] 5.6 For text nodes: extract `fontSize`, `fontName`, `textAlignHorizontal`, `textAlignVertical`, `characters` (truncated to 100 chars), `lineHeight`, `letterSpacing`
-  - [ ] 5.7 Extract hierarchy: `parentId`, `parentName`, `childCount`. For frames/groups, include direct children's `id`, `type`, and `name` (one level deep only)
-  - [ ] 5.8 Extract prototyping connections if present: `reactions` array with `trigger`, `action type`, `destinationId`
-  - [ ] 5.9 Implement truncation: if total serialized context exceeds a configurable token limit (~2000 tokens, roughly 8000 characters), truncate children lists and add a summary (e.g., "…and 12 more children")
-  - [ ] 5.10 Register a `figma.on('selectionchange', ...)` listener in `code.ts` that calls the serializer and sends the result to the iframe via `figma.ui.postMessage`
-  - [ ] 5.11 Also serialize and send on plugin launch (initial selection)
+- [x] 5.0 Build the selection serializer
+  - [x] 5.1 Create `src/main/selection-serializer.ts` with a `serializeSelection(nodes: readonly SceneNode[]): SelectionContext` function
+  - [x] 5.2 For each selected node, extract: `id`, `type`, `name`, `x`, `y`, `width`, `height`, `rotation`, `opacity`, `visible`
+  - [x] 5.3 Extract fill properties: `fills` array (type, color, opacity for solid fills; gradient stops for gradient fills; image hash for image fills)
+  - [x] 5.4 Extract stroke properties: `strokes` array (color, weight, alignment)
+  - [x] 5.5 Extract effects: `effects` array (type, radius, offset, color for shadows/blurs)
+  - [x] 5.6 For text nodes: extract `fontSize`, `fontName`, `textAlignHorizontal`, `textAlignVertical`, `characters` (truncated to 100 chars), `lineHeight`, `letterSpacing`
+  - [x] 5.7 Extract hierarchy: `parentId`, `parentName`, `childCount`. For frames/groups, include direct children's `id`, `type`, and `name` (one level deep only)
+  - [x] 5.8 Extract prototyping connections if present: `reactions` array with `trigger`, `action type`, `destinationId`
+  - [x] 5.9 Implement truncation: if total serialized context exceeds a configurable token limit (~2000 tokens, roughly 8000 characters), truncate children lists and add a summary (e.g., "…and 12 more children")
+  - [x] 5.10 Register a `figma.on('selectionchange', ...)` listener in `code.ts` that calls the serializer and sends the result to the iframe via `figma.ui.postMessage`
+  - [x] 5.11 Also serialize and send on plugin launch (initial selection)
 
-- [ ] 6.0 Build LLM integration and system prompt
-  - [ ] 6.1 Create `src/ui/api/claude.ts` — a function `callClaude(messages: ChatMessage[], systemPrompt: string): Promise<LLMResponse>` that makes a fetch request to `https://api.anthropic.com/v1/messages` with the appropriate headers (`x-api-key`, `anthropic-version`, `content-type`). Parse the response and extract the text content.
-  - [ ] 6.2 Handle API errors: network failures, 4xx/5xx responses, rate limiting. Return a structured error object rather than throwing, so the caller can display it in the chat.
-  - [ ] 6.3 Add API key configuration: for MVP, read from a hardcoded constant in `claude.ts` (with a clear `// TODO: move to settings` comment). Add a `.env` or `.gitignore` entry to avoid committing the key.
-  - [ ] 6.4 Create `src/ui/prompt/system-prompt.ts` — the system prompt that tells the LLM:
+- [x] 6.0 Build LLM integration and system prompt
+  - [x] 6.1 Create `src/ui/api/claude.ts` — a function `callClaude(messages: ChatMessage[], systemPrompt: string): Promise<LLMResponse>` that makes a fetch request to `https://api.anthropic.com/v1/messages` with the appropriate headers (`x-api-key`, `anthropic-version`, `content-type`). Parse the response and extract the text content.
+  - [x] 6.2 Handle API errors: network failures, 4xx/5xx responses, rate limiting. Return a structured error object rather than throwing, so the caller can display it in the chat.
+  - [x] 6.3 Add API key configuration: for MVP, read from a hardcoded constant in `claude.ts` (with a clear `// TODO: move to settings` comment). Add a `.env` or `.gitignore` entry to avoid committing the key.
+  - [x] 6.4 Create `src/ui/prompt/system-prompt.ts` — the system prompt that tells the LLM:
     - Its role (generating Figma plugin UI and actions on demand)
     - The response format (`{ "actions": [...], "ui": {...} }`)
     - The action format (structured JSON describing `figma.*` calls, with `method`, `nodeId`, and `args` fields)
     - The complete component catalog: every component name, its props with types and defaults, and a short usage example
     - Constraints: only use listed components, fall back to raw HTML with design tokens if nothing fits, keep UI concise
-  - [ ] 6.5 Create `src/ui/prompt/prompt-composer.ts` — a function `composePrompt(selectionContext, currentUISpec, chatHistory, userMessage): { system: string, messages: ChatMessage[] }` that assembles the full prompt. Selection context and current UI spec go into a system message or the first user message. Chat history maps to alternating user/assistant messages. The new user message goes last.
-  - [ ] 6.6 Parse the LLM response: extract JSON from the response text (handle cases where the LLM wraps JSON in markdown code fences). Validate that the parsed object has `actions` (array) and `ui` (object) fields. If validation fails, return an error describing what went wrong.
-  - [ ] 6.7 Wire into `App.tsx`: when the user submits a chat message, call `composePrompt` → `callClaude` → parse response → dispatch actions to main thread via postMessage → update `currentUISpec` in state. Add the user message and LLM response to chat history.
+  - [x] 6.5 Create `src/ui/prompt/prompt-composer.ts` — a function `composePrompt(selectionContext, currentUISpec, chatHistory, userMessage): { system: string, messages: ChatMessage[] }` that assembles the full prompt. Selection context and current UI spec go into a system message or the first user message. Chat history maps to alternating user/assistant messages. The new user message goes last.
+  - [x] 6.6 Parse the LLM response: extract JSON from the response text (handle cases where the LLM wraps JSON in markdown code fences). Validate that the parsed object has `actions` (array) and `ui` (object) fields. If validation fails, return an error describing what went wrong.
+  - [x] 6.7 Wire into `App.tsx`: when the user submits a chat message, call `composePrompt` → `callClaude` → parse response → dispatch actions to main thread via postMessage → update `currentUISpec` in state. Add the user message and LLM response to chat history.
 
-- [ ] 7.0 Build the action executor
-  - [ ] 7.1 Create `src/main/action-executor.ts` with a function `executeActions(actions: Action[]): ExecutionResult` that processes an array of structured action objects
-  - [ ] 7.2 Define the `Action` interface: `{ method: string, nodeId?: string, args: Record<string, any>, parentId?: string }`. Support methods like: `createRectangle`, `createFrame`, `createText`, `setProperty`, `setFill`, `setStroke`, `setEffect`, `setLayoutProperties`, `appendChild`, `resize`, `setReactions`, etc.
-  - [ ] 7.3 Implement node resolution: given a `nodeId` string, find the corresponding node using `figma.getNodeById()`. For newly created nodes (where `nodeId` is a temporary reference), maintain a mapping of temp IDs → created nodes within the execution batch.
-  - [ ] 7.4 Wrap all actions in `figma.group(() => { ... })` (or the equivalent undo-group API) so the entire batch can be reverted with a single Cmd+Z
-  - [ ] 7.5 Execute actions sequentially. If an individual action throws an error, catch it, log the error with the action's index and method name, and continue with the next action. Collect all errors.
-  - [ ] 7.6 After execution, return an `ExecutionResult` with: `{ success: boolean, executedCount: number, errorCount: number, errors: string[], createdNodeIds: string[] }`. Send this back to the iframe via postMessage so it can be displayed in the chat.
-  - [ ] 7.7 Wire into `message-handler.ts`: when an `ExecuteActionsMessage` arrives, call `executeActions` and send the result back.
+- [x] 7.0 Build the action executor
+  - [x] 7.1 Create `src/main/action-executor.ts` with a function `executeActions(actions: Action[]): ExecutionResult` that processes an array of structured action objects
+  - [x] 7.2 Define the `Action` interface: `{ method: string, nodeId?: string, args: Record<string, any>, parentId?: string }`. Support methods like: `createRectangle`, `createFrame`, `createText`, `setProperty`, `setFill`, `setStroke`, `setEffect`, `setLayoutProperties`, `appendChild`, `resize`, `setReactions`, etc.
+  - [x] 7.3 Implement node resolution: given a `nodeId` string, find the corresponding node using `figma.getNodeById()`. For newly created nodes (where `nodeId` is a temporary reference), maintain a mapping of temp IDs → created nodes within the execution batch.
+  - [x] 7.4 Wrap all actions in `figma.group(() => { ... })` (or the equivalent undo-group API) so the entire batch can be reverted with a single Cmd+Z
+  - [x] 7.5 Execute actions sequentially. If an individual action throws an error, catch it, log the error with the action's index and method name, and continue with the next action. Collect all errors.
+  - [x] 7.6 After execution, return an `ExecutionResult` with: `{ success: boolean, executedCount: number, errorCount: number, errors: string[], createdNodeIds: string[] }`. Send this back to the iframe via postMessage so it can be displayed in the chat.
+  - [x] 7.7 Wire into `message-handler.ts`: when an `ExecuteActionsMessage` arrives, call `executeActions` and send the result back.
 
 - [ ] 8.0 Build the declarative UI renderer and live canvas update loop
   - [ ] 8.1 Create `src/ui/renderer/UIRenderer.tsx` — a React component that takes a `spec: UISpec` prop (the JSON tree from the LLM) and renders it as a component tree

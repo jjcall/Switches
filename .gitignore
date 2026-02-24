@@ -2,3 +2,6 @@ node_modules/
 dist/_ui_bundle.js
 .env
 .DS_Store
+# Prevent accidental commit of a real API key in claude.ts
+# (the file is tracked but the key line should stay as placeholder)
+src/ui/api/claude.local.ts

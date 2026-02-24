@@ -1,141 +1,184 @@
 import { createRoot } from 'react-dom/client';
-import { useState, useEffect, useRef } from 'react';
-// useRef still needed for lastHeight tracking in useAutoResize
+import { useState, useEffect, useCallback, useRef } from 'react';
 import '../styles/plugin.css';
-import {
-  Slider,
-  Toggle,
-  Select,
-  Section,
-  ColorSwatch,
-  SpringEditor,
-  TextInput,
-  Button,
-  NumberInput,
-  SegmentedControl,
-} from './components';
-import type { SpringConfig } from './components';
+import { postToMain, onMainMessage } from './messaging';
+import { ChatInput } from './chat/ChatInput';
+import { ChatHistory } from './chat/ChatHistory';
+import type { ChatMessage } from './chat/ChatHistory';
+import type { SelectionContext, UISpec, ActionDescriptor } from '../shared/message-types';
+import { callClaude } from './api/claude';
+import { composePrompt, parseLLMResponse } from './prompt/prompt-composer';
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const PLUGIN_WIDTH = 300;
-const MIN_HEIGHT = 120;
-// No artificial cap — Figma enforces its own maximum based on screen size.
-// Our content is ~700px with Spring open; capping at 680 was clipping it.
-const MAX_HEIGHT = 2000;
+const MAX_HEIGHT = 600;
 
-// Resizes the plugin window to match content.
-// Uses MutationObserver to detect DOM changes, then reads offsetHeight
-// on #root's first child. figma.ui.resize() expects CSS pixels and maps
-// 1:1 to the iframe viewport regardless of devicePixelRatio.
-function useAutoResize() {
-  const lastHeight = useRef(-1);
+// ─── Shell resize ─────────────────────────────────────────────────────────────
 
+function useShellResize() {
   useEffect(() => {
-    const root = document.getElementById('root');
-    if (!root) return;
-
-    const sendResize = () => {
-      const content = root.firstElementChild as HTMLElement | null;
-      if (!content) return;
-      const height = content.offsetHeight;
-      if (height === lastHeight.current) return;
-      lastHeight.current = height;
-      const clamped = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, height));
-      parent.postMessage({ pluginMessage: { type: 'resize', width: PLUGIN_WIDTH, height: clamped } }, '*');
-    };
-
-    // MutationObserver catches all DOM changes: children added/removed (folder toggle),
-    // attribute changes (style updates from controls). We debounce slightly with rAF
-    // to batch multiple mutations into a single measurement.
-    let pending = false;
-    const mo = new MutationObserver(() => {
-      if (!pending) {
-        pending = true;
-        requestAnimationFrame(() => {
-          pending = false;
-          sendResize();
-        });
-      }
-    });
-    mo.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
-
-    sendResize();
-    return () => mo.disconnect();
+    parent.postMessage(
+      { pluginMessage: { type: 'resize', width: PLUGIN_WIDTH, height: MAX_HEIGHT } },
+      '*',
+    );
   }, []);
 }
 
-// Test harness — verifies all components render and interact correctly.
-// Will be replaced by the real plugin shell in Task 4.
-function App() {
-  useAutoResize();
+// ─── Loading indicator ────────────────────────────────────────────────────────
 
-  const [opacityVal, setOpacityVal] = useState(0.5);
-  const [blurVal, setBlurVal] = useState(6);
-  const [toggleVal, setToggleVal] = useState(false);
-  const [selectVal, setSelectVal] = useState('center');
-  const [colorVal, setColorVal] = useState('#7B61FF');
-  const [textVal, setTextVal] = useState('');
-  const [numVal, setNumVal] = useState(8);
-  const [segVal, setSegVal] = useState<'a' | 'b'>('a');
-  const [spring, setSpring] = useState<SpringConfig>({
-    type: 'spring',
-    visualDuration: 0.3,
-    bounce: 0.2,
-  });
+function LoadingDots() {
+  return (
+    <div className="loading-dots" aria-label="Loading">
+      <span />
+      <span />
+      <span />
+    </div>
+  );
+}
+
+// ─── Empty state ──────────────────────────────────────────────────────────────
+
+function EmptyState({ hasSelection }: { hasSelection: boolean }) {
+  return (
+    <div className="render-zone-empty">
+      <svg className="render-zone-empty-icon" width="24" height="24" viewBox="0 0 24 24" fill="none">
+        <rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+        <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+        <rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+        <rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+      </svg>
+      <p className="render-zone-empty-text">
+        {hasSelection
+          ? 'Describe what you want to build'
+          : 'Select something on the canvas, then describe what you want'}
+      </p>
+    </div>
+  );
+}
+
+// ─── App ──────────────────────────────────────────────────────────────────────
+
+function App() {
+  useShellResize();
+
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [currentUISpec, setCurrentUISpec] = useState<UISpec | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectionContext, setSelectionContext] = useState<SelectionContext | null>(null);
+
+  // Keep a ref to the latest messages so the submit callback always sees
+  // current history without needing to be in its dependency array.
+  const messagesRef = useRef<ChatMessage[]>(messages);
+  messagesRef.current = messages;
+
+  // ── Messaging ──────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    postToMain({ type: 'PLUGIN_READY' });
+
+    return onMainMessage((msg) => {
+      if (msg.type === 'SELECTION_CONTEXT') {
+        setSelectionContext(msg.payload);
+      } else if (msg.type === 'EXECUTION_RESULT') {
+        const { errorCount, errors } = msg.payload;
+        if (errorCount > 0) {
+          addMessage('error', `${errorCount} action(s) failed:\n${errors.join('\n')}`);
+        }
+      } else if (msg.type === 'ERROR') {
+        addMessage('error', msg.payload.message);
+      }
+    });
+  // addMessage is stable (useCallback with no deps), safe to exclude
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  const addMessage = useCallback((role: ChatMessage['role'], content: string) => {
+    setMessages(prev => [
+      ...prev,
+      { id: `${Date.now()}-${Math.random()}`, role, content },
+    ]);
+  }, []);
+
+  // ── Submit ─────────────────────────────────────────────────────────────────
+
+  const handleSubmit = useCallback(async (text: string) => {
+    addMessage('user', text);
+    setIsLoading(true);
+
+    // Snapshot current state at submission time.
+    const selCtx = selectionContext;
+    const uiSpec = currentUISpec;
+    const history = messagesRef.current;
+
+    const { system, messages: apiMessages } = composePrompt(selCtx, uiSpec, history, text);
+
+    const result = await callClaude(apiMessages, system);
+
+    if (!result.ok) {
+      addMessage('error', result.error);
+      setIsLoading(false);
+      return;
+    }
+
+    const parsed = parseLLMResponse(result.text);
+
+    if (!parsed.ok) {
+      addMessage('error', parsed.error);
+      setIsLoading(false);
+      return;
+    }
+
+    const { actions, ui, message } = parsed.data;
+
+    // Show any explanatory message the LLM included.
+    if (message) {
+      addMessage('assistant', message);
+    } else {
+      addMessage('assistant', `Done — ${actions.length} action(s), ${ui.controls.length} control(s) generated.`);
+    }
+
+    // Dispatch actions to the main thread for execution.
+    if (actions.length > 0) {
+      postToMain({
+        type: 'EXECUTE_ACTIONS',
+        payload: { actions: actions as ActionDescriptor[] },
+      });
+    }
+
+    // Update the rendered UI spec.
+    setCurrentUISpec(prev => {
+      if (!prev || ui.replace) return ui;
+      // Merge: replace controls by id, append new ones.
+      const existingById = new Map(prev.controls.map(c => [c.id, c]));
+      for (const c of ui.controls) existingById.set(c.id, c);
+      return { ...prev, controls: Array.from(existingById.values()) };
+    });
+
+    setIsLoading(false);
+  }, [addMessage, selectionContext, currentUISpec]);
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
+  const hasSpec = currentUISpec !== null && currentUISpec.controls.length > 0;
+  const hasSelection = selectionContext !== null && selectionContext.nodes.length > 0;
 
   return (
-    <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginBottom: 4, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-          Component test harness
-        </div>
+    <div className="shell">
+      {/* Render zone */}
+      <div className="render-zone">
+        {isLoading && <LoadingDots />}
+        {!isLoading && !hasSpec && <EmptyState hasSelection={hasSelection} />}
+        {/* UIRenderer mounted here in Task 8 */}
+      </div>
 
-        <Slider label="Opacity" value={opacityVal} onChange={setOpacityVal} min={0} max={1} step={0.01} />
-        <Slider label="Blur" value={blurVal} onChange={setBlurVal} min={0} max={20} step={0.5} />
-
-        <Toggle label="Visible" checked={toggleVal} onChange={setToggleVal} />
-
-        <div className="dialkit-labeled-control">
-          <span className="dialkit-labeled-control-label">Mode</span>
-          <SegmentedControl
-            options={[{ value: 'a' as const, label: 'Auto' }, { value: 'b' as const, label: 'Fixed' }]}
-            value={segVal}
-            onChange={setSegVal}
-          />
-        </div>
-
-        <Select
-          label="Align"
-          value={selectVal}
-          options={['left', 'center', 'right', 'justify']}
-          onChange={setSelectVal}
-        />
-
-        <ColorSwatch label="Fill" value={colorVal} onChange={setColorVal} />
-
-        <TextInput label="Name" value={textVal} onChange={setTextVal} placeholder="Layer name" />
-
-        <NumberInput label="Spacing" value={numVal} onChange={setNumVal} min={0} max={64} step={1} />
-
-        <Section title="Spring" defaultOpen={false}>
-          <SpringEditor label="Easing" value={spring} onChange={setSpring} />
-        </Section>
-
-        {/* Buttons in a row — side-by-side for short actions */}
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button
-            className="dialkit-button"
-            style={{ flex: 1 }}
-            onClick={() => console.log('apply', { opacityVal, blurVal, toggleVal, selectVal, colorVal, numVal, spring })}
-          >
-            Apply
-          </button>
-          <button
-            className="dialkit-button"
-            style={{ flex: 1 }}
-            onClick={() => { setOpacityVal(0.5); setBlurVal(6); setNumVal(8); }}
-          >
-            Reset
-          </button>
-        </div>
+      {/* Chat area */}
+      <div className="chat-area">
+        <ChatHistory messages={messages} />
+        <ChatInput onSubmit={handleSubmit} disabled={isLoading} />
+      </div>
     </div>
   );
 }

@@ -1,0 +1,217 @@
+// ─── Selection context ────────────────────────────────────────────────────────
+
+export interface SolidFill {
+  type: 'SOLID';
+  color: { r: number; g: number; b: number };
+  opacity: number;
+}
+
+export interface GradientStop {
+  position: number;
+  color: { r: number; g: number; b: number; a: number };
+}
+
+export interface GradientFill {
+  type: 'GRADIENT_LINEAR' | 'GRADIENT_RADIAL' | 'GRADIENT_ANGULAR' | 'GRADIENT_DIAMOND';
+  gradientStops: GradientStop[];
+  opacity: number;
+}
+
+export interface ImageFill {
+  type: 'IMAGE';
+  imageHash: string | null;
+  opacity: number;
+}
+
+export type FillDescriptor = SolidFill | GradientFill | ImageFill;
+
+export interface StrokeDescriptor {
+  color: { r: number; g: number; b: number };
+  opacity: number;
+  weight: number;
+  alignment: 'CENTER' | 'INSIDE' | 'OUTSIDE';
+}
+
+export interface ShadowEffect {
+  type: 'DROP_SHADOW' | 'INNER_SHADOW';
+  color: { r: number; g: number; b: number; a: number };
+  offset: { x: number; y: number };
+  radius: number;
+  spread?: number;
+  visible: boolean;
+}
+
+export interface BlurEffect {
+  type: 'LAYER_BLUR' | 'BACKGROUND_BLUR';
+  radius: number;
+  visible: boolean;
+}
+
+export type EffectDescriptor = ShadowEffect | BlurEffect;
+
+export interface ChildSummary {
+  id: string;
+  type: string;
+  name: string;
+}
+
+export interface ReactionDescriptor {
+  trigger: string;
+  actionType: string;
+  destinationId: string | null;
+}
+
+export interface NodeDescriptor {
+  id: string;
+  type: string;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  opacity: number;
+  visible: boolean;
+  fills: FillDescriptor[];
+  strokes: StrokeDescriptor[];
+  effects: EffectDescriptor[];
+  parentId: string | null;
+  parentName: string | null;
+  childCount: number;
+  children?: ChildSummary[];
+  // Text-node specific
+  fontSize?: number;
+  fontName?: { family: string; style: string };
+  textAlignHorizontal?: string;
+  textAlignVertical?: string;
+  characters?: string;
+  lineHeight?: LineHeight;
+  letterSpacing?: LetterSpacing;
+  // Prototyping
+  reactions?: ReactionDescriptor[];
+}
+
+export interface LineHeight {
+  unit: 'AUTO' | 'PIXELS' | 'PERCENT';
+  value?: number;
+}
+
+export interface LetterSpacing {
+  unit: 'PIXELS' | 'PERCENT';
+  value: number;
+}
+
+export interface SelectionContext {
+  nodes: NodeDescriptor[];
+  truncated: boolean;
+}
+
+// ─── Message types ────────────────────────────────────────────────────────────
+
+/** Main → iframe: sends serialized selection whenever it changes. */
+export interface SelectionContextMessage {
+  type: 'SELECTION_CONTEXT';
+  payload: SelectionContext;
+}
+
+/** Iframe → iframe (internal): carries the UI spec emitted by the LLM. */
+export interface UIRenderMessage {
+  type: 'UI_RENDER';
+  payload: UISpec;
+}
+
+/** Iframe → main: describes a single Figma API update triggered by a control. */
+export interface ControlChangeMessage {
+  type: 'CONTROL_CHANGE';
+  payload: {
+    controlId: string;
+    value: unknown;
+    action: ActionDescriptor;
+  };
+}
+
+/** Iframe → main: the full actions array from an LLM response. */
+export interface ExecuteActionsMessage {
+  type: 'EXECUTE_ACTIONS';
+  payload: {
+    actions: ActionDescriptor[];
+  };
+}
+
+/** Bidirectional: communicates an error. */
+export interface ErrorMessage {
+  type: 'ERROR';
+  payload: {
+    source: string;
+    message: string;
+  };
+}
+
+/** Iframe → main: signals the iframe has mounted and is ready to receive messages. */
+export interface PluginReadyMessage {
+  type: 'PLUGIN_READY';
+}
+
+/** Main → iframe: reports the result of executing an actions batch. */
+export interface ExecutionResultMessage {
+  type: 'EXECUTION_RESULT';
+  payload: ExecutionResult;
+}
+
+export interface ExecutionResult {
+  success: boolean;
+  executedCount: number;
+  errorCount: number;
+  errors: string[];
+  createdNodeIds: string[];
+}
+
+export type MainToIframeMessage =
+  | SelectionContextMessage
+  | ExecutionResultMessage
+  | ErrorMessage;
+
+export type IframeToMainMessage =
+  | PluginReadyMessage
+  | ControlChangeMessage
+  | ExecuteActionsMessage
+  | ErrorMessage;
+
+// ─── UI spec (LLM → renderer) ─────────────────────────────────────────────────
+
+export interface UISpec {
+  replace?: boolean;
+  controls: UIControl[];
+}
+
+export interface UIControl {
+  id: string;
+  type:
+    | 'slider'
+    | 'toggle'
+    | 'select'
+    | 'section'
+    | 'color'
+    | 'spring'
+    | 'text'
+    | 'button'
+    | 'number'
+    | 'segmented';
+  label?: string;
+  props?: Record<string, unknown>;
+  /** The Figma API update to perform when this control's value changes. */
+  action?: ActionDescriptor;
+  /** Nested controls (for section type). */
+  children?: UIControl[];
+}
+
+// ─── Action descriptor (LLM → executor) ──────────────────────────────────────
+
+export interface ActionDescriptor {
+  method: string;
+  nodeId?: string;
+  parentId?: string;
+  args: Record<string, unknown>;
+  /** Temporary ID used to reference nodes created earlier in the same batch. */
+  tempId?: string;
+}
