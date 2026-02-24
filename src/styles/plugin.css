@@ -585,6 +585,7 @@ body {
 
 /* ── Render zone ─────────────────────────────────── */
 .render-zone {
+  position: relative;
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
@@ -592,6 +593,19 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+/* Fade hint when render zone overflows */
+.render-zone::after {
+  content: '';
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 16px;
+  background: linear-gradient(to bottom, transparent, #1e1e1e);
+  pointer-events: none;
+  flex-shrink: 0;
 }
 
 /* Scrollbar — Figma-native thin style */
@@ -655,6 +669,11 @@ body {
 @keyframes loading-pulse {
   0%, 80%, 100% { opacity: 0.3; transform: scale(0.85); }
   40%            { opacity: 1;   transform: scale(1); }
+}
+
+/* ── UI renderer ─────────────────────────────────── */
+.ui-renderer {
+  padding-bottom: 8px;
 }
 
 /* ── Chat area ───────────────────────────────────── */
@@ -767,6 +786,11 @@ body {
 .chat-input-send:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.18);
   color: #fff;
+}
+
+.chat-input-send:active:not(:disabled) {
+  background: rgba(255, 255, 255, 0.24);
+  transform: scale(0.94);
 }
 
 .chat-input-send:disabled {

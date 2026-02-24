@@ -8,6 +8,7 @@
   "documentAccess": "dynamic-page",
   "networkAccess": {
     "allowedDomains": ["https://api.anthropic.com"],
-    "reasoning": "Calls the Anthropic Claude API to generate plugin UI and Figma actions on demand."
+    "reasoning": "Calls the Anthropic Claude API to generate plugin UI and Figma actions on demand.",
+    "devAllowedDomains": ["http://localhost:3333"]
   }
 }

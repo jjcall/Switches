@@ -13,18 +13,18 @@ type TempNodeMap = Map<string, SceneNode>;
 
 /**
  * Resolves a nodeId to a SceneNode, checking the tempId map first (for nodes
- * created earlier in the same batch), then falling back to figma.getNodeById().
+ * created earlier in the same batch), then falling back to figma.getNodeByIdAsync().
  */
-function resolveNode(
+async function resolveNode(
   nodeId: string | undefined,
   tempMap: TempNodeMap,
-): SceneNode {
+): Promise<SceneNode> {
   if (!nodeId) throw new Error('No nodeId provided.');
 
   const temp = tempMap.get(nodeId);
   if (temp) return temp;
 
-  const node = figma.getNodeById(nodeId);
+  const node = await figma.getNodeByIdAsync(nodeId);
   if (!node) throw new Error(`Node not found: ${nodeId}`);
   if (node.type === 'DOCUMENT' || node.type === 'PAGE') {
     throw new Error(`Cannot target document or page node: ${nodeId}`);
@@ -35,12 +35,12 @@ function resolveNode(
 /**
  * Resolves a parentId to a container node.
  */
-function resolveParent(
+async function resolveParent(
   parentId: string | undefined,
   tempMap: TempNodeMap,
-): FrameNode | GroupNode | PageNode | ComponentNode | SectionNode {
+): Promise<FrameNode | GroupNode | PageNode | ComponentNode | SectionNode> {
   if (!parentId) return figma.currentPage;
-  const node = tempMap.get(parentId) ?? figma.getNodeById(parentId);
+  const node = tempMap.get(parentId) ?? await figma.getNodeByIdAsync(parentId);
   if (!node) throw new Error(`Parent node not found: ${parentId}`);
   if (
     node.type !== 'FRAME' &&
@@ -149,39 +149,39 @@ function toEffects(rawEffects: unknown): Effect[] {
 
 // ─── Method implementations ───────────────────────────────────────────────────
 
-function execCreateRectangle(args: Args, tempMap: TempNodeMap, tempId?: string): SceneNode {
+async function execCreateRectangle(args: Args, tempMap: TempNodeMap, tempId?: string): Promise<SceneNode> {
   const node = figma.createRectangle();
   if (typeof args.x === 'number') node.x = args.x;
   if (typeof args.y === 'number') node.y = args.y;
   if (typeof args.width === 'number' && typeof args.height === 'number') {
     node.resize(args.width as number, args.height as number);
   }
-  const parent = resolveParent(undefined, tempMap);
+  const parent = await resolveParent(undefined, tempMap);
   parent.appendChild(node);
   if (tempId) tempMap.set(tempId, node);
   return node;
 }
 
-function execCreateFrame(args: Args, tempMap: TempNodeMap, tempId?: string): SceneNode {
+async function execCreateFrame(args: Args, tempMap: TempNodeMap, tempId?: string): Promise<SceneNode> {
   const node = figma.createFrame();
   if (typeof args.x === 'number') node.x = args.x;
   if (typeof args.y === 'number') node.y = args.y;
   if (typeof args.width === 'number' && typeof args.height === 'number') {
     node.resize(args.width as number, args.height as number);
   }
-  const parent = resolveParent(undefined, tempMap);
+  const parent = await resolveParent(undefined, tempMap);
   parent.appendChild(node);
   if (tempId) tempMap.set(tempId, node);
   return node;
 }
 
-function execCreateText(args: Args, tempMap: TempNodeMap, tempId?: string): SceneNode {
+async function execCreateText(args: Args, tempMap: TempNodeMap, tempId?: string): Promise<SceneNode> {
   const node = figma.createText();
   if (typeof args.x === 'number') node.x = args.x;
   if (typeof args.y === 'number') node.y = args.y;
   if (typeof args.fontSize === 'number') node.fontSize = args.fontSize;
   if (typeof args.characters === 'string') node.characters = args.characters;
-  const parent = resolveParent(undefined, tempMap);
+  const parent = await resolveParent(undefined, tempMap);
   parent.appendChild(node);
   if (tempId) tempMap.set(tempId, node);
   return node;
@@ -214,12 +214,47 @@ function execSetFill(node: SceneNode, args: Args): void {
     return;
   }
 
+  // Property-patch: modify a single property on the first fill without replacing the array.
+  const property = typeof args.property === 'string' ? args.property : null;
+  if (property !== null && 'value' in args) {
+    const geoNode = node as GeometryMixin;
+    const fills: Paint[] = (geoNode.fills as readonly Paint[]).map(f => ({ ...f }));
+    if (fills.length > 0) {
+      (fills[0] as Record<string, unknown>)[property] = args.value;
+      geoNode.fills = fills;
+    }
+    return;
+  }
+
   const rawFills = args.fills ?? (Array.isArray(args.value) ? args.value : undefined);
   (node as GeometryMixin).fills = toPaints(rawFills);
 }
 
 function execSetStroke(node: SceneNode, args: Args): void {
   if (!('strokes' in node)) throw new Error(`Node type ${node.type} does not support strokes.`);
+
+  // Property-patch: modify a single property on the first stroke or the stroke itself.
+  const property = typeof args.property === 'string' ? args.property : null;
+  if (property !== null && 'value' in args) {
+    const geoNode = node as GeometryMixin;
+    // strokeWeight and strokeAlign live on the node, not inside the stroke paint.
+    if (property === 'strokeWeight' || property === 'weight') {
+      geoNode.strokeWeight = args.value as number;
+      return;
+    }
+    if (property === 'strokeAlign' || property === 'align') {
+      geoNode.strokeAlign = args.value as StrokeAlign;
+      return;
+    }
+    // Patch the first stroke paint's property (e.g. opacity).
+    const strokes: Paint[] = (geoNode.strokes as readonly Paint[]).map(s => ({ ...s }));
+    if (strokes.length > 0) {
+      (strokes[0] as Record<string, unknown>)[property] = args.value;
+      geoNode.strokes = strokes;
+    }
+    return;
+  }
+
   const rawStrokes = args.strokes ?? (Array.isArray(args.value) ? args.value : []);
   (node as GeometryMixin).strokes = toPaints(rawStrokes);
   if (typeof args.weight === 'number') {
@@ -230,10 +265,89 @@ function execSetStroke(node: SceneNode, args: Args): void {
   }
 }
 
+function makeDefaultEffect(type: string): Effect {
+  if (type === 'DROP_SHADOW' || type === 'INNER_SHADOW') {
+    return {
+      type: type as 'DROP_SHADOW',
+      color: { r: 0, g: 0, b: 0, a: 0.25 },
+      offset: { x: 0, y: 4 },
+      radius: 8,
+      spread: 0,
+      visible: true,
+      blendMode: 'NORMAL',
+      showShadowBehindNode: false,
+    } as DropShadowEffect;
+  }
+  return {
+    type: (type === 'BACKGROUND_BLUR' ? 'BACKGROUND_BLUR' : 'LAYER_BLUR') as 'LAYER_BLUR',
+    radius: 8,
+    visible: true,
+  } as BlurEffect;
+}
+
 function execSetEffect(node: SceneNode, args: Args): void {
   if (!('effects' in node)) throw new Error(`Node type ${node.type} does not support effects.`);
-  const rawEffects = args.effects ?? (Array.isArray(args.value) ? args.value : []);
-  (node as BlendMixin).effects = toEffects(rawEffects);
+
+  // Full replacement: args.effects is an array of effect objects.
+  if (args.effects !== undefined) {
+    (node as BlendMixin).effects = toEffects(args.effects);
+    return;
+  }
+
+  // Array value — treat as full replacement.
+  if (Array.isArray(args.value)) {
+    (node as BlendMixin).effects = toEffects(args.value);
+    return;
+  }
+
+  // Live control-change: patch a single property on an effect of the specified type.
+  // Args: { property, effectType, effectIndex? }
+  const property = typeof args.property === 'string' ? args.property : null;
+  if (property !== null && 'value' in args) {
+    const blendNode = node as BlendMixin;
+    const effectType = typeof args.effectType === 'string' ? args.effectType : 'DROP_SHADOW';
+    const effectIndex = typeof args.effectIndex === 'number' ? args.effectIndex : 0;
+
+    // Deep-clone the effects array so Figma's frozen objects can be mutated.
+    const effects: Effect[] = blendNode.effects.map(e => {
+      const clone = { ...e } as Record<string, unknown>;
+      // Deep-clone sub-objects that we may need to patch.
+      if (clone.offset && typeof clone.offset === 'object') {
+        clone.offset = { ...(clone.offset as object) };
+      }
+      if (clone.color && typeof clone.color === 'object') {
+        clone.color = { ...(clone.color as object) };
+      }
+      return clone as unknown as Effect;
+    });
+
+    // Find target effect by type, falling back to effectIndex.
+    let idx = effects.findIndex(e => e.type === effectType);
+    if (idx < 0) idx = effectIndex;
+
+    // If effect still not found, create a sensible default of the requested type.
+    if (idx < 0 || idx >= effects.length) {
+      const defaultEffect = makeDefaultEffect(effectType);
+      effects.push(defaultEffect);
+      idx = effects.length - 1;
+    }
+
+    // Patch the property.
+    const target = effects[idx] as Record<string, unknown>;
+    if (property === 'offsetX') {
+      (target.offset as { x: number; y: number }).x = args.value as number;
+    } else if (property === 'offsetY') {
+      (target.offset as { x: number; y: number }).y = args.value as number;
+    } else {
+      target[property] = args.value;
+    }
+
+    blendNode.effects = effects as readonly Effect[];
+    return;
+  }
+
+  // Fallback: no-op (don't wipe existing effects).
+  console.warn('[setEffect] could not determine update intent from args:', args);
 }
 
 function execSetCornerRadius(node: SceneNode, args: Args): void {
@@ -274,9 +388,9 @@ function execResize(node: SceneNode, args: Args): void {
   (node as LayoutMixin).resize(w, h);
 }
 
-function execAppendChild(action: ActionDescriptor, tempMap: TempNodeMap): void {
-  const child = resolveNode(action.nodeId, tempMap) as SceneNode;
-  const parent = resolveParent(action.parentId, tempMap);
+async function execAppendChild(action: ActionDescriptor, tempMap: TempNodeMap): Promise<void> {
+  const child = await resolveNode(action.nodeId, tempMap);
+  const parent = await resolveParent(action.parentId, tempMap);
   parent.appendChild(child);
 }
 
@@ -286,7 +400,7 @@ function execDeleteNode(node: SceneNode): void {
 
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
 
-function dispatchAction(action: ActionDescriptor, tempMap: TempNodeMap): SceneNode | null {
+async function dispatchAction(action: ActionDescriptor, tempMap: TempNodeMap): Promise<SceneNode | null> {
   const { method, nodeId, args, tempId } = action;
   const a = (args ?? {}) as Args;
 
@@ -301,53 +415,53 @@ function dispatchAction(action: ActionDescriptor, tempMap: TempNodeMap): SceneNo
       return execCreateText(a, tempMap, tempId);
 
     case 'setProperty': {
-      const node = resolveNode(nodeId, tempMap);
+      const node = await resolveNode(nodeId, tempMap);
       execSetProperty(node, a);
       return null;
     }
 
     case 'setFill': {
-      const node = resolveNode(nodeId, tempMap);
+      const node = await resolveNode(nodeId, tempMap);
       execSetFill(node, a);
       return null;
     }
 
     case 'setStroke': {
-      const node = resolveNode(nodeId, tempMap);
+      const node = await resolveNode(nodeId, tempMap);
       execSetStroke(node, a);
       return null;
     }
 
     case 'setEffect': {
-      const node = resolveNode(nodeId, tempMap);
+      const node = await resolveNode(nodeId, tempMap);
       execSetEffect(node, a);
       return null;
     }
 
     case 'setCornerRadius': {
-      const node = resolveNode(nodeId, tempMap);
+      const node = await resolveNode(nodeId, tempMap);
       execSetCornerRadius(node, a);
       return null;
     }
 
     case 'setLayoutProperties': {
-      const node = resolveNode(nodeId, tempMap);
+      const node = await resolveNode(nodeId, tempMap);
       execSetLayoutProperties(node, a);
       return null;
     }
 
     case 'resize': {
-      const node = resolveNode(nodeId, tempMap);
+      const node = await resolveNode(nodeId, tempMap);
       execResize(node, a);
       return null;
     }
 
     case 'appendChild':
-      execAppendChild(action, tempMap);
+      await execAppendChild(action, tempMap);
       return null;
 
     case 'deleteNode': {
-      const node = resolveNode(nodeId, tempMap);
+      const node = await resolveNode(nodeId, tempMap);
       execDeleteNode(node);
       return null;
     }
@@ -363,29 +477,21 @@ function dispatchAction(action: ActionDescriptor, tempMap: TempNodeMap): SceneNo
  * Executes a batch of LLM-generated actions inside a single undo group.
  * Individual action failures are caught and collected — execution continues.
  */
-export function executeActions(actions: ActionDescriptor[]): ExecutionResult {
+export async function executeActions(actions: ActionDescriptor[]): Promise<ExecutionResult> {
   const errors: string[] = [];
   const createdNodeIds: string[] = [];
   let executedCount = 0;
 
   const tempMap: TempNodeMap = new Map();
 
-  figma.commitUndo(); // Close any open undo group before starting a new batch.
+  figma.commitUndo();
 
-  // figma.batch is not part of the Plugin API; the canonical way to group
-  // multiple changes into one undo step is to wrap them in a closure passed
-  // to a plugin-specific undo group. The Figma Plugin API groups all
-  // synchronous plugin operations between consecutive figma.commitUndo() calls
-  // into a single undo step automatically. We call commitUndo() once at the
-  // end to finalise the group.
   for (let i = 0; i < actions.length; i++) {
     const action = actions[i];
     try {
-      const created = dispatchAction(action, tempMap);
+      const created = await dispatchAction(action, tempMap);
       executedCount++;
-      if (created) {
-        createdNodeIds.push(created.id);
-      }
+      if (created) createdNodeIds.push(created.id);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       errors.push(`[${i}] ${action.method}: ${msg}`);
@@ -393,8 +499,13 @@ export function executeActions(actions: ActionDescriptor[]): ExecutionResult {
     }
   }
 
-  // Commit finalises all the changes above as a single undoable step.
   figma.commitUndo();
+
+  // Build a tempId → real node ID map so the iframe can rewrite control actions.
+  const tempIdMap: Record<string, string> = {};
+  for (const [tempId, node] of tempMap.entries()) {
+    tempIdMap[tempId] = node.id;
+  }
 
   return {
     success: errors.length === 0,
@@ -402,20 +513,45 @@ export function executeActions(actions: ActionDescriptor[]): ExecutionResult {
     errorCount: errors.length,
     errors,
     createdNodeIds,
+    tempIdMap,
   };
 }
 
 /**
  * Applies a single live control-change action without undo grouping.
- * These are immediate tweaks — the user dragging a slider — so they
- * should not create undo history entries.
+ * Supports args.scale and args.offset for linear value transforms:
+ *   actual = value * scale + offset
+ *
+ * Safety: if a setEffect action accidentally carries a full "effects" array
+ * (which would wipe all existing effects), we strip it and force the patch
+ * path by keeping only the patch-form args. This prevents LLM mistakes from
+ * creating duplicate shadows.
  */
-export function applyControlChange(action: ActionDescriptor, value: unknown): void {
+export async function applyControlChange(action: ActionDescriptor, value: unknown): Promise<void> {
   const tempMap: TempNodeMap = new Map();
-  // Merge the live value into the action args so every method can find it.
+
+  // Apply linear transform if scale/offset are specified.
+  let effectiveValue = value;
+  if (typeof value === 'number') {
+    const scale = typeof action.args.scale === 'number' ? action.args.scale : 1;
+    const offset = typeof action.args.offset === 'number' ? action.args.offset : 0;
+    effectiveValue = value * scale + offset;
+  }
+
+  let mergedArgs = { ...action.args, value: effectiveValue };
+
+  // Guard: setEffect control actions must use the property-patch form.
+  // If the LLM mistakenly included an "effects" array, remove it so we fall
+  // into the patch path (which reads and mutates the existing effects array).
+  if (action.method === 'setEffect' && Array.isArray(mergedArgs.effects)) {
+    console.warn('[applyControlChange] stripping "effects" array from control setEffect — use property patch form instead.');
+    const { effects: _removed, ...patchArgs } = mergedArgs as typeof mergedArgs & { effects: unknown };
+    mergedArgs = patchArgs as typeof mergedArgs;
+  }
+
   const merged: ActionDescriptor = {
     ...action,
-    args: { ...action.args, value },
+    args: mergedArgs,
   };
-  dispatchAction(merged, tempMap);
+  await dispatchAction(merged, tempMap);
 }

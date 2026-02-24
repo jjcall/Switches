@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "build": "node esbuild.config.js",
-    "watch": "node esbuild.config.js --watch"
+    "watch": "node esbuild.config.js --watch",
+    "proxy": "node proxy.mjs"
   },
   "dependencies": {
     "motion": "latest",

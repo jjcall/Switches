@@ -19,6 +19,18 @@
     return a;
   };
   var __spreadProps = (a, b) => __defProps(a, __getOwnPropDescs(b));
+  var __objRest = (source, exclude) => {
+    var target = {};
+    for (var prop in source)
+      if (__hasOwnProp.call(source, prop) && exclude.indexOf(prop) < 0)
+        target[prop] = source[prop];
+    if (source != null && __getOwnPropSymbols)
+      for (var prop of __getOwnPropSymbols(source)) {
+        if (exclude.indexOf(prop) < 0 && __propIsEnum.call(source, prop))
+          target[prop] = source[prop];
+      }
+    return target;
+  };
 
   // src/main/selection-serializer.ts
   var CHAR_BUDGET = 8e3;
@@ -206,21 +218,21 @@
   }
 
   // src/main/action-executor.ts
-  function resolveNode(nodeId, tempMap) {
+  async function resolveNode(nodeId, tempMap) {
     if (!nodeId) throw new Error("No nodeId provided.");
     const temp = tempMap.get(nodeId);
     if (temp) return temp;
-    const node = figma.getNodeById(nodeId);
+    const node = await figma.getNodeByIdAsync(nodeId);
     if (!node) throw new Error(`Node not found: ${nodeId}`);
     if (node.type === "DOCUMENT" || node.type === "PAGE") {
       throw new Error(`Cannot target document or page node: ${nodeId}`);
     }
     return node;
   }
-  function resolveParent(parentId, tempMap) {
+  async function resolveParent(parentId, tempMap) {
     var _a;
     if (!parentId) return figma.currentPage;
-    const node = (_a = tempMap.get(parentId)) != null ? _a : figma.getNodeById(parentId);
+    const node = (_a = tempMap.get(parentId)) != null ? _a : await figma.getNodeByIdAsync(parentId);
     if (!node) throw new Error(`Parent node not found: ${parentId}`);
     if (node.type !== "FRAME" && node.type !== "GROUP" && node.type !== "COMPONENT" && node.type !== "COMPONENT_SET" && node.type !== "SECTION" && node.type !== "PAGE") {
       throw new Error(`Node ${parentId} (${node.type}) cannot contain children.`);
@@ -304,37 +316,37 @@
       return { type: "LAYER_BLUR", radius: 0, visible: false };
     });
   }
-  function execCreateRectangle(args, tempMap, tempId) {
+  async function execCreateRectangle(args, tempMap, tempId) {
     const node = figma.createRectangle();
     if (typeof args.x === "number") node.x = args.x;
     if (typeof args.y === "number") node.y = args.y;
     if (typeof args.width === "number" && typeof args.height === "number") {
       node.resize(args.width, args.height);
     }
-    const parent = resolveParent(void 0, tempMap);
+    const parent = await resolveParent(void 0, tempMap);
     parent.appendChild(node);
     if (tempId) tempMap.set(tempId, node);
     return node;
   }
-  function execCreateFrame(args, tempMap, tempId) {
+  async function execCreateFrame(args, tempMap, tempId) {
     const node = figma.createFrame();
     if (typeof args.x === "number") node.x = args.x;
     if (typeof args.y === "number") node.y = args.y;
     if (typeof args.width === "number" && typeof args.height === "number") {
       node.resize(args.width, args.height);
     }
-    const parent = resolveParent(void 0, tempMap);
+    const parent = await resolveParent(void 0, tempMap);
     parent.appendChild(node);
     if (tempId) tempMap.set(tempId, node);
     return node;
   }
-  function execCreateText(args, tempMap, tempId) {
+  async function execCreateText(args, tempMap, tempId) {
     const node = figma.createText();
     if (typeof args.x === "number") node.x = args.x;
     if (typeof args.y === "number") node.y = args.y;
     if (typeof args.fontSize === "number") node.fontSize = args.fontSize;
     if (typeof args.characters === "string") node.characters = args.characters;
-    const parent = resolveParent(void 0, tempMap);
+    const parent = await resolveParent(void 0, tempMap);
     parent.appendChild(node);
     if (tempId) tempMap.set(tempId, node);
     return node;
@@ -358,12 +370,40 @@
       node.fills = [{ type: "SOLID", color: { r, g, b }, opacity: 1 }];
       return;
     }
+    const property = typeof args.property === "string" ? args.property : null;
+    if (property !== null && "value" in args) {
+      const geoNode = node;
+      const fills = geoNode.fills.map((f) => __spreadValues({}, f));
+      if (fills.length > 0) {
+        fills[0][property] = args.value;
+        geoNode.fills = fills;
+      }
+      return;
+    }
     const rawFills = (_a = args.fills) != null ? _a : Array.isArray(args.value) ? args.value : void 0;
     node.fills = toPaints(rawFills);
   }
   function execSetStroke(node, args) {
     var _a;
     if (!("strokes" in node)) throw new Error(`Node type ${node.type} does not support strokes.`);
+    const property = typeof args.property === "string" ? args.property : null;
+    if (property !== null && "value" in args) {
+      const geoNode = node;
+      if (property === "strokeWeight" || property === "weight") {
+        geoNode.strokeWeight = args.value;
+        return;
+      }
+      if (property === "strokeAlign" || property === "align") {
+        geoNode.strokeAlign = args.value;
+        return;
+      }
+      const strokes = geoNode.strokes.map((s) => __spreadValues({}, s));
+      if (strokes.length > 0) {
+        strokes[0][property] = args.value;
+        geoNode.strokes = strokes;
+      }
+      return;
+    }
     const rawStrokes = (_a = args.strokes) != null ? _a : Array.isArray(args.value) ? args.value : [];
     node.strokes = toPaints(rawStrokes);
     if (typeof args.weight === "number") {
@@ -373,11 +413,69 @@
       node.strokeAlign = args.align;
     }
   }
+  function makeDefaultEffect(type) {
+    if (type === "DROP_SHADOW" || type === "INNER_SHADOW") {
+      return {
+        type,
+        color: { r: 0, g: 0, b: 0, a: 0.25 },
+        offset: { x: 0, y: 4 },
+        radius: 8,
+        spread: 0,
+        visible: true,
+        blendMode: "NORMAL",
+        showShadowBehindNode: false
+      };
+    }
+    return {
+      type: type === "BACKGROUND_BLUR" ? "BACKGROUND_BLUR" : "LAYER_BLUR",
+      radius: 8,
+      visible: true
+    };
+  }
   function execSetEffect(node, args) {
-    var _a;
     if (!("effects" in node)) throw new Error(`Node type ${node.type} does not support effects.`);
-    const rawEffects = (_a = args.effects) != null ? _a : Array.isArray(args.value) ? args.value : [];
-    node.effects = toEffects(rawEffects);
+    if (args.effects !== void 0) {
+      node.effects = toEffects(args.effects);
+      return;
+    }
+    if (Array.isArray(args.value)) {
+      node.effects = toEffects(args.value);
+      return;
+    }
+    const property = typeof args.property === "string" ? args.property : null;
+    if (property !== null && "value" in args) {
+      const blendNode = node;
+      const effectType = typeof args.effectType === "string" ? args.effectType : "DROP_SHADOW";
+      const effectIndex = typeof args.effectIndex === "number" ? args.effectIndex : 0;
+      const effects = blendNode.effects.map((e) => {
+        const clone = __spreadValues({}, e);
+        if (clone.offset && typeof clone.offset === "object") {
+          clone.offset = __spreadValues({}, clone.offset);
+        }
+        if (clone.color && typeof clone.color === "object") {
+          clone.color = __spreadValues({}, clone.color);
+        }
+        return clone;
+      });
+      let idx = effects.findIndex((e) => e.type === effectType);
+      if (idx < 0) idx = effectIndex;
+      if (idx < 0 || idx >= effects.length) {
+        const defaultEffect = makeDefaultEffect(effectType);
+        effects.push(defaultEffect);
+        idx = effects.length - 1;
+      }
+      const target = effects[idx];
+      if (property === "offsetX") {
+        target.offset.x = args.value;
+      } else if (property === "offsetY") {
+        target.offset.y = args.value;
+      } else {
+        target[property] = args.value;
+      }
+      blendNode.effects = effects;
+      return;
+    }
+    console.warn("[setEffect] could not determine update intent from args:", args);
   }
   function execSetCornerRadius(node, args) {
     if (!("cornerRadius" in node)) throw new Error(`Node type ${node.type} does not support cornerRadius.`);
@@ -411,15 +509,15 @@
     const h = typeof args.height === "number" ? args.height : node.height;
     node.resize(w, h);
   }
-  function execAppendChild(action, tempMap) {
-    const child = resolveNode(action.nodeId, tempMap);
-    const parent = resolveParent(action.parentId, tempMap);
+  async function execAppendChild(action, tempMap) {
+    const child = await resolveNode(action.nodeId, tempMap);
+    const parent = await resolveParent(action.parentId, tempMap);
     parent.appendChild(child);
   }
   function execDeleteNode(node) {
     node.remove();
   }
-  function dispatchAction(action, tempMap) {
+  async function dispatchAction(action, tempMap) {
     const { method, nodeId, args, tempId } = action;
     const a = args != null ? args : {};
     switch (method) {
@@ -430,45 +528,45 @@
       case "createText":
         return execCreateText(a, tempMap, tempId);
       case "setProperty": {
-        const node = resolveNode(nodeId, tempMap);
+        const node = await resolveNode(nodeId, tempMap);
         execSetProperty(node, a);
         return null;
       }
       case "setFill": {
-        const node = resolveNode(nodeId, tempMap);
+        const node = await resolveNode(nodeId, tempMap);
         execSetFill(node, a);
         return null;
       }
       case "setStroke": {
-        const node = resolveNode(nodeId, tempMap);
+        const node = await resolveNode(nodeId, tempMap);
         execSetStroke(node, a);
         return null;
       }
       case "setEffect": {
-        const node = resolveNode(nodeId, tempMap);
+        const node = await resolveNode(nodeId, tempMap);
         execSetEffect(node, a);
         return null;
       }
       case "setCornerRadius": {
-        const node = resolveNode(nodeId, tempMap);
+        const node = await resolveNode(nodeId, tempMap);
         execSetCornerRadius(node, a);
         return null;
       }
       case "setLayoutProperties": {
-        const node = resolveNode(nodeId, tempMap);
+        const node = await resolveNode(nodeId, tempMap);
         execSetLayoutProperties(node, a);
         return null;
       }
       case "resize": {
-        const node = resolveNode(nodeId, tempMap);
+        const node = await resolveNode(nodeId, tempMap);
         execResize(node, a);
         return null;
       }
       case "appendChild":
-        execAppendChild(action, tempMap);
+        await execAppendChild(action, tempMap);
         return null;
       case "deleteNode": {
-        const node = resolveNode(nodeId, tempMap);
+        const node = await resolveNode(nodeId, tempMap);
         execDeleteNode(node);
         return null;
       }
@@ -476,7 +574,7 @@
         throw new Error(`Unknown action method: "${method}"`);
     }
   }
-  function executeActions(actions) {
+  async function executeActions(actions) {
     const errors = [];
     const createdNodeIds = [];
     let executedCount = 0;
@@ -485,11 +583,9 @@
     for (let i = 0; i < actions.length; i++) {
       const action = actions[i];
       try {
-        const created = dispatchAction(action, tempMap);
+        const created = await dispatchAction(action, tempMap);
         executedCount++;
-        if (created) {
-          createdNodeIds.push(created.id);
-        }
+        if (created) createdNodeIds.push(created.id);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         errors.push(`[${i}] ${action.method}: ${msg}`);
@@ -497,20 +593,37 @@
       }
     }
     figma.commitUndo();
+    const tempIdMap = {};
+    for (const [tempId, node] of tempMap.entries()) {
+      tempIdMap[tempId] = node.id;
+    }
     return {
       success: errors.length === 0,
       executedCount,
       errorCount: errors.length,
       errors,
-      createdNodeIds
+      createdNodeIds,
+      tempIdMap
     };
   }
-  function applyControlChange(action, value) {
+  async function applyControlChange(action, value) {
     const tempMap = /* @__PURE__ */ new Map();
+    let effectiveValue = value;
+    if (typeof value === "number") {
+      const scale = typeof action.args.scale === "number" ? action.args.scale : 1;
+      const offset = typeof action.args.offset === "number" ? action.args.offset : 0;
+      effectiveValue = value * scale + offset;
+    }
+    let mergedArgs = __spreadProps(__spreadValues({}, action.args), { value: effectiveValue });
+    if (action.method === "setEffect" && Array.isArray(mergedArgs.effects)) {
+      console.warn('[applyControlChange] stripping "effects" array from control setEffect \u2014 use property patch form instead.');
+      const _a = mergedArgs, { effects: _removed } = _a, patchArgs = __objRest(_a, ["effects"]);
+      mergedArgs = patchArgs;
+    }
     const merged = __spreadProps(__spreadValues({}, action), {
-      args: __spreadProps(__spreadValues({}, action.args), { value })
+      args: mergedArgs
     });
-    dispatchAction(merged, tempMap);
+    await dispatchAction(merged, tempMap);
   }
 
   // src/main/message-handler.ts
@@ -519,29 +632,74 @@
     sendSelectionContext();
   }
   function handleControlChange(msg) {
-    const { controlId, value, action } = msg.payload;
-    try {
-      applyControlChange(action, value);
-    } catch (err) {
+    const { controlId, value, action, actions } = msg.payload;
+    const toApply = (actions == null ? void 0 : actions.length) ? actions : action ? [action] : [];
+    if (toApply.length === 0) return;
+    Promise.all(toApply.map((a) => applyControlChange(a, value))).catch((err) => {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`[main] control change failed for ${controlId}:`, message);
       figma.ui.postMessage({
         type: "ERROR",
         payload: { source: "control-change", message }
       });
-    }
+    });
   }
   function handleExecuteActions(msg) {
     const { actions } = msg.payload;
-    const result = executeActions(actions);
-    const response = {
-      type: "EXECUTION_RESULT",
-      payload: result
-    };
-    figma.ui.postMessage(response);
+    executeActions(actions).then((result) => {
+      const response = {
+        type: "EXECUTION_RESULT",
+        payload: result
+      };
+      figma.ui.postMessage(response);
+    }).catch((err) => {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[main] executeActions threw unexpectedly:", message);
+      figma.ui.postMessage({
+        type: "ERROR",
+        payload: { source: "execute-actions", message }
+      });
+    });
   }
   function handleError(msg) {
     console.error(`[main] error from iframe (${msg.payload.source}):`, msg.payload.message);
+  }
+  async function handleClaudeRequest(msg) {
+    const { requestId, apiKey, body } = msg.payload;
+    let ok = false;
+    let status = 0;
+    let responseBody = "";
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json"
+        },
+        body
+      });
+      ok = response.ok;
+      status = response.status;
+      responseBody = await response.text();
+    } catch (err) {
+      let message = "Unknown fetch error";
+      if (err instanceof Error) {
+        message = err.message;
+      } else if (typeof err === "string") {
+        message = err;
+      } else if (err && typeof err === "object") {
+        const e = err;
+        message = typeof e.message === "string" ? e.message : JSON.stringify(err);
+      }
+      responseBody = JSON.stringify({ error: { message } });
+      status = 0;
+    }
+    const reply = {
+      type: "CLAUDE_RESPONSE",
+      payload: { requestId, ok, status, body: responseBody }
+    };
+    figma.ui.postMessage(reply);
   }
   function sendSelectionContext() {
     const payload = serializeSelection(figma.currentPage.selection);
@@ -577,6 +735,9 @@
           break;
         case "ERROR":
           handleError(msg);
+          break;
+        case "CLAUDE_REQUEST":
+          void handleClaudeRequest(msg);
           break;
         default: {
           const _exhaustive = msg;

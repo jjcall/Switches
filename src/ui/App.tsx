@@ -5,9 +5,34 @@ import { postToMain, onMainMessage } from './messaging';
 import { ChatInput } from './chat/ChatInput';
 import { ChatHistory } from './chat/ChatHistory';
 import type { ChatMessage } from './chat/ChatHistory';
-import type { SelectionContext, UISpec, ActionDescriptor } from '../shared/message-types';
+import type { SelectionContext, UISpec, UIControl, ActionDescriptor } from '../shared/message-types';
 import { callClaude } from './api/claude';
 import { composePrompt, parseLLMResponse } from './prompt/prompt-composer';
+import { UIRenderer } from './renderer/UIRenderer';
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Walks the UISpec and replaces any tempId references in control action nodeId /
+ * parentId fields with real Figma node IDs using the mapping returned by the
+ * executor after a batch runs.
+ */
+function rewriteTempIds(spec: UISpec, map: Record<string, string>): UISpec {
+  function rewriteAction(a: ActionDescriptor): ActionDescriptor {
+    const nodeId = a.nodeId && map[a.nodeId] ? map[a.nodeId] : a.nodeId;
+    const parentId = a.parentId && map[a.parentId] ? map[a.parentId] : a.parentId;
+    return { ...a, nodeId, parentId };
+  }
+
+  function rewriteControl(c: UIControl): UIControl {
+    const action = c.action ? rewriteAction(c.action) : c.action;
+    const actions = c.actions?.map(rewriteAction);
+    const children = c.children?.map(rewriteControl);
+    return { ...c, action, actions, children };
+  }
+
+  return { ...spec, controls: spec.controls.map(rewriteControl) };
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -81,9 +106,13 @@ function App() {
       if (msg.type === 'SELECTION_CONTEXT') {
         setSelectionContext(msg.payload);
       } else if (msg.type === 'EXECUTION_RESULT') {
-        const { errorCount, errors } = msg.payload;
+        const { errorCount, errors, tempIdMap } = msg.payload;
         if (errorCount > 0) {
           addMessage('error', `${errorCount} action(s) failed:\n${errors.join('\n')}`);
+        }
+        // Rewrite tempId references in the current UI spec with real node IDs.
+        if (tempIdMap && Object.keys(tempIdMap).length > 0) {
+          setCurrentUISpec(prev => prev ? rewriteTempIds(prev, tempIdMap) : prev);
         }
       } else if (msg.type === 'ERROR') {
         addMessage('error', msg.payload.message);
@@ -123,6 +152,9 @@ function App() {
       return;
     }
 
+    // Log raw LLM output to Figma's plugin console for debugging.
+    console.log('[llm] raw response:', result.text);
+
     const parsed = parseLLMResponse(result.text);
 
     if (!parsed.ok) {
@@ -130,6 +162,8 @@ function App() {
       setIsLoading(false);
       return;
     }
+
+    console.log('[llm] parsed:', JSON.stringify(parsed.data, null, 2));
 
     const { actions, ui, message } = parsed.data;
 
@@ -171,7 +205,7 @@ function App() {
       <div className="render-zone">
         {isLoading && <LoadingDots />}
         {!isLoading && !hasSpec && <EmptyState hasSelection={hasSelection} />}
-        {/* UIRenderer mounted here in Task 8 */}
+        {!isLoading && hasSpec && <UIRenderer spec={currentUISpec!} />}
       </div>
 
       {/* Chat area */}

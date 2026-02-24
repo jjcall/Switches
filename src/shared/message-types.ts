@@ -120,13 +120,15 @@ export interface UIRenderMessage {
   payload: UISpec;
 }
 
-/** Iframe → main: describes a single Figma API update triggered by a control. */
+/** Iframe → main: describes one or more Figma API updates triggered by a control. */
 export interface ControlChangeMessage {
   type: 'CONTROL_CHANGE';
   payload: {
     controlId: string;
     value: unknown;
-    action: ActionDescriptor;
+    /** Single action (backwards compat) or multiple coordinated actions. */
+    action?: ActionDescriptor;
+    actions?: ActionDescriptor[];
   };
 }
 
@@ -164,18 +166,43 @@ export interface ExecutionResult {
   errorCount: number;
   errors: string[];
   createdNodeIds: string[];
+  /** Maps tempId strings used in the action batch to real Figma node IDs. */
+  tempIdMap?: Record<string, string>;
+}
+
+/** Iframe → main: asks the main thread to proxy a Claude API call. */
+export interface ClaudeRequestMessage {
+  type: 'CLAUDE_REQUEST';
+  payload: {
+    requestId: string;
+    apiKey: string;
+    body: string; // pre-serialized JSON body
+  };
+}
+
+/** Main → iframe: delivers the Claude API response (or error). */
+export interface ClaudeResponseMessage {
+  type: 'CLAUDE_RESPONSE';
+  payload: {
+    requestId: string;
+    ok: boolean;
+    status: number;
+    body: string; // raw response text
+  };
 }
 
 export type MainToIframeMessage =
   | SelectionContextMessage
   | ExecutionResultMessage
-  | ErrorMessage;
+  | ErrorMessage
+  | ClaudeResponseMessage;
 
 export type IframeToMainMessage =
   | PluginReadyMessage
   | ControlChangeMessage
   | ExecuteActionsMessage
-  | ErrorMessage;
+  | ErrorMessage
+  | ClaudeRequestMessage;
 
 // ─── UI spec (LLM → renderer) ─────────────────────────────────────────────────
 
@@ -199,8 +226,10 @@ export interface UIControl {
     | 'segmented';
   label?: string;
   props?: Record<string, unknown>;
-  /** The Figma API update to perform when this control's value changes. */
+  /** Single Figma API update when this control changes (simple case). */
   action?: ActionDescriptor;
+  /** Multiple coordinated Figma API updates (for controls that drive multiple properties). */
+  actions?: ActionDescriptor[];
   /** Nested controls (for section type). */
   children?: UIControl[];
 }

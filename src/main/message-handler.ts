@@ -8,6 +8,8 @@ import type {
   ErrorMessage,
   SelectionContextMessage,
   ExecutionResultMessage,
+  ClaudeRequestMessage,
+  ClaudeResponseMessage,
 } from '../shared/message-types';
 import { serializeSelection } from './selection-serializer';
 import { executeActions, applyControlChange } from './action-executor';
@@ -28,32 +30,89 @@ function handlePluginReady(_msg: PluginReadyMessage): void {
 }
 
 function handleControlChange(msg: ControlChangeMessage): void {
-  const { controlId, value, action } = msg.payload;
-  try {
-    applyControlChange(action, value);
-  } catch (err) {
+  const { controlId, value, action, actions } = msg.payload;
+
+  // Build the list of actions to apply: prefer actions[] over single action.
+  const toApply: ActionDescriptor[] = actions?.length
+    ? actions
+    : action
+      ? [action]
+      : [];
+
+  if (toApply.length === 0) return;
+
+  // Apply all actions in parallel — live tweaks, no undo grouping.
+  Promise.all(toApply.map(a => applyControlChange(a, value))).catch((err: unknown) => {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[main] control change failed for ${controlId}:`, message);
     figma.ui.postMessage({
       type: 'ERROR',
       payload: { source: 'control-change', message },
     });
-  }
+  });
 }
 
 function handleExecuteActions(msg: ExecuteActionsMessage): void {
   const { actions } = msg.payload;
-  const result = executeActions(actions);
-
-  const response: ExecutionResultMessage = {
-    type: 'EXECUTION_RESULT',
-    payload: result,
-  };
-  figma.ui.postMessage(response);
+  executeActions(actions).then((result) => {
+    const response: ExecutionResultMessage = {
+      type: 'EXECUTION_RESULT',
+      payload: result,
+    };
+    figma.ui.postMessage(response);
+  }).catch((err: unknown) => {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[main] executeActions threw unexpectedly:', message);
+    figma.ui.postMessage({
+      type: 'ERROR',
+      payload: { source: 'execute-actions', message },
+    });
+  });
 }
 
 function handleError(msg: ErrorMessage): void {
   console.error(`[main] error from iframe (${msg.payload.source}):`, msg.payload.message);
+}
+
+async function handleClaudeRequest(msg: ClaudeRequestMessage): Promise<void> {
+  const { requestId, apiKey, body } = msg.payload;
+  let ok = false;
+  let status = 0;
+  let responseBody = '';
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body,
+    });
+    ok = response.ok;
+    status = response.status;
+    responseBody = await response.text();
+  } catch (err) {
+    // In Figma's sandbox, thrown errors may not be Error instances.
+    let message = 'Unknown fetch error';
+    if (err instanceof Error) {
+      message = err.message;
+    } else if (typeof err === 'string') {
+      message = err;
+    } else if (err && typeof err === 'object') {
+      const e = err as Record<string, unknown>;
+      message = typeof e.message === 'string' ? e.message : JSON.stringify(err);
+    }
+    responseBody = JSON.stringify({ error: { message } });
+    status = 0;
+  }
+
+  const reply: ClaudeResponseMessage = {
+    type: 'CLAUDE_RESPONSE',
+    payload: { requestId, ok, status, body: responseBody },
+  };
+  figma.ui.postMessage(reply);
 }
 
 // ─── Outbound helpers ─────────────────────────────────────────────────────────
@@ -104,6 +163,9 @@ export function registerMessageHandler(): void {
         break;
       case 'ERROR':
         handleError(msg);
+        break;
+      case 'CLAUDE_REQUEST':
+        void handleClaudeRequest(msg);
         break;
       default: {
         // Narrow to never to catch unhandled message types at compile time.
