@@ -1,0 +1,13 @@
+{
+  "name": "On-Demand Plugin",
+  "id": "on-demand-plugin-dev",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "dist/ui.html",
+  "editorType": ["figma"],
+  "documentAccess": "dynamic-page",
+  "networkAccess": {
+    "allowedDomains": ["https://api.anthropic.com"],
+    "reasoning": "Calls the Anthropic Claude API to generate plugin UI and Figma actions on demand."
+  }
+}
