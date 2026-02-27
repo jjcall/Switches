@@ -1,4 +1,6 @@
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect } from 'react';
+import { Renderer, Camera, Program, Mesh, Geometry, Box, Orbit, Transform } from 'ogl';
+import type { OGLRenderingContext } from 'ogl';
 
 interface CubePreviewProps {
   rx: number;
@@ -7,170 +9,278 @@ interface CubePreviewProps {
   onRotate: (rx: number, ry: number) => void;
 }
 
-interface Point3D { x: number; y: number; z: number }
-interface Point2D { x: number; y: number }
+const VERTEX = /* glsl */ `
+attribute vec3 position;
+attribute vec3 normal;
+uniform mat4 modelViewMatrix;
+uniform mat4 projectionMatrix;
+uniform mat3 normalMatrix;
+varying vec3 vNormal;
+varying vec3 vViewPos;
+void main() {
+  vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+  vNormal = normalize(normalMatrix * normal);
+  vViewPos = -mvPos.xyz;
+  gl_Position = projectionMatrix * mvPos;
+}
+`;
 
-const CUBE_SIZE = 80;
-const FOCAL = 400;
-const EDGE_PAIRS: [number, number][] = [
-  [0, 1], [1, 2], [2, 3], [3, 0],
-  [4, 5], [5, 6], [6, 7], [7, 4],
-  [0, 4], [1, 5], [2, 6], [3, 7],
-];
-const FACES: number[][] = [
-  [0, 1, 2, 3],
-  [4, 5, 6, 7],
-  [0, 4, 7, 3],
-  [1, 5, 6, 2],
-  [0, 1, 5, 4],
-  [3, 2, 6, 7],
-];
+const FRAGMENT = /* glsl */ `
+precision highp float;
+varying vec3 vNormal;
+varying vec3 vViewPos;
+void main() {
+  vec3 normal = normalize(vNormal);
+  vec3 viewDir = normalize(vViewPos);
+  vec3 light = normalize(vec3(0.5, 1.0, 0.8));
+  float diff = max(dot(normal, light), 0.0);
+  float rim = pow(1.0 - max(dot(normal, viewDir), 0.0), 3.0);
+  float ambient = 0.12;
+  vec3 color = vec3(0.4, 0.5, 0.7) * (ambient + diff * 0.8) + vec3(0.6, 0.7, 1.0) * rim * 0.15;
+  gl_FragColor = vec4(color, 0.7);
+}
+`;
 
-function makeCube(size: number): Point3D[] {
-  const h = size / 2;
-  return [
-    { x: -h, y: -h, z: -h }, { x: h, y: -h, z: -h },
-    { x: h, y: h, z: -h },   { x: -h, y: h, z: -h },
-    { x: -h, y: -h, z: h },  { x: h, y: -h, z: h },
-    { x: h, y: h, z: h },    { x: -h, y: h, z: h },
-  ];
+const ORBIT_RADIUS = 4;
+const DEG = Math.PI / 180;
+const RAD = 180 / Math.PI;
+
+function eulerToSpherical(rxDeg: number, ryDeg: number) {
+  const theta = ryDeg * DEG;
+  const phi = rxDeg * DEG + Math.PI / 2;
+  return { theta, phi };
 }
 
-function rotate(p: Point3D, rx: number, ry: number, rz: number): Point3D {
-  const toR = (d: number) => d * Math.PI / 180;
-  const [ax, ay, az] = [toR(rx), toR(ry), toR(rz)];
-  const { x, y, z } = p;
-  const y1 = y * Math.cos(ax) - z * Math.sin(ax);
-  const z1 = y * Math.sin(ax) + z * Math.cos(ax);
-  const x2 = x * Math.cos(ay) + z1 * Math.sin(ay);
-  const z2 = -x * Math.sin(ay) + z1 * Math.cos(ay);
-  const x3 = x2 * Math.cos(az) - y1 * Math.sin(az);
-  const y3 = x2 * Math.sin(az) + y1 * Math.cos(az);
-  return { x: x3, y: y3, z: z2 };
+function sphericalToEuler(theta: number, phi: number) {
+  const ry = theta * RAD;
+  const rx = (phi - Math.PI / 2) * RAD;
+  return { rx, ry };
 }
 
-function project(p: Point3D): Point2D {
-  const denom = FOCAL + p.z;
-  const s = FOCAL / (Math.abs(denom) < 0.001 ? 0.001 : denom);
-  return { x: p.x * s, y: p.y * s };
+function setCameraFromEuler(camera: Camera, rxDeg: number, ryDeg: number) {
+  const { theta, phi } = eulerToSpherical(rxDeg, ryDeg);
+  const sinPhi = Math.sin(Math.max(0.000001, phi));
+  camera.position.x = ORBIT_RADIUS * sinPhi * Math.sin(theta);
+  camera.position.y = ORBIT_RADIUS * Math.cos(phi);
+  camera.position.z = ORBIT_RADIUS * sinPhi * Math.cos(theta);
 }
 
 export function CubePreview({ rx, ry, rz = 0, onRotate }: CubePreviewProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const isDraggingRef = useRef(false);
-  const dragStartRef = useRef<{ x: number; y: number; rx: number; ry: number } | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const stateRef = useRef<{
+    renderer: InstanceType<typeof Renderer>;
+    camera: Camera;
+    orbit: InstanceType<typeof Orbit>;
+    scene: Transform;
+    cube: Mesh;
+    wire: Mesh;
+    gl: OGLRenderingContext;
+    rafId: number;
+    lastEmittedRx: number;
+    lastEmittedRy: number;
+    externalUpdate: boolean;
+  } | null>(null);
   const onRotateRef = useRef(onRotate);
   onRotateRef.current = onRotate;
-  const rxRef = useRef(rx);
-  const ryRef = useRef(ry);
-  rxRef.current = rx;
-  ryRef.current = ry;
+  const propsRef = useRef({ rx, ry });
+  propsRef.current = { rx, ry };
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    const container = containerRef.current;
+    if (!container) return;
 
-    const dpr = window.devicePixelRatio || 1;
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
-    ctx.scale(dpr, dpr);
+    const renderer = new Renderer({
+      alpha: true,
+      antialias: true,
+      premultipliedAlpha: true,
+      dpr: Math.min(window.devicePixelRatio, 2),
+    });
+    const gl = renderer.gl as OGLRenderingContext;
+    gl.clearColor(0, 0, 0, 0);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-    const cx = w / 2;
-    const cy = h / 2;
+    const canvas = gl.canvas as HTMLCanvasElement;
+    canvas.className = 'dialkit-cube-preview-canvas';
+    container.appendChild(canvas);
 
-    ctx.clearRect(0, 0, w, h);
+    const camera = new Camera(gl, { fov: 35, near: 0.1, far: 50 });
+    setCameraFromEuler(camera, propsRef.current.rx, propsRef.current.ry);
+    camera.lookAt([0, 0, 0]);
 
-    const verts = makeCube(CUBE_SIZE);
-    const rotated = verts.map(v => rotate(v, rx, ry, rz));
-    const projected = rotated.map(v => project(v));
+    const scene = new Transform();
 
-    const sortedFaces = FACES.map((face) => ({
-      face,
-      avgZ: face.reduce((s, vi) => s + rotated[vi].z, 0) / face.length,
-    })).sort((a, b) => a.avgZ - b.avgZ);
+    const boxGeometry = new Box(gl, {
+      width: 1.6,
+      height: 1.6,
+      depth: 1.6,
+    });
 
-    for (const { face, avgZ } of sortedFaces) {
-      const pts = face.map(i => projected[i]);
-      const lightness = 0.06 + 0.08 * ((avgZ + CUBE_SIZE) / (CUBE_SIZE * 2));
-      ctx.beginPath();
-      ctx.moveTo(cx + pts[0].x, cy + pts[0].y);
-      for (let i = 1; i < pts.length; i++) {
-        ctx.lineTo(cx + pts[i].x, cy + pts[i].y);
+    const litProgram = new Program(gl, {
+      vertex: VERTEX,
+      fragment: FRAGMENT,
+      transparent: true,
+      cullFace: false,
+      depthWrite: false,
+    });
+
+    const cube = new Mesh(gl, { geometry: boxGeometry, program: litProgram });
+    cube.setParent(scene);
+
+    const wireProgram = new Program(gl, {
+      vertex: /* glsl */ `
+attribute vec3 position;
+uniform mat4 modelViewMatrix;
+uniform mat4 projectionMatrix;
+void main() {
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`,
+      fragment: /* glsl */ `
+precision highp float;
+void main() {
+  gl_FragColor = vec4(1.0, 1.0, 1.0, 0.35);
+}
+`,
+      transparent: true,
+      depthTest: true,
+      depthWrite: false,
+    });
+
+    const wireIndices = buildWireframeIndices(boxGeometry);
+    const wireGeo = new Geometry(gl, {
+      position: { ...boxGeometry.attributes.position },
+      index: { data: wireIndices },
+    });
+
+    const wire = new Mesh(gl, {
+      geometry: wireGeo,
+      program: wireProgram,
+      mode: gl.LINES,
+    });
+    wire.setParent(scene);
+
+    const orbit = new Orbit(camera, {
+      element: canvas,
+      enableZoom: false,
+      enablePan: false,
+      ease: 0.25,
+      inertia: 0.85,
+      rotateSpeed: 0.1,
+    });
+
+    const resize = () => {
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      renderer.setSize(w, h);
+      camera.perspective({ aspect: w / h });
+    };
+    resize();
+
+    const resizeObs = new ResizeObserver(resize);
+    resizeObs.observe(container);
+
+    const state = {
+      renderer,
+      camera,
+      orbit,
+      scene,
+      cube,
+      wire,
+      gl,
+      rafId: 0,
+      lastEmittedRx: propsRef.current.rx,
+      lastEmittedRy: propsRef.current.ry,
+      externalUpdate: false,
+    };
+
+    orbit.forcePosition();
+
+    function tick() {
+      state.rafId = requestAnimationFrame(tick);
+      orbit.update();
+
+      const offset = orbit.offset;
+      const radius = Math.sqrt(offset.x * offset.x + offset.y * offset.y + offset.z * offset.z);
+      const theta = Math.atan2(offset.x, offset.z);
+      const phi = Math.acos(Math.min(Math.max(offset.y / radius, -1), 1));
+      const { rx: newRx, ry: newRy } = sphericalToEuler(theta, phi);
+
+      const roundedRx = Math.round(newRx);
+      const roundedRy = Math.round(newRy);
+
+      if (!state.externalUpdate &&
+          (Math.abs(roundedRx - state.lastEmittedRx) > 0.5 ||
+           Math.abs(roundedRy - state.lastEmittedRy) > 0.5)) {
+        state.lastEmittedRx = roundedRx;
+        state.lastEmittedRy = roundedRy;
+        onRotateRef.current(roundedRx, roundedRy);
       }
-      ctx.closePath();
-      ctx.fillStyle = `rgba(255, 255, 255, ${lightness.toFixed(3)})`;
-      ctx.fill();
+      state.externalUpdate = false;
+
+      renderer.render({ scene, camera });
     }
 
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-    ctx.lineWidth = 1;
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
-    for (const [a, b] of EDGE_PAIRS) {
-      ctx.beginPath();
-      ctx.moveTo(cx + projected[a].x, cy + projected[a].y);
-      ctx.lineTo(cx + projected[b].x, cy + projected[b].y);
-      ctx.stroke();
-    }
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-    for (const p of projected) {
-      ctx.beginPath();
-      ctx.arc(cx + p.x, cy + p.y, 1.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }, [rx, ry, rz]);
-
-  // Use native DOM events to avoid React state/closure issues with pointer capture
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const onDown = (e: PointerEvent) => {
-      e.preventDefault();
-      canvas.setPointerCapture(e.pointerId);
-      isDraggingRef.current = true;
-      dragStartRef.current = { x: e.clientX, y: e.clientY, rx: rxRef.current, ry: ryRef.current };
-      canvas.classList.add('dialkit-cube-preview-dragging');
-    };
-
-    const onMove = (e: PointerEvent) => {
-      if (!isDraggingRef.current || !dragStartRef.current) return;
-      const dx = e.clientX - dragStartRef.current.x;
-      const dy = e.clientY - dragStartRef.current.y;
-      const sensitivity = 0.8;
-      const newRy = Math.max(-180, Math.min(180, Math.round(dragStartRef.current.ry + dx * sensitivity)));
-      const newRx = Math.max(-180, Math.min(180, Math.round(dragStartRef.current.rx + dy * sensitivity)));
-      onRotateRef.current(newRx, newRy);
-    };
-
-    const onUp = () => {
-      isDraggingRef.current = false;
-      dragStartRef.current = null;
-      canvas.classList.remove('dialkit-cube-preview-dragging');
-    };
-
-    canvas.addEventListener('pointerdown', onDown);
-    canvas.addEventListener('pointermove', onMove);
-    canvas.addEventListener('pointerup', onUp);
-    canvas.addEventListener('pointercancel', onUp);
+    state.rafId = requestAnimationFrame(tick);
+    stateRef.current = state;
 
     return () => {
-      canvas.removeEventListener('pointerdown', onDown);
-      canvas.removeEventListener('pointermove', onMove);
-      canvas.removeEventListener('pointerup', onUp);
-      canvas.removeEventListener('pointercancel', onUp);
+      cancelAnimationFrame(state.rafId);
+      orbit.remove();
+      resizeObs.disconnect();
+      if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
+      stateRef.current = null;
     };
   }, []);
 
+  useEffect(() => {
+    const state = stateRef.current;
+    if (!state) return;
+
+    const { rx: emRx, ry: emRy } = { rx: state.lastEmittedRx, ry: state.lastEmittedRy };
+    if (Math.abs(rx - emRx) < 1.5 && Math.abs(ry - emRy) < 1.5) return;
+
+    state.externalUpdate = true;
+    setCameraFromEuler(state.camera, rx, ry);
+    state.orbit.forcePosition();
+    state.lastEmittedRx = rx;
+    state.lastEmittedRy = ry;
+  }, [rx, ry]);
+
   return (
-    <div className="dialkit-cube-preview-wrapper">
-      <canvas ref={canvasRef} className="dialkit-cube-preview-canvas" />
+    <div ref={containerRef} className="dialkit-cube-preview-wrapper">
       <span className="dialkit-preview-label">Drag to rotate</span>
     </div>
   );
+}
+
+function buildWireframeIndices(geometry: any): Uint16Array {
+  const posData = geometry.attributes.position.data;
+  const indexData = geometry.attributes.index?.data;
+  const edges = new Set<string>();
+  const indices: number[] = [];
+
+  function addEdge(a: number, b: number) {
+    const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+    if (edges.has(key)) return;
+    edges.add(key);
+    indices.push(a, b);
+  }
+
+  if (indexData) {
+    for (let i = 0; i < indexData.length; i += 3) {
+      addEdge(indexData[i], indexData[i + 1]);
+      addEdge(indexData[i + 1], indexData[i + 2]);
+      addEdge(indexData[i + 2], indexData[i]);
+    }
+  } else {
+    const numVerts = posData.length / 3;
+    for (let i = 0; i < numVerts; i += 3) {
+      addEdge(i, i + 1);
+      addEdge(i + 1, i + 2);
+      addEdge(i + 2, i);
+    }
+  }
+
+  return new Uint16Array(indices);
 }
