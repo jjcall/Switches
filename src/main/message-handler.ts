@@ -11,9 +11,12 @@ import type {
   ExecutionResultMessage,
   ClaudeRequestMessage,
   ClaudeResponseMessage,
+  RequestImageDataMessage,
+  ImageDataMessage,
 } from '../shared/message-types';
 import { serializeSelection } from './selection-serializer';
 import { executeActions, applyControlChange } from './action-executor';
+import UPNG from 'upng-js';
 
 // Resize is sent by useAutoResize in the iframe and is not a typed protocol
 // message, so we handle it separately before the typed router.
@@ -116,6 +119,39 @@ async function handleClaudeRequest(msg: ClaudeRequestMessage): Promise<void> {
   figma.ui.postMessage(reply);
 }
 
+async function handleRequestImageData(msg: RequestImageDataMessage): Promise<void> {
+  const { requestId, nodeId, maxWidth } = msg.payload;
+  try {
+    const node = await figma.getNodeByIdAsync(nodeId);
+    if (!node || node.type === 'DOCUMENT' || node.type === 'PAGE') {
+      throw new Error(`Node not found or not exportable: ${nodeId}`);
+    }
+
+    const sceneNode = node as SceneNode;
+    const pngBytes = await (sceneNode as ExportMixin).exportAsync({
+      format: 'PNG',
+      constraint: { type: 'WIDTH', value: Math.min(maxWidth, 200) },
+    });
+
+    const decoded = UPNG.decode(pngBytes.buffer);
+    const rgba = new Uint8Array(UPNG.toRGBA8(decoded)[0]);
+    const pixels = Array.from(rgba);
+
+    const response: ImageDataMessage = {
+      type: 'IMAGE_DATA',
+      payload: { requestId, width: decoded.width, height: decoded.height, pixels },
+    };
+    figma.ui.postMessage(response);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[main] handleRequestImageData failed:', message);
+    figma.ui.postMessage({
+      type: 'ERROR',
+      payload: { source: 'request-image-data', message },
+    });
+  }
+}
+
 // ─── Outbound helpers ─────────────────────────────────────────────────────────
 
 /** Serializes the current page selection and sends it to the iframe. */
@@ -182,6 +218,9 @@ export function registerMessageHandler(): void {
         break;
       case 'CLAUDE_REQUEST':
         void handleClaudeRequest(msg);
+        break;
+      case 'REQUEST_IMAGE_DATA':
+        void handleRequestImageData(msg);
         break;
       default: {
         // Narrow to never to catch unhandled message types at compile time.

@@ -10,7 +10,8 @@ import { callClaude } from './api/claude';
 import { composePrompt, parseLLMResponse } from './prompt/prompt-composer';
 import { UIRenderer } from './renderer/UIRenderer';
 import { resolveTemplate, collectControlDefaults } from './template';
-import { compileGenerator, executeGenerator } from './codegen';
+import { compileGenerator, executeGenerator, setImageData } from './codegen';
+import type { ImagePixelData } from './codegen';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -144,16 +145,38 @@ function App() {
     ]);
   }, []);
 
-  const handleApply = useCallback((values: Record<string, unknown>) => {
+  const fetchImageData = useCallback((nodeId: string, maxWidth = 100): Promise<ImagePixelData> => {
+    return new Promise((resolve, reject) => {
+      const requestId = `img-${Date.now()}-${Math.random()}`;
+      const cleanup = onMainMessage((msg) => {
+        if (msg.type === 'IMAGE_DATA' && msg.payload.requestId === requestId) {
+          cleanup();
+          resolve({ width: msg.payload.width, height: msg.payload.height, pixels: msg.payload.pixels });
+        } else if (msg.type === 'ERROR' && msg.payload.source === 'request-image-data') {
+          cleanup();
+          reject(new Error(msg.payload.message));
+        }
+      });
+      postToMain({ type: 'REQUEST_IMAGE_DATA', payload: { requestId, nodeId, maxWidth } });
+    });
+  }, []);
+
+  const handleApply = useCallback(async (values: Record<string, unknown>) => {
     if (!currentUISpec || currentUISpec.mode !== 'apply') return;
 
     let resolved: ActionDescriptor[];
 
     if (currentUISpec.generate) {
       try {
+        if (currentUISpec.imageNodeId) {
+          const imgData = await fetchImageData(currentUISpec.imageNodeId);
+          setImageData(imgData);
+        }
         const fn = compileGenerator(currentUISpec.generate);
         resolved = executeGenerator(fn, values);
+        setImageData(null);
       } catch (err) {
+        setImageData(null);
         addMessage('error', `Generator error: ${err instanceof Error ? err.message : String(err)}`);
         return;
       }
@@ -221,7 +244,7 @@ function App() {
         pluginSpec: JSON.stringify(currentUISpec),
       },
     });
-  }, [addMessage, currentUISpec]);
+  }, [addMessage, currentUISpec, fetchImageData]);
 
   // ── Submit ─────────────────────────────────────────────────────────────────
 
@@ -306,12 +329,16 @@ function App() {
         payload: { actions: actions as ActionDescriptor[], pluginSpec: specJson },
       });
     } else if (mergedUi.mode === 'apply' && mergedUi.generate) {
-      // Auto-execute using the merged generator with default control values.
       const defaults = collectControlDefaults(mergedUi.controls);
 
       try {
+        if (mergedUi.imageNodeId) {
+          const imgData = await fetchImageData(mergedUi.imageNodeId);
+          setImageData(imgData);
+        }
         const fn = compileGenerator(mergedUi.generate);
         const generated = executeGenerator(fn, defaults);
+        setImageData(null);
 
         if (existingFrameId) {
           // Reuse the existing frame: strip createFrame, deleteChildren, rewrite tempIds.
@@ -348,6 +375,7 @@ function App() {
           });
         }
       } catch (err) {
+        setImageData(null);
         addMessage('error', `Generator error: ${err instanceof Error ? err.message : String(err)}`);
       }
     } else if (mergedUi.mode === 'apply' && mergedUi.actionTemplate?.length) {
@@ -363,7 +391,7 @@ function App() {
     setCurrentUISpec(mergedUi);
 
     setIsLoading(false);
-  }, [addMessage, selectionContext, currentUISpec]);
+  }, [addMessage, selectionContext, currentUISpec, fetchImageData]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 

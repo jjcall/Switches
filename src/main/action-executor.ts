@@ -120,11 +120,10 @@ function toEffects(rawEffects: unknown): Effect[] {
     if (type === 'DROP_SHADOW' || type === 'INNER_SHADOW') {
       const offsetRaw = effect.offset as Record<string, unknown> | undefined;
       const color = toRGBA(effect.color);
-      // LLM sometimes puts opacity at the effect level; map it to color.a.
       if (typeof effect.opacity === 'number') {
         color.a = effect.opacity;
       }
-      return {
+      const base = {
         type: type as 'DROP_SHADOW',
         color,
         offset: {
@@ -134,9 +133,12 @@ function toEffects(rawEffects: unknown): Effect[] {
         radius: typeof effect.radius === 'number' ? effect.radius : 8,
         spread: typeof effect.spread === 'number' ? effect.spread : 0,
         visible: effect.visible !== false,
-        blendMode: 'NORMAL',
-        showShadowBehindNode: false,
-      } as DropShadowEffect;
+        blendMode: 'NORMAL' as const,
+      };
+      if (type === 'DROP_SHADOW') {
+        return { ...base, showShadowBehindNode: false } as DropShadowEffect;
+      }
+      return base as InnerShadowEffect;
     }
 
     if (type === 'LAYER_BLUR' || type === 'BACKGROUND_BLUR') {
@@ -164,6 +166,7 @@ async function execCreateRectangle(args: Args, tempMap: TempNodeMap, tempId?: st
   if (typeof args.cornerRadius === 'number') {
     node.cornerRadius = args.cornerRadius;
   }
+  if (typeof args.name === 'string') node.name = args.name;
   const parent = await resolveParent(parentId, tempMap);
   parent.appendChild(node);
   if (tempId) tempMap.set(tempId, node);
@@ -177,6 +180,54 @@ async function execCreateFrame(args: Args, tempMap: TempNodeMap, tempId?: string
   if (typeof args.width === 'number' && typeof args.height === 'number') {
     node.resize(args.width as number, args.height as number);
   }
+  if (typeof args.name === 'string') node.name = args.name;
+  const parent = await resolveParent(parentId, tempMap);
+  parent.appendChild(node);
+  if (tempId) tempMap.set(tempId, node);
+  return node;
+}
+
+async function execCreateEllipse(args: Args, tempMap: TempNodeMap, tempId?: string, parentId?: string): Promise<SceneNode> {
+  const node = figma.createEllipse();
+  if (typeof args.x === 'number') node.x = args.x;
+  if (typeof args.y === 'number') node.y = args.y;
+  if (typeof args.width === 'number' && typeof args.height === 'number') {
+    node.resize(args.width as number, args.height as number);
+  }
+  if (typeof args.name === 'string') node.name = args.name;
+  const parent = await resolveParent(parentId, tempMap);
+  parent.appendChild(node);
+  if (tempId) tempMap.set(tempId, node);
+  return node;
+}
+
+/**
+ * Normalize an SVG path string for Figma's vectorPaths parser, which requires
+ * spaces between command letters and their numeric arguments.
+ * d3-delaunay outputs paths like "M438.39,285.86L292.27,297.97Z" —
+ * this converts to "M 438.39 285.86 L 292.27 297.97 Z".
+ */
+function normalizeSvgPath(raw: string): string {
+  return raw
+    .replace(/,/g, ' ')
+    .replace(/([A-Za-z])(\d)/g, '$1 $2')
+    .replace(/(\d)([A-Za-z])/g, '$1 $2')
+    .replace(/([A-Za-z])(-)/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function execCreateVector(args: Args, tempMap: TempNodeMap, tempId?: string, parentId?: string): Promise<SceneNode> {
+  const node = figma.createVector();
+  if (typeof args.data === 'string') {
+    node.vectorPaths = [{
+      windingRule: (typeof args.windingRule === 'string' ? args.windingRule : 'NONZERO') as VectorPaths[number]['windingRule'],
+      data: normalizeSvgPath(args.data),
+    }];
+  }
+  if (typeof args.x === 'number') node.x = args.x;
+  if (typeof args.y === 'number') node.y = args.y;
+  if (typeof args.name === 'string') node.name = args.name;
   const parent = await resolveParent(parentId, tempMap);
   parent.appendChild(node);
   if (tempId) tempMap.set(tempId, node);
@@ -254,6 +305,22 @@ function coercePropertyValue(prop: string, value: unknown): unknown {
   }
 }
 
+/** Deep-clone a Figma paint so all nested objects (color, gradientStops, etc.) are mutable. */
+function clonePaint(paint: Paint): Paint {
+  const clone = { ...paint } as Record<string, unknown>;
+  if (clone.color && typeof clone.color === 'object') {
+    clone.color = { ...(clone.color as object) };
+  }
+  if (Array.isArray(clone.gradientStops)) {
+    clone.gradientStops = (clone.gradientStops as unknown[]).map(s => {
+      const stop = { ...(s as Record<string, unknown>) };
+      if (stop.color && typeof stop.color === 'object') stop.color = { ...(stop.color as object) };
+      return stop;
+    });
+  }
+  return clone as unknown as Paint;
+}
+
 function execSetFill(node: SceneNode, args: Args): void {
   if (!('fills' in node)) throw new Error(`Node type ${node.type} does not support fills.`);
 
@@ -274,7 +341,7 @@ function execSetFill(node: SceneNode, args: Args): void {
     const property = typeof args.property === 'string' ? args.property : null;
 
     if (property === 'opacity') {
-      const fills: Paint[] = (geoNode.fills as readonly Paint[]).map(f => ({ ...f }));
+      const fills = (geoNode.fills as readonly Paint[]).map(clonePaint);
       if (fills.length > 0) {
         (fills[0] as Record<string, unknown>).opacity = args.value;
         geoNode.fills = fills;
@@ -285,7 +352,7 @@ function execSetFill(node: SceneNode, args: Args): void {
     // "color" property with a number, or bare numeric value → grayscale.
     const v = args.value as number;
     const clamped = Math.max(0, Math.min(1, v));
-    const fills: Paint[] = (geoNode.fills as readonly Paint[]).map(f => ({ ...f }));
+    const fills = (geoNode.fills as readonly Paint[]).map(clonePaint);
     if (fills.length > 0 && (fills[0] as SolidPaint).type === 'SOLID') {
       (fills[0] as SolidPaint).color = { r: clamped, g: clamped, b: clamped };
       geoNode.fills = fills;
@@ -299,9 +366,8 @@ function execSetFill(node: SceneNode, args: Args): void {
   const property = typeof args.property === 'string' ? args.property : null;
   if (property !== null && 'value' in args) {
     const geoNode = node as GeometryMixin;
-    const fills: Paint[] = (geoNode.fills as readonly Paint[]).map(f => ({ ...f }));
+    const fills = (geoNode.fills as readonly Paint[]).map(clonePaint);
     if (fills.length > 0) {
-      // Deep-clone the color sub-object to avoid mutating frozen Figma objects.
       const fill = fills[0] as Record<string, unknown>;
       if (property === 'color' && typeof args.value === 'object' && args.value !== null) {
         fill.color = { ...(fill.color as object), ...(args.value as object) };
@@ -334,7 +400,7 @@ function execSetStroke(node: SceneNode, args: Args): void {
       return;
     }
     // Patch the first stroke paint's property (e.g. opacity).
-    const strokes: Paint[] = (geoNode.strokes as readonly Paint[]).map(s => ({ ...s }));
+    const strokes = (geoNode.strokes as readonly Paint[]).map(clonePaint);
     if (strokes.length > 0) {
       (strokes[0] as Record<string, unknown>)[property] = args.value;
       geoNode.strokes = strokes;
@@ -354,16 +420,19 @@ function execSetStroke(node: SceneNode, args: Args): void {
 
 function makeDefaultEffect(type: string): Effect {
   if (type === 'DROP_SHADOW' || type === 'INNER_SHADOW') {
-    return {
+    const base = {
       type: type as 'DROP_SHADOW',
       color: { r: 0, g: 0, b: 0, a: 0.25 },
       offset: { x: 0, y: 4 },
       radius: 8,
       spread: 0,
       visible: true,
-      blendMode: 'NORMAL',
-      showShadowBehindNode: false,
-    } as DropShadowEffect;
+      blendMode: 'NORMAL' as const,
+    };
+    if (type === 'DROP_SHADOW') {
+      return { ...base, showShadowBehindNode: false } as DropShadowEffect;
+    }
+    return base as InnerShadowEffect;
   }
   return {
     type: (type === 'BACKGROUND_BLUR' ? 'BACKGROUND_BLUR' : 'LAYER_BLUR') as 'LAYER_BLUR',
@@ -516,6 +585,18 @@ async function dispatchAction(action: ActionDescriptor, tempMap: TempNodeMap): P
       return created;
     }
 
+    case 'createEllipse': {
+      const created = await execCreateEllipse(a, tempMap, tempId, parentId);
+      lastCreatedNode = created;
+      return created;
+    }
+
+    case 'createVector': {
+      const created = await execCreateVector(a, tempMap, tempId, parentId);
+      lastCreatedNode = created;
+      return created;
+    }
+
     case 'createText': {
       const created = await execCreateText(a, tempMap, tempId, parentId);
       lastCreatedNode = created;
@@ -639,6 +720,38 @@ export async function executeActions(
     }
   }
 
+  // Resize the root frame to hug its contents after all children are placed.
+  if (rootFrameId) {
+    try {
+      const rootNode = tempMap.get(rootFrameId)
+        ?? await figma.getNodeByIdAsync(rootFrameId);
+      if (rootNode && (rootNode.type === 'FRAME' || rootNode.type === 'COMPONENT')) {
+        const frame = rootNode as FrameNode;
+        if (frame.layoutMode !== 'NONE') {
+          frame.primaryAxisSizingMode = 'AUTO';
+          frame.counterAxisSizingMode = 'AUTO';
+        } else if (frame.children.length > 0) {
+          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+          for (const child of frame.children) {
+            minX = Math.min(minX, child.x);
+            minY = Math.min(minY, child.y);
+            maxX = Math.max(maxX, child.x + child.width);
+            maxY = Math.max(maxY, child.y + child.height);
+          }
+          frame.resize(maxX - minX, maxY - minY);
+          if (minX !== 0 || minY !== 0) {
+            for (const child of frame.children) {
+              child.x -= minX;
+              child.y -= minY;
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[action-executor] failed to resize root frame:', err);
+    }
+  }
+
   // Persist plugin spec so it can be restored on re-selection.
   // Prefer the root frame; fall back to the first targeted node (live mode).
   const persistTargetId = rootFrameId ?? (actions.length > 0 ? actions[0].nodeId : undefined);
@@ -655,6 +768,23 @@ export async function executeActions(
   }
 
   figma.commitUndo();
+
+  // Pan & zoom the viewport to show newly created content.
+  const nodesToFocus: SceneNode[] = [];
+  if (rootFrameId) {
+    const root = tempMap.get(rootFrameId)
+      ?? await figma.getNodeByIdAsync(rootFrameId);
+    if (root) nodesToFocus.push(root as SceneNode);
+  } else {
+    for (const id of createdNodeIds) {
+      const node = tempMap.get(id) ?? await figma.getNodeByIdAsync(id);
+      if (node) nodesToFocus.push(node as SceneNode);
+    }
+  }
+  if (nodesToFocus.length > 0) {
+    figma.viewport.scrollAndZoomIntoView(nodesToFocus);
+    figma.viewport.zoom = figma.viewport.zoom * 0.85;
+  }
 
   // Build a tempId → real node ID map so the iframe can rewrite control actions.
   const tempIdMap: Record<string, string> = {};

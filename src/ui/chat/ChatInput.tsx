@@ -20,7 +20,10 @@ export function ChatInput({
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
+    el.style.overflowY = 'hidden';
+    const next = Math.min(el.scrollHeight, 240);
+    el.style.height = `${next}px`;
+    el.style.overflowY = next >= 240 ? 'auto' : 'hidden';
   }, [value]);
 
   const submit = () => {

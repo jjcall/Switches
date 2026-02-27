@@ -197,18 +197,41 @@ export interface ClaudeResponseMessage {
   };
 }
 
+/** Iframe → main: request pixel data for a node (for image-processing generators). */
+export interface RequestImageDataMessage {
+  type: 'REQUEST_IMAGE_DATA';
+  payload: {
+    requestId: string;
+    nodeId: string;
+    maxWidth: number;
+  };
+}
+
+/** Main → iframe: pixel data response. */
+export interface ImageDataMessage {
+  type: 'IMAGE_DATA';
+  payload: {
+    requestId: string;
+    width: number;
+    height: number;
+    pixels: number[];
+  };
+}
+
 export type MainToIframeMessage =
   | SelectionContextMessage
   | ExecutionResultMessage
   | ErrorMessage
-  | ClaudeResponseMessage;
+  | ClaudeResponseMessage
+  | ImageDataMessage;
 
 export type IframeToMainMessage =
   | PluginReadyMessage
   | ControlChangeMessage
   | ExecuteActionsMessage
   | ErrorMessage
-  | ClaudeRequestMessage;
+  | ClaudeRequestMessage
+  | RequestImageDataMessage;
 
 // ─── UI spec (LLM → renderer) ─────────────────────────────────────────────────
 
@@ -221,6 +244,9 @@ export interface UISpec {
   /** JS function body that receives (params, lib) and returns ActionDescriptor[].
    *  Preferred over actionTemplate when the plugin needs loops, randomness, or computation. */
   generate?: string;
+  /** When set, the runtime pre-fetches pixel data for this node before running the generator.
+   *  The data is available as lib.imageData inside the generate function. */
+  imageNodeId?: string;
   controls: UIControl[];
 }
 

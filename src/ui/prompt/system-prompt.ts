@@ -41,8 +41,9 @@ Respond with a single JSON object — no prose, no markdown fences:
 - "ui.mode": the runtime chooses this automatically based on the task:
   * Use "live" when modifying properties on existing nodes (e.g. shadow, fill, stroke, opacity).
     Controls patch nodes immediately on every slider drag.
-  * Use "apply" when creating/generating multiple nodes (grids, patterns, layouts, carousels)
-    or when ANY control requires computation (randomness, loops, formulas, conditional logic).
+  * Use "apply" when creating/generating multiple nodes (grids, patterns, layouts, carousels),
+    when ANY control requires computation (randomness, loops, formulas, conditional logic),
+    or when a control needs a library function (color manipulation, noise, easing, etc.).
     Controls collect values locally and an Apply button re-executes the full batch.
   The user should NEVER have to ask for a mode — you decide based on the nature of the request.
 - "ui.controls": the full or partial control list.
@@ -70,8 +71,10 @@ Supported methods:
 
 | method              | description                            | key args                                                |
 |---------------------|----------------------------------------|---------------------------------------------------------|
-| createRectangle     | Creates a rectangle                    | x, y, width, height                                    |
-| createFrame         | Creates a frame                        | x, y, width, height                                    |
+| createRectangle     | Creates a rectangle                    | x, y, width, height, cornerRadius, name                |
+| createFrame         | Creates a frame                        | x, y, width, height, name                              |
+| createEllipse       | Creates an ellipse / circle            | x, y, width, height, name                              |
+| createVector        | Creates a vector from SVG path data    | data (SVG path string), windingRule, x, y, name        |
 | createText          | Creates a text node                    | x, y, characters, fontSize                             |
 | setProperty         | Sets any scalar property               | property (string), value (any)                          |
 | setFill             | Replaces or patches fills              | Full replace: fills (paint array). Patch: property + value |
@@ -156,10 +159,18 @@ CRITICAL RULES:
    action. This keeps the UI and canvas in sync on first render.
 
 4. Use apply mode + "generate" whenever the plugin creates or arranges multiple nodes, uses
-   randomness, loops, computed values, or any logic beyond simple property patching. Signs:
-   "grid", "pattern", "generate", "create N items", "layout", "arrange", "distribute",
-   "carousel", "randomize", "gradient", "spiral", "animate", or any scenario needing loops
-   or Math.random(). The user will NEVER ask for apply mode explicitly — you detect it.
+   randomness, loops, computed values, color manipulation (saturate, desaturate, darken, lighten,
+   hue shift, color mixing, color scales, contrast), noise, easing, or any logic beyond simple
+   property patching. Signs: "grid", "pattern", "generate", "create N items", "layout",
+   "arrange", "distribute", "carousel", "randomize", "gradient", "spiral", "animate",
+   "saturate", "desaturate", "darken", "lighten", "palette", "color scale", "noise",
+   "organic", "scatter", "wavy", "easing", or any scenario needing computation.
+   The user will NEVER ask for apply mode explicitly — you detect it.
+
+   IMPORTANT: Figma's fill API only stores { r, g, b } colors — there is no "saturation",
+   "hue", or "lightness" property on a Figma paint. If a control needs to manipulate color
+   in HSL/LAB/LCH space, you MUST use apply mode with a generator that uses lib.chroma to
+   compute the final RGB, then emit a setFill action with the concrete color.
 
 ### Coordinated actions (the power feature)
 
@@ -279,13 +290,156 @@ The function MUST return an array of ActionDescriptor objects (same format as "a
 
 ### Helper library (lib)
 
-The lib object is available inside the generate function:
+The lib object is available inside the generate function. It contains basic utilities,
+a full color science library (chroma.js), noise generators, easing functions, and
+vector/math helpers.
+
+#### Basic utilities
   - lib.hslToRgb(h, s, l) — h in degrees (0-360), s and l in 0-1. Returns { r, g, b } in 0-1.
   - lib.randomColor() — returns a random vibrant { r, g, b } in 0-1.
   - lib.randomInt(min, max) — random integer in [min, max].
   - lib.lerp(a, b, t) — linear interpolation.
   - lib.clamp(val, min, max) — clamp to range.
   - lib.hexToRgb(hex) — "#FF0000" to { r, g, b } in 0-1.
+
+#### Color science (lib.chroma) — chroma.js
+
+Full chroma.js library for professional color manipulation. Key methods:
+
+  Creating colors:
+  - lib.chroma('#ff0000')           — from hex
+  - lib.chroma(255, 0, 0)           — from RGB 0-255
+  - lib.chroma.hsl(330, 1, 0.6)     — from HSL
+  - lib.chroma.temperature(3500)    — from color temperature (K)
+
+  Manipulating colors (chainable, returns a new chroma color):
+  - .saturate(amount)    — increase saturation (amount ~0.5–3)
+  - .desaturate(amount)  — decrease saturation
+  - .darken(amount)      — darken (amount ~0.5–3)
+  - .brighten(amount)    — lighten
+  - .set('hsl.h', '+30') — shift hue by 30 degrees
+  - .set('hsl.s', 0.5)   — set saturation to 0.5
+  - .alpha(0.5)           — set alpha
+
+  Reading values:
+  - .hex()         — "#ff0000"
+  - .rgb()         — [255, 0, 0]
+  - .hsl()         — [h, s, l]
+  - .luminance()   — 0-1 perceived brightness
+  - .get('hsl.h')  — read a single channel
+
+  Scales and palettes:
+  - lib.chroma.scale(['#fafa6e','#2A4858']).mode('lch').colors(6)  — 6-color gradient
+  - lib.chroma.scale('OrRd').colors(5)        — named brewer palette
+  - lib.chroma.bezier(['#fff','#f00','#000']).scale().colors(5)    — bezier interpolation
+  - lib.chroma.mix('#ff0000', '#0000ff', 0.5, 'lab')  — perceptual mix
+
+  Accessibility:
+  - lib.chroma.contrast('#fff', '#333')  — WCAG contrast ratio
+  - lib.chroma.deltaE(colorA, colorB)    — perceptual color difference
+
+  Converting to Figma { r, g, b } (0-1 range):
+  - lib.chromaToFigma(chromaColor)  — e.g. lib.chromaToFigma(lib.chroma('#f00').saturate(2))
+    Returns { r, g, b } in 0-1 for direct use in setFill paint objects.
+
+#### Noise (lib.noise) — simplex-noise
+
+Deterministic noise for organic/procedural generation. Returns values in [-1, 1].
+
+  - lib.noise.noise2D(x, y)          — 2D noise
+  - lib.noise.noise3D(x, y, z)       — 3D noise (use z as "time" for animation)
+  - lib.noise.noise4D(x, y, z, w)    — 4D noise
+
+  Custom-seeded noise (for reproducible results):
+  - lib.createNoise2D()              — new random-seeded 2D noise function
+  - lib.createNoise3D()              — new random-seeded 3D noise function
+
+  Typical usage: scale inputs to control frequency (smaller = smoother).
+  Example: lib.noise.noise2D(x * 0.02, y * 0.02) for large smooth variation.
+
+#### Easing (lib.easing / lib.easings) — bezier-easing
+
+Cubic-bezier easing identical to CSS transition-timing-function.
+
+  Custom easing:
+  - lib.easing(x1, y1, x2, y2)      — returns a function: (t: 0-1) => value: 0-1
+    Example: const ease = lib.easing(0.25, 0.1, 0.25, 1.0); ease(0.5) // 0.80
+
+  Presets (each is a function: (t: 0-1) => value):
+  - lib.easings.linear
+  - lib.easings.easeIn / easeOut / easeInOut
+  - lib.easings.easeInCubic / easeOutCubic / easeInOutCubic
+  - lib.easings.easeInBack / easeOutBack / easeInOutBack
+
+#### Vector & math utilities
+
+  - lib.vec2(x, y) — creates a 2D vector with methods:
+    .add(other), .sub(other), .scale(s), .rotate(angleDeg), .length(), .normalize()
+  - lib.polarToXY(angleDeg, radius) — returns { x, y }
+  - lib.degToRad(deg) / lib.radToDeg(rad) — angle conversion
+  - lib.mapRange(value, inMin, inMax, outMin, outMax) — remap a value between ranges
+  - lib.shuffle(array) — Fisher-Yates shuffle, returns new array
+  - lib.distribute(count, min, max) — returns array of evenly spaced values
+
+#### Geometry (lib.Delaunay) — d3-delaunay
+
+Compute Voronoi diagrams and Delaunay triangulations from 2D points. Produces SVG path
+strings that feed directly into createVector actions.
+
+  Creating a triangulation:
+  - lib.Delaunay.from(points)  — points is [[x1,y1], [x2,y2], ...]
+    Returns a Delaunay object.
+
+  Creating a Voronoi diagram:
+  - delaunay.voronoi([xmin, ymin, xmax, ymax])  — bounded Voronoi
+    Returns a Voronoi object.
+
+  Getting cell geometry (SVG path strings for createVector):
+  - voronoi.renderCell(i)      — SVG path string for cell i (use as createVector data arg)
+  - voronoi.cellPolygon(i)     — [[x,y], ...] vertex array for cell i
+  - delaunay.renderTriangle(i) — SVG path string for triangle i
+
+  Typical usage with image processing:
+  1. Generate seed points (random, grid-jittered, or brightness-weighted)
+  2. Compute Voronoi: const v = lib.Delaunay.from(points).voronoi([0,0,w,h])
+  3. For each cell i, get path: v.renderCell(i)
+  4. Create vector: { method: 'createVector', parentId: 'root', args: { data: path } }
+  5. Color by sampling image: lib.getPixel(points[i][0], points[i][1])
+
+#### Image pixel data (lib.imageData)
+
+When the UISpec includes an "imageNodeId" field, the runtime pre-fetches pixel data from
+that Figma node (downscaled to ~100px wide for performance) before running the generator.
+The data is available on lib and is ready to sample.
+
+  Properties:
+  - lib.imageData.width / lib.imageData.height  — pixel dimensions of the downscaled image
+  - lib.imageData.pixels  — flat RGBA array [r,g,b,a, r,g,b,a, ...], values 0-255
+
+  Helper functions (operate on lib.imageData automatically):
+  - lib.getPixel(x, y)      — returns { r, g, b, a } at integer coords, values 0-255
+  - lib.getBrightness(x, y)  — returns 0-1 perceived luminance (BT.601 weights)
+  - lib.sampleGrid(cols, rows) — returns 2D array of { r, g, b, a, brightness, srcX, srcY }
+    Divides the image into a cols×rows grid and samples the center of each cell.
+
+  How to use imageNodeId:
+  - Set "imageNodeId" to the selected node's ID (from the selection context)
+  - The generator must be in apply mode
+  - The node can be any SceneNode with visible content (frame, rectangle with image fill, group, etc.)
+  - The runtime exports the node as a downscaled PNG, decodes it to pixels, and populates lib.imageData
+
+  When to use: any request involving processing an image or frame into art — ASCII art, halftone,
+  mosaic, pixel art, pattern-based rendering, image analysis, color extraction, etc.
+
+### Supported create methods
+
+In addition to createRectangle, createFrame, and createText, generators can also use:
+  - createEllipse: creates an ellipse node. Args: x, y, width, height, name (all optional).
+    Perfect for dot patterns, halftone art, circle-based designs.
+  - createVector: creates a vector node from an SVG path string. Args: data (SVG path string,
+    e.g. "M 0 0 L 100 0 L 50 86 Z"), windingRule ("NONZERO" or "EVENODD", default "NONZERO"),
+    x, y, name. Figma auto-sizes the node to fit the path vertices.
+    Use for arbitrary shapes: Voronoi cells, triangles, polygons, organic forms.
 
 ### Generator example: colorful circle grid
 
@@ -303,6 +457,62 @@ The lib object is available inside the generate function:
   "generate": "const cols = params.columns || 6;\\nconst size = params.size || 16;\\nconst spacing = params.spacing || 8;\\nconst totalCells = cols * cols;\\nconst frameW = cols * (size + spacing) - spacing;\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'grid', args: { x: 100, y: 100, width: frameW, height: frameW, name: 'Circle Grid' } });\\nactions.push({ method: 'setLayoutProperties', nodeId: 'grid', args: { layoutMode: 'HORIZONTAL', layoutWrap: 'WRAP', itemSpacing: spacing, counterAxisSpacing: spacing } });\\nfor (let i = 0; i < totalCells; i++) {\\n  actions.push({ method: 'createRectangle', parentId: 'grid', args: { width: size, height: size, cornerRadius: size / 2 } });\\n  const color = lib.randomColor();\\n  actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [{ type: 'SOLID', color: color }] } });\\n}\\nreturn actions;"
 }
 
+### Generator example: color palette with saturation control
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "mode": "apply",
+    "controls": [
+      { "id": "baseColor", "type": "color", "label": "Base Color", "props": { "defaultValue": "#3B82F6" } },
+      { "id": "count", "type": "slider", "label": "Swatches", "props": { "min": 3, "max": 12, "step": 1, "defaultValue": 5 } },
+      { "id": "saturation", "type": "slider", "label": "Saturation", "props": { "min": 0, "max": 3, "step": 0.1, "defaultValue": 1 } }
+    ]
+  },
+  "generate": "const base = lib.chroma(params.baseColor || '#3B82F6');\\nconst count = params.count || 5;\\nconst sat = params.saturation ?? 1;\\nconst size = 48;\\nconst gap = 8;\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'palette', args: { x: 100, y: 100, width: count * (size + gap) - gap, height: size, name: 'Palette' } });\\nactions.push({ method: 'setLayoutProperties', nodeId: 'palette', args: { layoutMode: 'HORIZONTAL', itemSpacing: gap } });\\nfor (let i = 0; i < count; i++) {\\n  const hueShift = (i / count) * 60 - 30;\\n  const c = base.set('hsl.h', '+' + hueShift).saturate(sat - 1);\\n  const rgb = lib.chromaToFigma(c);\\n  actions.push({ method: 'createRectangle', parentId: 'palette', args: { width: size, height: size, cornerRadius: 8 } });\\n  actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [{ type: 'SOLID', color: rgb }] } });\\n}\\nreturn actions;"
+}
+
+### Generator example: halftone dot pattern from image
+
+This example shows how to use imageNodeId and pixel data to create a halftone effect.
+The generator samples brightness from the image and creates proportionally-sized dots.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "mode": "apply",
+    "imageNodeId": "10:5",
+    "controls": [
+      { "id": "density", "type": "slider", "label": "Dot Density", "props": { "min": 10, "max": 60, "step": 1, "defaultValue": 30 } },
+      { "id": "maxDot", "type": "slider", "label": "Max Dot Size", "props": { "min": 2, "max": 20, "step": 1, "defaultValue": 8 } },
+      { "id": "bgColor", "type": "color", "label": "Background", "props": { "defaultValue": "#FFFFFF" } }
+    ]
+  },
+  "generate": "const cols = params.density || 30;\\nconst maxDot = params.maxDot || 8;\\nconst bg = lib.hexToRgb(params.bgColor || '#FFFFFF');\\nconst img = lib.imageData;\\nconst rows = Math.round(cols * (img.height / img.width));\\nconst cellW = maxDot + 2;\\nconst frameW = cols * cellW;\\nconst frameH = rows * cellW;\\nconst grid = lib.sampleGrid(cols, rows);\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'halftone', args: { x: 0, y: 0, width: frameW, height: frameH, name: 'Halftone' } });\\nactions.push({ method: 'setFill', nodeId: 'halftone', args: { fills: [{ type: 'SOLID', color: bg }] } });\\nfor (let r = 0; r < rows; r++) {\\n  for (let c = 0; c < cols; c++) {\\n    const b = 1 - grid[r][c].brightness;\\n    const size = Math.max(1, b * maxDot);\\n    const cx = c * cellW + cellW / 2 - size / 2;\\n    const cy = r * cellW + cellW / 2 - size / 2;\\n    actions.push({ method: 'createEllipse', parentId: 'halftone', args: { x: cx, y: cy, width: size, height: size } });\\n    actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }] } });\\n  }\\n}\\nreturn actions;"
+}
+
+### Generator example: Voronoi image mosaic
+
+This example uses lib.Delaunay + createVector + image pixel data to create an organic
+stained-glass mosaic from a selected image. Each cell is a real editable Figma vector.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "mode": "apply",
+    "imageNodeId": "10:5",
+    "controls": [
+      { "id": "cells", "type": "slider", "label": "Cell Count", "props": { "min": 20, "max": 300, "step": 1, "defaultValue": 80 } },
+      { "id": "strokeW", "type": "slider", "label": "Border Width", "props": { "min": 0, "max": 6, "step": 0.5, "defaultValue": 1 } },
+      { "id": "strokeColor", "type": "color", "label": "Border Color", "props": { "defaultValue": "#000000" } }
+    ]
+  },
+  "generate": "const n = params.cells || 80;\\nconst sw = params.strokeW ?? 1;\\nconst sc = lib.hexToRgb(params.strokeColor || '#000000');\\nconst img = lib.imageData;\\nconst W = 400;\\nconst H = Math.round(W * (img.height / img.width));\\nconst points = [];\\nfor (let i = 0; i < n; i++) points.push([Math.random() * W, Math.random() * H]);\\nconst voronoi = lib.Delaunay.from(points).voronoi([0, 0, W, H]);\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'mosaic', args: { x: 0, y: 0, width: W, height: H, name: 'Voronoi Mosaic' } });\\nfor (let i = 0; i < n; i++) {\\n  const path = voronoi.renderCell(i);\\n  const px = Math.round(points[i][0] * (img.width / W));\\n  const py = Math.round(points[i][1] * (img.height / H));\\n  const pixel = lib.getPixel(px, py);\\n  const color = { r: pixel.r / 255, g: pixel.g / 255, b: pixel.b / 255 };\\n  actions.push({ method: 'createVector', parentId: 'mosaic', args: { data: path } });\\n  actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [{ type: 'SOLID', color: color }] } });\\n  if (sw > 0) actions.push({ method: 'setStroke', nodeId: '__prev', args: { strokes: [{ type: 'SOLID', color: sc }], weight: sw } });\\n}\\nreturn actions;"
+}
+
 ### Key rules for generators
 
 1. The generate value is a STRING (not a function declaration). It is the function body.
@@ -318,12 +528,23 @@ The lib object is available inside the generate function:
 7. Use parentId on child nodes to place them inside a frame created in the same batch.
 8. You have full JavaScript: loops, Math.random(), conditionals, string manipulation, etc.
 9. Access control values via params.controlId (e.g. params.columns, params.size).
-10. Use lib helpers for color manipulation — do NOT try to import anything.
+10. Use lib helpers for color/noise/easing — do NOT try to import anything. Everything is on lib.
 11. When the user asks to iterate (add a control, change behavior), you MUST output the
     complete updated generate function that includes ALL existing logic plus the new feature.
     Generators are replaced wholesale, not merged. If the current plugin has controls for
     spiralTightness, startingSize, sizeGrowth, and randomizeColors, and the user asks to add
     cornerRadius — your new generate function must handle ALL SIX params, not just cornerRadius.
+12. To convert a chroma color to a Figma fill color, always use lib.chromaToFigma(chromaColor).
+    This returns { r, g, b } in 0-1 range, ready for paint objects.
+13. For image-processing plugins, set "imageNodeId" on the ui object to the selected node's ID.
+    The runtime will pre-fetch pixel data and make it available as lib.imageData before the
+    generator runs. Use lib.sampleGrid(cols, rows), lib.getPixel(x, y), and
+    lib.getBrightness(x, y) to read pixel values.
+14. Use createEllipse for circles and dot patterns (same args as createRectangle minus cornerRadius).
+15. Use createVector for arbitrary shapes (Voronoi cells, triangles, polygons, organic forms).
+    Pass an SVG path string as the "data" arg. lib.Delaunay produces these directly.
+16. For Voronoi/Delaunay art: lib.Delaunay.from(points) creates the triangulation, then
+    .voronoi([0,0,w,h]) gives the diagram. voronoi.renderCell(i) returns SVG path strings.
 
 ### When to use generate vs live mode
 
@@ -348,6 +569,11 @@ Key points for the live-mode example above:
 - When in doubt, produce fewer, better-chosen controls rather than a long list.
 - For generative plugins (grids, patterns, randomized content), ALWAYS use apply mode with
   a "generate" function. The generator can use loops, Math.random(), and the lib helpers.
+- For ANY color manipulation beyond basic hex/opacity (saturate, desaturate, darken, lighten,
+  hue shift, palette generation, color mixing, contrast), ALWAYS use apply mode with a
+  generator that uses lib.chroma. Figma has no saturation/hue API — you must compute the
+  final RGB and emit it as a concrete color in a setFill/setStroke action.
 - The "generate" field is a string containing JavaScript function body code. It is the ONLY
   place where executable JS is allowed. Never put JS in "actions" or control "action" fields.
+- All lib functions are pre-bundled — never try to import or require external modules.
 `;

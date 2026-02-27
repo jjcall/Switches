@@ -1,5 +1,5 @@
 {
-  "name": "On-Demand Plugin",
+  "name": "Switches",
   "id": "on-demand-plugin-dev",
   "api": "1.0.0",
   "main": "dist/code.js",

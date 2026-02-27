@@ -1,4 +1,8 @@
 import type { ActionDescriptor } from '../shared/message-types';
+import chroma from 'chroma-js';
+import { createNoise2D, createNoise3D, createNoise4D } from 'simplex-noise';
+import BezierEasing from 'bezier-easing';
+import { Delaunay } from 'd3-delaunay';
 
 // ─── Helper library exposed to generated code as `lib` ───────────────────────
 
@@ -22,7 +26,113 @@ function hslToRgb(h: number, s: number, l: number): { r: number; g: number; b: n
   return { r: r1 + m, g: g1 + m, b: b1 + m };
 }
 
+// ─── Vector2 ──────────────────────────────────────────────────────────────────
+
+interface Vec2 {
+  x: number;
+  y: number;
+  add(other: Vec2 | { x: number; y: number }): Vec2;
+  sub(other: Vec2 | { x: number; y: number }): Vec2;
+  scale(s: number): Vec2;
+  rotate(angleDeg: number): Vec2;
+  length(): number;
+  normalize(): Vec2;
+}
+
+function vec2(x: number, y: number): Vec2 {
+  return {
+    x, y,
+    add(o)     { return vec2(x + o.x, y + o.y); },
+    sub(o)     { return vec2(x - o.x, y - o.y); },
+    scale(s)   { return vec2(x * s, y * s); },
+    rotate(deg) {
+      const rad = deg * Math.PI / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      return vec2(x * cos - y * sin, x * sin + y * cos);
+    },
+    length()    { return Math.sqrt(x * x + y * y); },
+    normalize() {
+      const len = Math.sqrt(x * x + y * y);
+      return len === 0 ? vec2(0, 0) : vec2(x / len, y / len);
+    },
+  };
+}
+
+// ─── Pre-seeded noise instances ───────────────────────────────────────────────
+
+const defaultNoise2D = createNoise2D();
+const defaultNoise3D = createNoise3D();
+const defaultNoise4D = createNoise4D();
+
+// ─── Easing presets ───────────────────────────────────────────────────────────
+
+const easings = {
+  linear:         BezierEasing(0, 0, 1, 1),
+  easeIn:         BezierEasing(0.42, 0, 1, 1),
+  easeOut:        BezierEasing(0, 0, 0.58, 1),
+  easeInOut:      BezierEasing(0.42, 0, 0.58, 1),
+  easeInCubic:    BezierEasing(0.55, 0.055, 0.675, 0.19),
+  easeOutCubic:   BezierEasing(0.215, 0.61, 0.355, 1),
+  easeInOutCubic: BezierEasing(0.645, 0.045, 0.355, 1),
+  easeInBack:     BezierEasing(0.6, -0.28, 0.735, 0.045),
+  easeOutBack:    BezierEasing(0.175, 0.885, 0.32, 1.275),
+  easeInOutBack:  BezierEasing(0.68, -0.55, 0.265, 1.55),
+};
+
+// ─── Chroma-to-Figma bridge ──────────────────────────────────────────────────
+
+function chromaToFigma(c: chroma.Color): { r: number; g: number; b: number } {
+  const [r, g, b] = c.rgb();
+  return { r: r / 255, g: g / 255, b: b / 255 };
+}
+
+// ─── Image data types & helpers ───────────────────────────────────────────────
+
+export interface ImagePixelData {
+  width: number;
+  height: number;
+  pixels: number[];
+}
+
+function getPixel(data: ImagePixelData, x: number, y: number): { r: number; g: number; b: number; a: number } {
+  const cx = Math.max(0, Math.min(data.width - 1, Math.round(x)));
+  const cy = Math.max(0, Math.min(data.height - 1, Math.round(y)));
+  const i = (cy * data.width + cx) * 4;
+  return { r: data.pixels[i], g: data.pixels[i + 1], b: data.pixels[i + 2], a: data.pixels[i + 3] };
+}
+
+function getBrightness(data: ImagePixelData, x: number, y: number): number {
+  const p = getPixel(data, x, y);
+  return (0.299 * p.r + 0.587 * p.g + 0.114 * p.b) / 255;
+}
+
+interface SampleCell {
+  r: number; g: number; b: number; a: number;
+  brightness: number;
+  srcX: number; srcY: number;
+}
+
+function sampleGrid(data: ImagePixelData, cols: number, rows: number): SampleCell[][] {
+  const grid: SampleCell[][] = [];
+  for (let row = 0; row < rows; row++) {
+    const rowArr: SampleCell[] = [];
+    const srcY = (row + 0.5) * (data.height / rows);
+    for (let col = 0; col < cols; col++) {
+      const srcX = (col + 0.5) * (data.width / cols);
+      const p = getPixel(data, srcX, srcY);
+      const brightness = (0.299 * p.r + 0.587 * p.g + 0.114 * p.b) / 255;
+      rowArr.push({ ...p, brightness, srcX, srcY });
+    }
+    grid.push(rowArr);
+  }
+  return grid;
+}
+
+// ─── Assembled lib ────────────────────────────────────────────────────────────
+
 const generatorLib = {
+  // --- Original helpers (preserved for backward compatibility) ---
   hslToRgb,
 
   randomColor(): { r: number; g: number; b: number } {
@@ -46,7 +156,89 @@ const generatorLib = {
     const n = parseInt(h, 16);
     return { r: ((n >> 16) & 0xff) / 255, g: ((n >> 8) & 0xff) / 255, b: (n & 0xff) / 255 };
   },
+
+  // --- Color: chroma-js ---
+  chroma,
+  chromaToFigma,
+
+  // --- Noise: simplex-noise ---
+  noise: {
+    noise2D: defaultNoise2D,
+    noise3D: defaultNoise3D,
+    noise4D: defaultNoise4D,
+  },
+  createNoise2D,
+  createNoise3D,
+  createNoise4D,
+
+  // --- Easing: bezier-easing ---
+  easing: BezierEasing,
+  easings,
+
+  // --- Geometry: d3-delaunay ---
+  Delaunay,
+
+  // --- Vector / math ---
+  vec2,
+
+  polarToXY(angleDeg: number, radius: number): { x: number; y: number } {
+    const rad = angleDeg * Math.PI / 180;
+    return { x: Math.cos(rad) * radius, y: Math.sin(rad) * radius };
+  },
+
+  degToRad(deg: number): number {
+    return deg * Math.PI / 180;
+  },
+
+  radToDeg(rad: number): number {
+    return rad * 180 / Math.PI;
+  },
+
+  mapRange(value: number, inMin: number, inMax: number, outMin: number, outMax: number): number {
+    return outMin + ((value - inMin) / (inMax - inMin)) * (outMax - outMin);
+  },
+
+  shuffle<T>(array: T[]): T[] {
+    const a = [...array];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  },
+
+  distribute(count: number, min: number, max: number): number[] {
+    if (count <= 1) return [min];
+    const step = (max - min) / (count - 1);
+    return Array.from({ length: count }, (_, i) => min + step * i);
+  },
+
+  // --- Image pixel data (populated before generator runs when imageNodeId is set) ---
+  imageData: null as ImagePixelData | null,
+
+  getPixel(x: number, y: number): { r: number; g: number; b: number; a: number } {
+    if (!generatorLib.imageData) throw new Error('No image data loaded. Set imageNodeId on the UISpec.');
+    return getPixel(generatorLib.imageData, x, y);
+  },
+
+  getBrightness(x: number, y: number): number {
+    if (!generatorLib.imageData) throw new Error('No image data loaded. Set imageNodeId on the UISpec.');
+    return getBrightness(generatorLib.imageData, x, y);
+  },
+
+  sampleGrid(cols: number, rows: number): SampleCell[][] {
+    if (!generatorLib.imageData) throw new Error('No image data loaded. Set imageNodeId on the UISpec.');
+    return sampleGrid(generatorLib.imageData, cols, rows);
+  },
 };
+
+/**
+ * Inject pixel data into the lib before running an image-processing generator.
+ * Call with null to clear after execution.
+ */
+export function setImageData(data: ImagePixelData | null): void {
+  generatorLib.imageData = data;
+}
 
 export type GeneratorLib = typeof generatorLib;
 
@@ -71,7 +263,6 @@ export function compileGenerator(code: string): GeneratorFn {
     const paramName = fnMatch[1];
     const libName = fnMatch[2] || 'lib';
     const innerBody = fnMatch[3];
-    // Re-alias if the LLM used different parameter names
     const aliases: string[] = [];
     if (paramName !== 'params') aliases.push(`const params = ${paramName};`);
     if (libName !== 'lib') aliases.push(`const lib = ${libName};`);
