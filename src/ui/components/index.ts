@@ -10,3 +10,5 @@ export type { SpringConfig } from './SpringVisualization';
 export { TextControl as TextInput } from './TextControl';
 export { ButtonGroup as Button } from './ButtonGroup';
 export { NumberInput } from './NumberInput';
+export { AngleWheel } from './AngleWheel';
+export { CubePreview } from './CubePreview';

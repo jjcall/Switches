@@ -5676,6 +5676,43 @@
     if (tempId) tempMap.set(tempId, node);
     return node;
   }
+  async function execApplyPatternFill(args, tempMap, tempId, parentId) {
+    const sourceId = typeof args.sourceNodeId === "string" ? args.sourceNodeId : void 0;
+    if (!sourceId) throw new Error("applyPatternFill requires sourceNodeId");
+    const sourceNode = await resolveNode(sourceId, tempMap);
+    let node;
+    const targetId = typeof args.targetNodeId === "string" ? args.targetNodeId : void 0;
+    if (targetId) {
+      node = await resolveNode(targetId, tempMap);
+    } else {
+      const rect = figma.createRectangle();
+      if (typeof args.x === "number") rect.x = args.x;
+      if (typeof args.y === "number") rect.y = args.y;
+      if (typeof args.width === "number" && typeof args.height === "number")
+        rect.resize(args.width, args.height);
+      if (typeof args.name === "string") rect.name = args.name;
+      const parent = await resolveParent(parentId, tempMap);
+      parent.appendChild(rect);
+      node = rect;
+    }
+    const validTileTypes = ["RECTANGULAR", "HORIZONTAL_HEXAGONAL", "VERTICAL_HEXAGONAL"];
+    const tileType = typeof args.tileType === "string" && validTileTypes.includes(args.tileType) ? args.tileType : "RECTANGULAR";
+    const patternPaint = {
+      type: "PATTERN",
+      sourceNodeId: sourceNode.id,
+      tileType,
+      scalingFactor: typeof args.scalingFactor === "number" ? args.scalingFactor : 1,
+      spacing: {
+        x: typeof args.spacingX === "number" ? args.spacingX : 0,
+        y: typeof args.spacingY === "number" ? args.spacingY : 0
+      }
+    };
+    if ("setFillsAsync" in node) {
+      await node.setFillsAsync([patternPaint]);
+    }
+    if (tempId) tempMap.set(tempId, node);
+    return node;
+  }
   async function execCreateText(args, tempMap, tempId, parentId) {
     const node = figma.createText();
     await figma.loadFontAsync(node.fontName);
@@ -5986,6 +6023,11 @@
         lastCreatedNode = created;
         return created;
       }
+      case "applyPatternFill": {
+        const created = await execApplyPatternFill(a, tempMap, tempId, parentId);
+        lastCreatedNode = created;
+        return created;
+      }
       case "createText": {
         const created = await execCreateText(a, tempMap, tempId, parentId);
         lastCreatedNode = created;
@@ -6121,19 +6163,27 @@
       }
     }
     figma.commitUndo();
-    const nodesToFocus = [];
-    if (rootFrameId) {
-      const root = (_c = tempMap.get(rootFrameId)) != null ? _c : await figma.getNodeByIdAsync(rootFrameId);
-      if (root) nodesToFocus.push(root);
-    } else {
-      for (const id of createdNodeIds) {
-        const node = (_d = tempMap.get(id)) != null ? _d : await figma.getNodeByIdAsync(id);
-        if (node) nodesToFocus.push(node);
+    const isReapply = actions.length > 0 && actions[0].method === "deleteChildren";
+    if (!isReapply && rootFrameId) {
+      try {
+        const rootNode = (_c = tempMap.get(rootFrameId)) != null ? _c : await figma.getNodeByIdAsync(rootFrameId);
+        if (rootNode && "x" in rootNode) {
+          const vp = figma.viewport.center;
+          const node = rootNode;
+          node.x = vp.x - node.width / 2;
+          node.y = vp.y - node.height / 2;
+        }
+      } catch (err) {
+        console.warn("[action-executor] failed to center root frame:", err);
       }
-    }
-    if (nodesToFocus.length > 0) {
-      figma.viewport.scrollAndZoomIntoView(nodesToFocus);
-      figma.viewport.zoom = figma.viewport.zoom * 0.85;
+      const savedZoom = figma.viewport.zoom;
+      const nodesToFocus = [];
+      const root = (_d = tempMap.get(rootFrameId)) != null ? _d : await figma.getNodeByIdAsync(rootFrameId);
+      if (root) nodesToFocus.push(root);
+      if (nodesToFocus.length > 0) {
+        figma.viewport.scrollAndZoomIntoView(nodesToFocus);
+        figma.viewport.zoom = savedZoom;
+      }
     }
     const tempIdMap = {};
     for (const [tempId, node] of tempMap.entries()) {
@@ -6274,6 +6324,16 @@
       });
     }
   }
+  async function handleClearPluginData(msg) {
+    try {
+      const node = await figma.getNodeByIdAsync(msg.payload.nodeId);
+      if (node && "setPluginData" in node) {
+        node.setPluginData("pluginSpec", "");
+      }
+    } catch (err) {
+      console.warn("[main] handleClearPluginData failed:", err);
+    }
+  }
   function sendSelectionContext() {
     const payload = serializeSelection(figma.currentPage.selection);
     const selection = figma.currentPage.selection;
@@ -6325,6 +6385,9 @@
           break;
         case "REQUEST_IMAGE_DATA":
           void handleRequestImageData(msg);
+          break;
+        case "CLEAR_PLUGIN_DATA":
+          void handleClearPluginData(msg);
           break;
         default: {
           const _exhaustive = msg;

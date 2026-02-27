@@ -439,6 +439,80 @@ body {
   opacity: 0;
   pointer-events: none;
 }
+.dialkit-angle-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: var(--dial-row-height);
+  padding: 6px 8px;
+  background: var(--dial-surface);
+  border-radius: var(--dial-radius);
+}
+.dialkit-angle-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--dial-text-label);
+  flex-shrink: 0;
+}
+.dialkit-angle-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dialkit-angle-dial {
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+  flex-shrink: 0;
+  border-radius: 50%;
+  transition: background 0.15s;
+}
+.dialkit-angle-dial:hover,
+.dialkit-angle-dial-active {
+  background: rgba(255, 255, 255, 0.04);
+}
+.dialkit-angle-svg {
+  display: block;
+}
+.dialkit-angle-value {
+  font-size: 11px;
+  font-weight: 500;
+  font-family:
+    ui-monospace,
+    "SF Mono",
+    "Courier New",
+    monospace;
+  color: var(--dial-text-label);
+  min-width: 3.5ch;
+  text-align: right;
+  border-bottom: 1px solid transparent;
+  padding-bottom: 1px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.dialkit-angle-value-editable {
+  border-bottom-color: var(--dial-text-label);
+}
+.dialkit-angle-input {
+  width: 5ch;
+  font-size: 11px;
+  font-weight: 500;
+  font-family:
+    ui-monospace,
+    "SF Mono",
+    "Courier New",
+    monospace;
+  color: var(--dial-text-label);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--dial-text-label);
+  padding: 0 0 1px 0;
+  outline: none;
+  text-align: right;
+}
+.dialkit-angle-input:focus {
+  color: #fff;
+}
 .dialkit-folder {
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
@@ -568,8 +642,52 @@ body {
   color: rgba(255, 255, 255, 0.35);
   max-width: 180px;
 }
+.dialkit-cube-preview-wrapper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--dial-radius);
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--dial-border);
+}
+.dialkit-cube-preview-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+.dialkit-cube-preview-dragging {
+  cursor: grabbing;
+}
 .ui-renderer {
   padding-bottom: 8px;
+}
+.dialkit-preview-wrapper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--dial-radius);
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--dial-border);
+}
+.dialkit-preview-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.dialkit-preview-label {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.2);
+  pointer-events: none;
 }
 .chat-area {
   flex-shrink: 0;
@@ -1852,7 +1970,7 @@ body {
             }
             return dispatcher.useContext(Context);
           }
-          function useState13(initialState) {
+          function useState14(initialState) {
             var dispatcher = resolveDispatcher();
             return dispatcher.useState(initialState);
           }
@@ -1860,11 +1978,11 @@ body {
             var dispatcher = resolveDispatcher();
             return dispatcher.useReducer(reducer, initialArg, init);
           }
-          function useRef14(initialValue) {
+          function useRef18(initialValue) {
             var dispatcher = resolveDispatcher();
             return dispatcher.useRef(initialValue);
           }
-          function useEffect13(create, deps) {
+          function useEffect16(create, deps) {
             var dispatcher = resolveDispatcher();
             return dispatcher.useEffect(create, deps);
           }
@@ -1876,7 +1994,7 @@ body {
             var dispatcher = resolveDispatcher();
             return dispatcher.useLayoutEffect(create, deps);
           }
-          function useCallback8(callback, deps) {
+          function useCallback10(callback, deps) {
             var dispatcher = resolveDispatcher();
             return dispatcher.useCallback(callback, deps);
           }
@@ -2643,19 +2761,19 @@ body {
           exports.memo = memo2;
           exports.startTransition = startTransition;
           exports.unstable_act = act;
-          exports.useCallback = useCallback8;
+          exports.useCallback = useCallback10;
           exports.useContext = useContext10;
           exports.useDebugValue = useDebugValue;
           exports.useDeferredValue = useDeferredValue;
-          exports.useEffect = useEffect13;
+          exports.useEffect = useEffect16;
           exports.useId = useId4;
           exports.useImperativeHandle = useImperativeHandle;
           exports.useInsertionEffect = useInsertionEffect4;
           exports.useLayoutEffect = useLayoutEffect3;
           exports.useMemo = useMemo7;
           exports.useReducer = useReducer;
-          exports.useRef = useRef14;
-          exports.useState = useState13;
+          exports.useRef = useRef18;
+          exports.useState = useState14;
           exports.useSyncExternalStore = useSyncExternalStore;
           exports.useTransition = useTransition;
           exports.version = ReactVersion;
@@ -25232,11 +25350,11 @@ body {
               return jsxWithValidation(type, props, key, false);
             }
           }
-          var jsx21 = jsxWithValidationDynamic;
-          var jsxs16 = jsxWithValidationStatic;
+          var jsx24 = jsxWithValidationDynamic;
+          var jsxs19 = jsxWithValidationStatic;
           exports.Fragment = REACT_FRAGMENT_TYPE;
-          exports.jsx = jsx21;
-          exports.jsxs = jsxs16;
+          exports.jsx = jsx24;
+          exports.jsxs = jsxs19;
         })();
       }
     }
@@ -25351,7 +25469,7 @@ body {
 
   // src/ui/App.tsx
   var import_client = __toESM(require_client());
-  var import_react38 = __toESM(require_react());
+  var import_react41 = __toESM(require_react());
 
   // src/ui/messaging.ts
   function postToMain(message) {
@@ -25754,6 +25872,11 @@ Spring curve editor.
 Props: defaultValue (spring config object, optional)
 Value type: { type: "spring", visualDuration: number, bounce: number } | { type: "tween", duration: number, ease: string }
 
+### angle
+Circular rotation dial for angle values. Use instead of slider for rotation, direction, or any angular parameter.
+Props: min (number, default -180), max (number, default 180), step (number, default 1), defaultValue (number)
+Value type: number (degrees)
+
 ### section
 Collapsible container. Use to group related controls.
 Props: defaultOpen (boolean, default true)
@@ -25982,6 +26105,137 @@ image and returns PNG bytes that feed directly into applyImageFill.
   - targetNodeId: if set, applies fill to existing node instead of creating new one
   - scaleMode: image fill mode, default "FILL"
 
+#### Canvas rendering from scratch (lib.renderCanvas)
+
+For generating pattern tiles or any canvas-drawn image without a source image, use
+lib.renderCanvas. Unlike lib.processImage, it does NOT require imageNodeId \u2014 it creates
+a blank canvas and lets the generator draw on it freely.
+
+  - lib.renderCanvas(width, height, fn) \u2014 creates a blank offscreen canvas, calls
+    fn(ctx, canvas) with the Canvas2D context, encodes to PNG, returns number[] for
+    applyImageFill. Synchronous.
+
+  Use with applyImageFill and scaleMode "TILE" for seamless repeating pattern fills:
+    const bytes = lib.renderCanvas(64, 64, (ctx) => {
+      // draw one tile \u2014 Figma repeats it infinitely
+      ctx.fillStyle = '#3B82F6';
+      ctx.fillRect(0, 0, 64, 64);
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(32, 32, 8, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    // then: { method: 'applyImageFill', args: { imageBytes: bytes, scaleMode: 'TILE', width: 400, height: 400 } }
+
+#### 3D projection (lib.rotate3D, lib.project3D)
+
+Pure-math 3D rendering pipeline. Rotates and perspective-projects 3D points to 2D,
+then uses createVector to create editable Figma vectors from the projected geometry.
+
+  Point types:
+  - Point3D: { x, y, z }
+  - Mesh3D: { vertices: Point3D[], faces: number[][] } \u2014 faces are arrays of vertex indices
+
+  Core functions:
+  - lib.rotate3D(point, rx, ry, rz) \u2014 rotate a {x,y,z} point by Euler angles in degrees.
+    Returns {x,y,z}. Apply to each vertex before projecting.
+  - lib.project3D(point, focalLength) \u2014 perspective-project {x,y,z} to {x,y}.
+    focalLength controls perspective strength: 300 = dramatic, 800 = subtle.
+
+  Primitive generators (return Mesh3D):
+  - lib.cube(size) \u2014 centered cube, 8 vertices, 6 quad faces
+  - lib.sphere(radius, segments) \u2014 UV sphere. segments controls resolution (default 12)
+  - lib.torus(majorRadius, minorRadius, segments) \u2014 torus/donut (default segments 16)
+
+  Path utility:
+  - lib.pointsToSvgPath(points2D, closed) \u2014 converts [{x,y}...] to SVG path string.
+    closed defaults to true. Use as the "data" arg for createVector.
+
+  Typical workflow:
+  1. Get a mesh: const mesh = lib.cube(200)
+  2. Rotate all vertices: const rotated = mesh.vertices.map(v => lib.rotate3D(v, params.rx, params.ry, 0))
+  3. Project to 2D: const projected = rotated.map(v => lib.project3D(v, 500))
+  4. For each face: get the 4 projected points, call lib.pointsToSvgPath, emit createVector
+  5. Sort faces by average Z (back to front) for correct painter's algorithm rendering
+  6. Color faces by Z depth using lib.chroma for shading
+
+  Example face rendering loop:
+    const mesh = lib.cube(200);
+    const rotated = mesh.vertices.map(v => lib.rotate3D(v, params.rx, params.ry, 0));
+    const projected = rotated.map(v => lib.project3D(v, 500));
+    // Sort faces back-to-front
+    const sorted = mesh.faces.slice().sort((a, b) => {
+      const avgZ = f => f.reduce((s, i) => s + rotated[i].z, 0) / f.length;
+      return avgZ(a) - avgZ(b);
+    });
+    for (const face of sorted) {
+      const pts = face.map(i => projected[i]);
+      const path = lib.pointsToSvgPath(pts, true);
+      actions.push({ method: 'createVector', parentId: 'root', args: { data: path } });
+      // Add fill based on Z depth...
+    }
+
+#### Organic shapes (lib.superformula)
+
+The Gielis superformula generates an infinite variety of organic shapes from 6 parameters.
+One equation produces circles, stars, flowers, starfish, blobs, leaves, and everything between.
+
+  - lib.superformula(theta, m, n1, n2, n3, a, b) \u2014 evaluates the superformula at angle theta
+    (radians). Returns the radius at that angle. Use for custom point generation.
+  - lib.superformulaPath(config, numPoints, size) \u2014 generates a complete closed SVG path
+    string ready for createVector. numPoints defaults to 128, size is the scale in pixels.
+    config: { m, n1, n2, n3, a?, b? }
+
+  Parameter intuition (use these as control names):
+  - m \u2014 symmetry / petal count. Integer values: 0=circle, 3=triangle, 4=square, 5=star, 6=flower
+  - n1 \u2014 roundness / inflation. High values (>10) = very round/blob, low values (<1) = pinched
+  - n2 / n3 \u2014 pinch / spikiness. Equal values = symmetric, unequal = asymmetric spikes
+  - a / b \u2014 horizontal / vertical stretch (default 1 = no stretch)
+
+  Example shapes:
+  - Circle:   { m: 0, n1: 1, n2: 1, n3: 1 }
+  - Star:     { m: 5, n1: 0.3, n2: 0.3, n3: 0.3 }
+  - Flower:   { m: 6, n1: 1, n2: 1, n3: 1 }
+  - Blob:     { m: 3, n1: 10, n2: 1.7, n3: 1.7 }
+  - Leaf:     { m: 2, n1: 1, n2: 4, n3: 8, a: 1, b: 2 }
+
+  Usage: generate the path, center it on the frame, emit one createVector action.
+    const path = lib.superformulaPath({ m: params.petals, n1: params.roundness, n2: 1, n3: 1 }, 256, params.size / 2);
+    actions.push({ method: 'createVector', parentId: 'root', args: { data: path, x: cx, y: cy, name: 'Shape' } });
+
+#### Native vector patterns (lib.selectionId, applyPatternFill)
+
+For resolution-independent tiled patterns, use the native Figma PATTERN fill type. The tile
+source is any node \u2014 one the generator creates (referenced by tempId) or the currently selected
+node. Unlike renderCanvas patterns, the output is fully vector and the tile source remains
+editable on the canvas after generation.
+
+  lib.selectionId \u2014 the currently selected node's Figma ID. Use as sourceNodeId to "patternize"
+  whatever the user has selected, with no node creation needed.
+
+  applyPatternFill action args:
+  - sourceNodeId (required) \u2014 Figma node ID or tempId of the tile source
+  - tileType \u2014 'RECTANGULAR' (default) | 'HORIZONTAL_HEXAGONAL' | 'VERTICAL_HEXAGONAL'
+  - scalingFactor \u2014 scale of the tile: 1 = 100%, 0.5 = 50% (default 1)
+  - spacingX / spacingY \u2014 gap between tiles as a ratio (0 = no gap, 0.2 = 20% gap, default 0)
+  - width, height, x, y, name \u2014 target fill rectangle dimensions and position
+  - targetNodeId \u2014 if set, applies fill to an existing node instead of creating a new rectangle
+
+  IMPORTANT: Must use setFillsAsync (not fills=) \u2014 handled automatically by the executor.
+
+  Typical workflow for generated vector tile:
+  1. Create a small frame (e.g., 40x40) to serve as the tile: { method: 'createFrame', tempId: 'tile', args: { width: 40, height: 40 } }
+  2. Add vector shapes inside it: { method: 'createEllipse', parentId: 'tile', args: { x: 5, y: 5, width: 30, height: 30 } }
+  3. Apply as pattern fill on a large rectangle:
+     { method: 'applyPatternFill', parentId: 'root', args: { sourceNodeId: 'tile', tileType: 'HORIZONTAL_HEXAGONAL', spacingX: 0.1, spacingY: 0.1, width: 600, height: 600, name: 'Pattern' } }
+
+  Patternize selection workflow (no tile creation needed):
+  1. Check lib.selectionId is not null
+  2. Emit one action: { method: 'applyPatternFill', args: { sourceNodeId: lib.selectionId, tileType: params.tileType, scalingFactor: params.scale, spacingX: params.spacing, spacingY: params.spacing, width: 600, height: 600, name: 'Pattern' } }
+
+  Prefer applyPatternFill over renderCanvas + applyImageFill whenever the tile can be drawn
+  as vector nodes \u2014 vector patterns are resolution-independent and the tile stays editable.
+
 ### Supported create methods
 
 In addition to createRectangle, createFrame, and createText, generators can also use:
@@ -26083,6 +26337,108 @@ The generator processes the source image through Canvas2D and writes back a new 
   "generate": "const r = params.radius || 4;\\nconst img = lib.imageData;\\nconst W = img.width;\\nconst H = img.height;\\nconst bytes = lib.processImage((ctx, canvas) => {\\n  ctx.filter = 'blur(' + r + 'px)';\\n  ctx.drawImage(canvas, 0, 0);\\n});\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: W, height: H, name: 'Blurred' } });\\nactions.push({ method: 'applyImageFill', parentId: 'root', args: { imageBytes: bytes, width: W, height: H, name: 'result' } });\\nreturn actions;"
 }
 
+### Generator example: 3D wireframe sphere
+
+This example shows how to use lib.sphere + lib.rotate3D + lib.project3D + lib.pointsToSvgPath
+to render a 3D wireframe as editable Figma vectors. Controls for X/Y rotation and segment count.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "mode": "apply",
+    "controls": [
+      { "id": "rx", "type": "angle", "label": "Rotate X", "props": { "min": -180, "max": 180, "step": 1, "defaultValue": 30 } },
+      { "id": "ry", "type": "angle", "label": "Rotate Y", "props": { "min": -180, "max": 180, "step": 1, "defaultValue": 45 } },
+      { "id": "segments", "type": "slider", "label": "Segments", "props": { "min": 4, "max": 20, "step": 1, "defaultValue": 10 } },
+      { "id": "color", "type": "color", "label": "Stroke Color", "props": { "defaultValue": "#3B82F6" } }
+    ]
+  },
+  "generate": "const SIZE = 300; const cx = SIZE/2; const cy = SIZE/2; const mesh = lib.sphere(120, Math.round(params.segments)); const rotated = mesh.vertices.map(v => lib.rotate3D(v, params.rx, params.ry, 0)); const projected = rotated.map(v => lib.project3D(v, 500)); const sorted = mesh.faces.slice().sort((a,b) => { const az = a.reduce((s,i)=>s+rotated[i].z,0)/a.length; const bz = b.reduce((s,i)=>s+rotated[i].z,0)/b.length; return az - bz; }); const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: SIZE, height: SIZE, name: '3D Sphere' } }); const col = lib.chroma(params.color || '#3B82F6'); for (const face of sorted) { const pts = face.map(i => ({ x: cx + projected[i].x, y: cy + projected[i].y })); const path = lib.pointsToSvgPath(pts, true); const avgZ = face.reduce((s,i)=>s+rotated[i].z,0)/face.length; const lightness = lib.mapRange(avgZ, -120, 120, 0.4, 1); const fc = col.luminance(lightness * 0.25); actions.push({ method: 'createVector', parentId: 'root', args: { data: path, name: 'face', fills: [{ type: 'SOLID', color: lib.chromaToFigma(fc), opacity: 0.9 }], strokes: [] } }); } return actions;"
+}
+
+### Generator example: organic blob shape (superformula)
+
+This example uses lib.superformulaPath to generate an organic shape with intuitive controls
+for symmetry (petals), roundness, and spikiness. A single createVector action outputs the shape.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "mode": "apply",
+    "controls": [
+      { "id": "petals", "type": "slider", "label": "Petals / Symmetry", "props": { "min": 1, "max": 12, "step": 1, "defaultValue": 5 } },
+      { "id": "roundness", "type": "slider", "label": "Roundness", "props": { "min": 0.1, "max": 20, "step": 0.1, "defaultValue": 1 } },
+      { "id": "spikiness", "type": "slider", "label": "Spikiness", "props": { "min": 0.1, "max": 5, "step": 0.1, "defaultValue": 0.5 } },
+      { "id": "size", "type": "slider", "label": "Size", "props": { "min": 50, "max": 300, "step": 10, "defaultValue": 150 } },
+      { "id": "fillColor", "type": "color", "label": "Fill", "props": { "defaultValue": "#6366F1" } }
+    ]
+  },
+  "generate": "const sz = params.size || 150; const FRAME = sz * 2 + 40; const cx = FRAME/2; const cy = FRAME/2; const path = lib.superformulaPath({ m: Math.round(params.petals), n1: params.roundness, n2: params.spikiness, n3: params.spikiness }, 256, sz); const col = lib.chroma(params.fillColor || '#6366F1'); const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: FRAME, height: FRAME, name: 'Organic Shape' } }); actions.push({ method: 'createVector', parentId: 'root', args: { data: path, x: cx, y: cy, name: 'shape', fills: [{ type: 'SOLID', color: lib.chromaToFigma(col), opacity: 1 }], strokes: [] } }); return actions;"
+}
+
+### Generator example: seamless dot pattern tile (renderCanvas)
+
+This example uses lib.renderCanvas to draw a repeating dot tile and applyImageFill with
+scaleMode TILE to fill a rectangle with an infinite pattern. No source image needed.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "mode": "apply",
+    "controls": [
+      { "id": "spacing", "type": "slider", "label": "Dot Spacing", "props": { "min": 12, "max": 80, "step": 4, "defaultValue": 32 } },
+      { "id": "dotSize", "type": "slider", "label": "Dot Size", "props": { "min": 2, "max": 30, "step": 1, "defaultValue": 8 } },
+      { "id": "dotColor", "type": "color", "label": "Dot Color", "props": { "defaultValue": "#1E293B" } },
+      { "id": "bgColor", "type": "color", "label": "Background", "props": { "defaultValue": "#F8FAFC" } }
+    ]
+  },
+  "generate": "const sp = Math.max(12, params.spacing || 32); const r = Math.min((params.dotSize || 8) / 2, sp/2 - 1); const bytes = lib.renderCanvas(sp, sp, (ctx) => { ctx.fillStyle = params.bgColor || '#F8FAFC'; ctx.fillRect(0, 0, sp, sp); ctx.fillStyle = params.dotColor || '#1E293B'; ctx.beginPath(); ctx.arc(sp/2, sp/2, r, 0, Math.PI*2); ctx.fill(); }); const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: 400, height: 400, name: 'Dot Pattern' } }); actions.push({ method: 'applyImageFill', parentId: 'root', args: { imageBytes: bytes, width: 400, height: 400, scaleMode: 'TILE', name: 'pattern' } }); return actions;"
+}
+
+### Generator example: vector hexagonal dot pattern (applyPatternFill)
+
+This example uses applyPatternFill with a generated tile node for a fully vector, scalable
+hexagonal dot pattern. The tile source frame is created first, then referenced as the pattern.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "mode": "apply",
+    "controls": [
+      { "id": "dotSize", "type": "slider", "label": "Dot Size", "props": { "min": 4, "max": 40, "step": 2, "defaultValue": 16 } },
+      { "id": "spacing", "type": "slider", "label": "Spacing", "props": { "min": 0, "max": 0.5, "step": 0.05, "defaultValue": 0.1 } },
+      { "id": "tileType", "type": "segmented", "label": "Tile Type", "props": { "options": [{ "value": "RECTANGULAR", "label": "Grid" }, { "value": "HORIZONTAL_HEXAGONAL", "label": "Hex" }], "defaultValue": "HORIZONTAL_HEXAGONAL" } },
+      { "id": "dotColor", "type": "color", "label": "Dot Color", "props": { "defaultValue": "#3B82F6" } },
+      { "id": "bgColor", "type": "color", "label": "Background", "props": { "defaultValue": "#F8FAFC" } }
+    ]
+  },
+  "generate": "const ds = params.dotSize || 16; const pad = ds * 0.3; const tileSize = ds + pad * 2; const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: 500, height: 500, name: 'Hex Dot Pattern', fills: [{ type: 'SOLID', color: lib.chromaToFigma(lib.chroma(params.bgColor || '#F8FAFC')), opacity: 1 }] } }); actions.push({ method: 'createFrame', tempId: 'tile', args: { width: tileSize, height: tileSize, fills: [] } }); actions.push({ method: 'createEllipse', parentId: 'tile', args: { x: pad, y: pad, width: ds, height: ds, fills: [{ type: 'SOLID', color: lib.chromaToFigma(lib.chroma(params.dotColor || '#3B82F6')), opacity: 1 }] } }); actions.push({ method: 'applyPatternFill', parentId: 'root', args: { sourceNodeId: 'tile', tileType: params.tileType || 'HORIZONTAL_HEXAGONAL', spacingX: params.spacing || 0.1, spacingY: params.spacing || 0.1, width: 500, height: 500, name: 'pattern' } }); return actions;"
+}
+
+### Generator example: patternize selected node
+
+This example tiles whatever node the user currently has selected, using lib.selectionId as
+the pattern source. No node creation \u2014 the selected frame/vector becomes the repeating tile.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "mode": "apply",
+    "controls": [
+      { "id": "tileType", "type": "segmented", "label": "Tile Type", "props": { "options": [{ "value": "RECTANGULAR", "label": "Grid" }, { "value": "HORIZONTAL_HEXAGONAL", "label": "Hex H" }, { "value": "VERTICAL_HEXAGONAL", "label": "Hex V" }], "defaultValue": "RECTANGULAR" } },
+      { "id": "scale", "type": "slider", "label": "Scale", "props": { "min": 0.1, "max": 2, "step": 0.05, "defaultValue": 1 } },
+      { "id": "spacing", "type": "slider", "label": "Gap", "props": { "min": 0, "max": 0.5, "step": 0.05, "defaultValue": 0 } },
+      { "id": "size", "type": "slider", "label": "Canvas Size", "props": { "min": 200, "max": 1200, "step": 100, "defaultValue": 600 } }
+    ]
+  },
+  "generate": "if (!lib.selectionId) { return []; } const sz = params.size || 600; const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: sz, height: sz, name: 'Tiled Pattern' } }); actions.push({ method: 'applyPatternFill', parentId: 'root', args: { sourceNodeId: lib.selectionId, tileType: params.tileType || 'RECTANGULAR', scalingFactor: params.scale || 1, spacingX: params.spacing || 0, spacingY: params.spacing || 0, width: sz, height: sz, name: 'pattern' } }); return actions;"
+}
+
 ### Key rules for generators
 
 1. The generate value is a STRING (not a function declaration). It is the function body.
@@ -26123,6 +26479,25 @@ The generator processes the source image through Canvas2D and writes back a new 
 18. lib.processImage(fn) is synchronous. The fn callback receives (ctx, canvas). Use
     ctx.getImageData / ctx.putImageData for manual pixel manipulation, or ctx.filter for
     CSS filter shortcuts (blur, contrast, brightness, etc.).
+19. For 3D shapes, use lib.rotate3D + lib.project3D to project vertices to 2D, then
+    lib.pointsToSvgPath to build face/edge paths for createVector. Sort faces by average Z
+    (ascending = back first) for correct painter's-algorithm (back-to-front) rendering. Use
+    lib.cube / lib.sphere / lib.torus to get vertices and faces arrays, or define custom meshes.
+20. For organic/blob shapes, use lib.superformulaPath to generate the base SVG path. Pair
+    with lib.noise for natural variation: offset superformula radii by noise before building
+    the path. lib.superformula(theta, m, n1, n2, n3) returns the raw radius if you need
+    per-point control. Map creative parameter names like "petals", "roundness", "spikiness"
+    directly to m, n1, n2/n3 so controls feel intuitive to the user.
+21. For seamless pattern fills, use lib.renderCanvas(w, h, fn) to draw a tile image from
+    scratch (no source image needed), then emit applyImageFill with scaleMode "TILE". The
+    tile dimensions should be kept small (32-128px) for crisp tiling. renderCanvas is
+    synchronous and returns number[] bytes just like processImage.
+22. For vector pattern fills, use applyPatternFill with a sourceNodeId pointing to the tile
+    node. Create the tile node first (give it a tempId like "tile"), then reference it in
+    applyPatternFill. Prefer applyPatternFill over renderCanvas + applyImageFill whenever the
+    tile can be drawn as vector nodes \u2014 the result is resolution-independent and the tile
+    source remains editable. For "patternize this" requests, use lib.selectionId as the
+    sourceNodeId and skip tile creation entirely.
 
 ### When to use generate vs live mode
 
@@ -26255,7 +26630,7 @@ ${text.slice(0, 300)}` };
   }
 
   // src/ui/renderer/UIRenderer.tsx
-  var import_react37 = __toESM(require_react());
+  var import_react40 = __toESM(require_react());
 
   // src/ui/components/Slider.tsx
   var import_react27 = __toESM(require_react());
@@ -31503,11 +31878,11 @@ ${text.slice(0, 300)}` };
       transform2 += `scale(${1 / treeScale.x}, ${1 / treeScale.y}) `;
     }
     if (latestTransform) {
-      const { transformPerspective, rotate: rotate2, rotateX, rotateY, skewX, skewY } = latestTransform;
+      const { transformPerspective, rotate: rotate3, rotateX, rotateY, skewX, skewY } = latestTransform;
       if (transformPerspective)
         transform2 = `perspective(${transformPerspective}px) ${transform2}`;
-      if (rotate2)
-        transform2 += `rotate(${rotate2}deg) `;
+      if (rotate3)
+        transform2 += `rotate(${rotate3}deg) `;
       if (rotateX)
         transform2 += `rotateX(${rotateX}deg) `;
       if (rotateY)
@@ -36313,6 +36688,710 @@ ${text.slice(0, 300)}` };
     ] });
   }
 
+  // src/ui/components/AngleWheel.tsx
+  var import_react37 = __toESM(require_react());
+  var import_jsx_runtime19 = __toESM(require_jsx_runtime());
+  var DIAL_SIZE = 48;
+  var DIAL_RADIUS = DIAL_SIZE / 2;
+  var TRACK_RADIUS = 18;
+  var DOT_RADIUS = 4;
+  function snapAngle(raw, step) {
+    return Math.round(raw / step) * step;
+  }
+  function decimalsForStep3(step) {
+    const s = step.toString();
+    const dot = s.indexOf(".");
+    return dot === -1 ? 0 : s.length - dot - 1;
+  }
+  function AngleWheel({
+    label,
+    value,
+    onChange,
+    min: min6 = -180,
+    max: max6 = 180,
+    step = 1
+  }) {
+    const dialRef = (0, import_react37.useRef)(null);
+    const inputRef = (0, import_react37.useRef)(null);
+    const [isDragging2, setIsDragging] = (0, import_react37.useState)(false);
+    const [showInput, setShowInput] = (0, import_react37.useState)(false);
+    const [inputValue, setInputValue] = (0, import_react37.useState)("");
+    const [isHovered, setIsHovered] = (0, import_react37.useState)(false);
+    const [isValueHovered, setIsValueHovered] = (0, import_react37.useState)(false);
+    const [isValueEditable, setIsValueEditable] = (0, import_react37.useState)(false);
+    const hoverTimeoutRef = (0, import_react37.useRef)(null);
+    const angleRad = (value - 90) * Math.PI / 180;
+    const dotX = DIAL_RADIUS + Math.cos(angleRad) * TRACK_RADIUS;
+    const dotY = DIAL_RADIUS + Math.sin(angleRad) * TRACK_RADIUS;
+    const angleFromPointer = (0, import_react37.useCallback)(
+      (clientX, clientY) => {
+        const el = dialRef.current;
+        if (!el) return value;
+        const rect = el.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const dx = clientX - cx;
+        const dy = clientY - cy;
+        let degrees2 = Math.atan2(dy, dx) * 180 / Math.PI + 90;
+        if (degrees2 > 180) degrees2 -= 360;
+        const snapped = snapAngle(degrees2, step);
+        return Math.max(min6, Math.min(max6, snapped));
+      },
+      [value, min6, max6, step]
+    );
+    const handlePointerDown = (0, import_react37.useCallback)(
+      (e) => {
+        e.preventDefault();
+        e.target.setPointerCapture(e.pointerId);
+        setIsDragging(true);
+        onChange(angleFromPointer(e.clientX, e.clientY));
+      },
+      [onChange, angleFromPointer]
+    );
+    const handlePointerMove = (0, import_react37.useCallback)(
+      (e) => {
+        if (!isDragging2) return;
+        onChange(angleFromPointer(e.clientX, e.clientY));
+      },
+      [isDragging2, onChange, angleFromPointer]
+    );
+    const handlePointerUp = (0, import_react37.useCallback)(() => {
+      setIsDragging(false);
+    }, []);
+    (0, import_react37.useEffect)(() => {
+      if (isValueHovered && !showInput && !isValueEditable) {
+        hoverTimeoutRef.current = setTimeout(() => {
+          setIsValueEditable(true);
+        }, 800);
+      } else if (!isValueHovered && !showInput) {
+        if (hoverTimeoutRef.current) {
+          clearTimeout(hoverTimeoutRef.current);
+          hoverTimeoutRef.current = null;
+        }
+        setIsValueEditable(false);
+      }
+      return () => {
+        if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+      };
+    }, [isValueHovered, showInput, isValueEditable]);
+    (0, import_react37.useEffect)(() => {
+      if (showInput && inputRef.current) {
+        inputRef.current.focus();
+        inputRef.current.select();
+      }
+    }, [showInput]);
+    const handleInputSubmit = () => {
+      const parsed = parseFloat(inputValue);
+      if (!isNaN(parsed)) {
+        const clamped = Math.max(min6, Math.min(max6, parsed));
+        onChange(snapAngle(clamped, step));
+      }
+      setShowInput(false);
+      setIsValueHovered(false);
+      setIsValueEditable(false);
+    };
+    const handleValueClick = () => {
+      if (isValueEditable) {
+        setShowInput(true);
+        setInputValue(value.toFixed(decimalsForStep3(step)));
+      }
+    };
+    const handleInputKeyDown = (e) => {
+      if (e.key === "Enter") handleInputSubmit();
+      else if (e.key === "Escape") {
+        setShowInput(false);
+        setIsValueHovered(false);
+      }
+    };
+    const displayValue = `${value.toFixed(decimalsForStep3(step))}\xB0`;
+    const isActive = isDragging2 || isHovered;
+    const ticks = [0, 90, 180, 270].map((deg) => {
+      const r = (deg - 90) * Math.PI / 180;
+      const inner = TRACK_RADIUS - 3;
+      const outer = TRACK_RADIUS + 3;
+      return {
+        x1: DIAL_RADIUS + Math.cos(r) * inner,
+        y1: DIAL_RADIUS + Math.sin(r) * inner,
+        x2: DIAL_RADIUS + Math.cos(r) * outer,
+        y2: DIAL_RADIUS + Math.sin(r) * outer
+      };
+    });
+    return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { className: "dialkit-angle-control", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { className: "dialkit-angle-label", children: label }),
+      /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { className: "dialkit-angle-right", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+          "div",
+          {
+            ref: dialRef,
+            className: `dialkit-angle-dial ${isActive ? "dialkit-angle-dial-active" : ""}`,
+            style: { width: DIAL_SIZE, height: DIAL_SIZE },
+            onPointerDown: handlePointerDown,
+            onPointerMove: handlePointerMove,
+            onPointerUp: handlePointerUp,
+            onMouseEnter: () => setIsHovered(true),
+            onMouseLeave: () => setIsHovered(false),
+            children: /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)(
+              "svg",
+              {
+                viewBox: `0 0 ${DIAL_SIZE} ${DIAL_SIZE}`,
+                width: DIAL_SIZE,
+                height: DIAL_SIZE,
+                className: "dialkit-angle-svg",
+                children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+                    "circle",
+                    {
+                      cx: DIAL_RADIUS,
+                      cy: DIAL_RADIUS,
+                      r: TRACK_RADIUS,
+                      fill: "none",
+                      stroke: "rgba(255, 255, 255, 0.12)",
+                      strokeWidth: "1.5"
+                    }
+                  ),
+                  ticks.map((t, i) => /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+                    "line",
+                    {
+                      x1: t.x1,
+                      y1: t.y1,
+                      x2: t.x2,
+                      y2: t.y2,
+                      stroke: "rgba(255, 255, 255, 0.15)",
+                      strokeWidth: "1",
+                      strokeLinecap: "round"
+                    },
+                    i
+                  )),
+                  /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+                    "line",
+                    {
+                      x1: DIAL_RADIUS,
+                      y1: DIAL_RADIUS,
+                      x2: dotX,
+                      y2: dotY,
+                      stroke: isActive ? "rgba(255, 255, 255, 0.5)" : "rgba(255, 255, 255, 0.25)",
+                      strokeWidth: "1.5",
+                      strokeLinecap: "round",
+                      style: { transition: isDragging2 ? "none" : "stroke 0.15s" }
+                    }
+                  ),
+                  /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+                    "circle",
+                    {
+                      cx: DIAL_RADIUS,
+                      cy: DIAL_RADIUS,
+                      r: "2",
+                      fill: "rgba(255, 255, 255, 0.3)"
+                    }
+                  ),
+                  /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+                    "circle",
+                    {
+                      cx: dotX,
+                      cy: dotY,
+                      r: DOT_RADIUS,
+                      fill: isActive ? "rgba(255, 255, 255, 0.9)" : "rgba(255, 255, 255, 0.6)",
+                      style: { transition: isDragging2 ? "none" : "fill 0.15s" }
+                    }
+                  )
+                ]
+              }
+            )
+          }
+        ),
+        showInput ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+          "input",
+          {
+            ref: inputRef,
+            type: "text",
+            className: "dialkit-angle-input",
+            value: inputValue,
+            onChange: (e) => setInputValue(e.target.value),
+            onKeyDown: handleInputKeyDown,
+            onBlur: handleInputSubmit,
+            onClick: (e) => e.stopPropagation(),
+            onMouseDown: (e) => e.stopPropagation()
+          }
+        ) : /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+          "span",
+          {
+            className: `dialkit-angle-value ${isValueEditable ? "dialkit-angle-value-editable" : ""}`,
+            onMouseEnter: () => setIsValueHovered(true),
+            onMouseLeave: () => setIsValueHovered(false),
+            onClick: handleValueClick,
+            style: { cursor: isValueEditable ? "text" : "default" },
+            children: displayValue
+          }
+        )
+      ] })
+    ] });
+  }
+
+  // src/ui/components/CubePreview.tsx
+  var import_react38 = __toESM(require_react());
+  var import_jsx_runtime20 = __toESM(require_jsx_runtime());
+  var CUBE_SIZE = 80;
+  var FOCAL = 400;
+  var EDGE_PAIRS = [
+    [0, 1],
+    [1, 2],
+    [2, 3],
+    [3, 0],
+    [4, 5],
+    [5, 6],
+    [6, 7],
+    [7, 4],
+    [0, 4],
+    [1, 5],
+    [2, 6],
+    [3, 7]
+  ];
+  var FACES = [
+    [0, 1, 2, 3],
+    [4, 5, 6, 7],
+    [0, 4, 7, 3],
+    [1, 5, 6, 2],
+    [0, 1, 5, 4],
+    [3, 2, 6, 7]
+  ];
+  function makeCube(size) {
+    const h = size / 2;
+    return [
+      { x: -h, y: -h, z: -h },
+      { x: h, y: -h, z: -h },
+      { x: h, y: h, z: -h },
+      { x: -h, y: h, z: -h },
+      { x: -h, y: -h, z: h },
+      { x: h, y: -h, z: h },
+      { x: h, y: h, z: h },
+      { x: -h, y: h, z: h }
+    ];
+  }
+  function rotate2(p, rx, ry, rz) {
+    const toR = (d) => d * Math.PI / 180;
+    const [ax, ay, az] = [toR(rx), toR(ry), toR(rz)];
+    const { x, y, z } = p;
+    const y1 = y * Math.cos(ax) - z * Math.sin(ax);
+    const z1 = y * Math.sin(ax) + z * Math.cos(ax);
+    const x2 = x * Math.cos(ay) + z1 * Math.sin(ay);
+    const z2 = -x * Math.sin(ay) + z1 * Math.cos(ay);
+    const x3 = x2 * Math.cos(az) - y1 * Math.sin(az);
+    const y3 = x2 * Math.sin(az) + y1 * Math.cos(az);
+    return { x: x3, y: y3, z: z2 };
+  }
+  function project(p) {
+    const denom = FOCAL + p.z;
+    const s = FOCAL / (Math.abs(denom) < 1e-3 ? 1e-3 : denom);
+    return { x: p.x * s, y: p.y * s };
+  }
+  function CubePreview({ rx, ry, rz = 0, onRotate }) {
+    const canvasRef = (0, import_react38.useRef)(null);
+    const isDraggingRef = (0, import_react38.useRef)(false);
+    const dragStartRef = (0, import_react38.useRef)(null);
+    const onRotateRef = (0, import_react38.useRef)(onRotate);
+    onRotateRef.current = onRotate;
+    const rxRef = (0, import_react38.useRef)(rx);
+    const ryRef = (0, import_react38.useRef)(ry);
+    rxRef.current = rx;
+    ryRef.current = ry;
+    (0, import_react38.useEffect)(() => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      const dpr = window.devicePixelRatio || 1;
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      ctx.scale(dpr, dpr);
+      const cx = w / 2;
+      const cy = h / 2;
+      ctx.clearRect(0, 0, w, h);
+      const verts = makeCube(CUBE_SIZE);
+      const rotated = verts.map((v2) => rotate2(v2, rx, ry, rz));
+      const projected = rotated.map((v2) => project(v2));
+      const sortedFaces = FACES.map((face) => ({
+        face,
+        avgZ: face.reduce((s, vi) => s + rotated[vi].z, 0) / face.length
+      })).sort((a, b) => a.avgZ - b.avgZ);
+      for (const { face, avgZ } of sortedFaces) {
+        const pts = face.map((i) => projected[i]);
+        const lightness = 0.06 + 0.08 * ((avgZ + CUBE_SIZE) / (CUBE_SIZE * 2));
+        ctx.beginPath();
+        ctx.moveTo(cx + pts[0].x, cy + pts[0].y);
+        for (let i = 1; i < pts.length; i++) {
+          ctx.lineTo(cx + pts[i].x, cy + pts[i].y);
+        }
+        ctx.closePath();
+        ctx.fillStyle = `rgba(255, 255, 255, ${lightness.toFixed(3)})`;
+        ctx.fill();
+      }
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+      ctx.lineWidth = 1;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      for (const [a, b] of EDGE_PAIRS) {
+        ctx.beginPath();
+        ctx.moveTo(cx + projected[a].x, cy + projected[a].y);
+        ctx.lineTo(cx + projected[b].x, cy + projected[b].y);
+        ctx.stroke();
+      }
+      ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+      for (const p of projected) {
+        ctx.beginPath();
+        ctx.arc(cx + p.x, cy + p.y, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }, [rx, ry, rz]);
+    (0, import_react38.useEffect)(() => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const onDown = (e) => {
+        e.preventDefault();
+        canvas.setPointerCapture(e.pointerId);
+        isDraggingRef.current = true;
+        dragStartRef.current = { x: e.clientX, y: e.clientY, rx: rxRef.current, ry: ryRef.current };
+        canvas.classList.add("dialkit-cube-preview-dragging");
+      };
+      const onMove = (e) => {
+        if (!isDraggingRef.current || !dragStartRef.current) return;
+        const dx = e.clientX - dragStartRef.current.x;
+        const dy = e.clientY - dragStartRef.current.y;
+        const sensitivity = 0.8;
+        const newRy = Math.max(-180, Math.min(180, Math.round(dragStartRef.current.ry + dx * sensitivity)));
+        const newRx = Math.max(-180, Math.min(180, Math.round(dragStartRef.current.rx + dy * sensitivity)));
+        onRotateRef.current(newRx, newRy);
+      };
+      const onUp = () => {
+        isDraggingRef.current = false;
+        dragStartRef.current = null;
+        canvas.classList.remove("dialkit-cube-preview-dragging");
+      };
+      canvas.addEventListener("pointerdown", onDown);
+      canvas.addEventListener("pointermove", onMove);
+      canvas.addEventListener("pointerup", onUp);
+      canvas.addEventListener("pointercancel", onUp);
+      return () => {
+        canvas.removeEventListener("pointerdown", onDown);
+        canvas.removeEventListener("pointermove", onMove);
+        canvas.removeEventListener("pointerup", onUp);
+        canvas.removeEventListener("pointercancel", onUp);
+      };
+    }, []);
+    return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "dialkit-cube-preview-wrapper", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("canvas", { ref: canvasRef, className: "dialkit-cube-preview-canvas" }),
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "dialkit-preview-label", children: "Drag to rotate" })
+    ] });
+  }
+
+  // src/ui/components/PreviewCanvas.tsx
+  var import_react39 = __toESM(require_react());
+  var import_jsx_runtime21 = __toESM(require_jsx_runtime());
+  function rgbToCSS(c, opacity = 1) {
+    return `rgba(${Math.round(c.r * 255)}, ${Math.round(c.g * 255)}, ${Math.round(c.b * 255)}, ${opacity})`;
+  }
+  function extractFillColor(fills) {
+    if (!fills?.length) return null;
+    const f = fills[0];
+    if (f.type !== "SOLID" || !f.color) return null;
+    const c = f.color;
+    return { color: c, opacity: typeof f.opacity === "number" ? f.opacity : 1 };
+  }
+  function extractStroke(strokes) {
+    if (!strokes?.length) return null;
+    const s = strokes[0];
+    if (s.type !== "SOLID" || !s.color) return null;
+    return {
+      color: s.color,
+      weight: typeof s.weight === "number" ? s.weight : 1
+    };
+  }
+  function PreviewCanvas({ actions }) {
+    const canvasRef = (0, import_react39.useRef)(null);
+    (0, import_react39.useEffect)(() => {
+      const canvas = canvasRef.current;
+      if (!canvas || !actions.length) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      const nodes = /* @__PURE__ */ new Map();
+      let lastCreatedId = null;
+      let tempIdCounter = 0;
+      let rootFrame = null;
+      let rootId = null;
+      for (const action of actions) {
+        const { method, args = {}, tempId, nodeId } = action;
+        switch (method) {
+          case "createFrame": {
+            const id3 = tempId ?? `__auto_${tempIdCounter++}`;
+            const node = {
+              type: "frame",
+              x: args.x ?? 0,
+              y: args.y ?? 0,
+              width: args.width ?? 100,
+              height: args.height ?? 100
+            };
+            nodes.set(id3, node);
+            lastCreatedId = id3;
+            if (!rootFrame) {
+              rootFrame = node;
+              rootId = id3;
+            }
+            break;
+          }
+          case "createRectangle": {
+            const id3 = tempId ?? `__auto_${tempIdCounter++}`;
+            const node = {
+              type: "rectangle",
+              x: args.x ?? 0,
+              y: args.y ?? 0,
+              width: args.width ?? 50,
+              height: args.height ?? 50,
+              cornerRadius: args.cornerRadius ?? 0
+            };
+            if (args.fills) {
+              const fc = extractFillColor(args.fills);
+              if (fc) {
+                node.fill = fc.color;
+                node.fillOpacity = fc.opacity;
+              }
+            }
+            nodes.set(id3, node);
+            lastCreatedId = id3;
+            break;
+          }
+          case "createEllipse": {
+            const id3 = tempId ?? `__auto_${tempIdCounter++}`;
+            const node = {
+              type: "ellipse",
+              x: args.x ?? 0,
+              y: args.y ?? 0,
+              width: args.width ?? 50,
+              height: args.height ?? 50
+            };
+            if (args.fills) {
+              const fc = extractFillColor(args.fills);
+              if (fc) {
+                node.fill = fc.color;
+                node.fillOpacity = fc.opacity;
+              }
+            }
+            nodes.set(id3, node);
+            lastCreatedId = id3;
+            break;
+          }
+          case "createVector": {
+            const id3 = tempId ?? `__auto_${tempIdCounter++}`;
+            const node = {
+              type: "vector",
+              x: args.x ?? 0,
+              y: args.y ?? 0,
+              width: 0,
+              height: 0,
+              pathData: args.data ?? ""
+            };
+            if (args.fills) {
+              const fc = extractFillColor(args.fills);
+              if (fc) {
+                node.fill = fc.color;
+                node.fillOpacity = fc.opacity;
+              }
+            }
+            if (args.strokes) {
+              const sc = extractStroke(args.strokes);
+              if (sc) {
+                node.stroke = sc.color;
+                node.strokeWeight = sc.weight;
+              }
+            }
+            nodes.set(id3, node);
+            lastCreatedId = id3;
+            break;
+          }
+          case "setFill": {
+            const targetId = resolveId(nodeId, lastCreatedId);
+            const target = targetId ? nodes.get(targetId) : null;
+            if (target && args.fills) {
+              const fc = extractFillColor(args.fills);
+              if (fc) {
+                target.fill = fc.color;
+                target.fillOpacity = fc.opacity;
+              }
+            }
+            break;
+          }
+          case "setStroke": {
+            const targetId = resolveId(nodeId, lastCreatedId);
+            const target = targetId ? nodes.get(targetId) : null;
+            if (target && args.strokes) {
+              const sc = extractStroke(args.strokes);
+              if (sc) {
+                target.stroke = sc.color;
+                target.strokeWeight = sc.weight;
+              }
+            }
+            if (target && typeof args.weight === "number") {
+              target.strokeWeight = args.weight;
+            }
+            break;
+          }
+          case "applyImageFill": {
+            if (args.imageBytes && Array.isArray(args.imageBytes)) {
+              const id3 = tempId ?? `__auto_${tempIdCounter++}`;
+              const node = {
+                type: "image",
+                x: args.x ?? 0,
+                y: args.y ?? 0,
+                width: args.width ?? 100,
+                height: args.height ?? 100,
+                imageBytes: args.imageBytes
+              };
+              nodes.set(id3, node);
+              lastCreatedId = id3;
+            }
+            break;
+          }
+        }
+      }
+      const frameW = rootFrame?.width ?? 300;
+      const frameH = rootFrame?.height ?? 300;
+      const dpr = window.devicePixelRatio || 1;
+      const displayW = canvas.clientWidth;
+      const displayH = canvas.clientHeight;
+      canvas.width = displayW * dpr;
+      canvas.height = displayH * dpr;
+      ctx.scale(dpr, dpr);
+      const scaleX2 = displayW / frameW;
+      const scaleY2 = displayH / frameH;
+      const scale3 = Math.min(scaleX2, scaleY2) * 0.9;
+      const offsetX = (displayW - frameW * scale3) / 2;
+      const offsetY = (displayH - frameH * scale3) / 2;
+      ctx.clearRect(0, 0, displayW, displayH);
+      if (rootFrame?.fill) {
+        ctx.fillStyle = rgbToCSS(rootFrame.fill, rootFrame.fillOpacity ?? 1);
+        ctx.fillRect(offsetX, offsetY, frameW * scale3, frameH * scale3);
+      }
+      ctx.save();
+      ctx.translate(offsetX, offsetY);
+      ctx.scale(scale3, scale3);
+      for (const [id3, node] of nodes) {
+        if (id3 === rootId) continue;
+        renderNode(ctx, node);
+      }
+      ctx.restore();
+    }, [actions]);
+    return /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "dialkit-preview-wrapper", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("canvas", { ref: canvasRef, className: "dialkit-preview-canvas" }),
+      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { className: "dialkit-preview-label", children: "Preview" })
+    ] });
+  }
+  function resolveId(nodeId, lastCreatedId) {
+    if (nodeId === "__prev") return lastCreatedId;
+    return nodeId ?? lastCreatedId;
+  }
+  function renderNode(ctx, node) {
+    const { type, x, y, width, height, fill, fillOpacity = 1, stroke, strokeWeight, cornerRadius, pathData, imageBytes } = node;
+    switch (type) {
+      case "rectangle": {
+        if (fill) {
+          ctx.fillStyle = rgbToCSS(fill, fillOpacity);
+          if (cornerRadius && cornerRadius > 0) {
+            roundRect(ctx, x, y, width, height, cornerRadius);
+            ctx.fill();
+          } else {
+            ctx.fillRect(x, y, width, height);
+          }
+        }
+        if (stroke && strokeWeight) {
+          ctx.strokeStyle = rgbToCSS(stroke);
+          ctx.lineWidth = strokeWeight;
+          if (cornerRadius && cornerRadius > 0) {
+            roundRect(ctx, x, y, width, height, cornerRadius);
+            ctx.stroke();
+          } else {
+            ctx.strokeRect(x, y, width, height);
+          }
+        }
+        break;
+      }
+      case "ellipse": {
+        ctx.beginPath();
+        ctx.ellipse(x + width / 2, y + height / 2, width / 2, height / 2, 0, 0, Math.PI * 2);
+        if (fill) {
+          ctx.fillStyle = rgbToCSS(fill, fillOpacity);
+          ctx.fill();
+        }
+        if (stroke && strokeWeight) {
+          ctx.strokeStyle = rgbToCSS(stroke);
+          ctx.lineWidth = strokeWeight;
+          ctx.stroke();
+        }
+        break;
+      }
+      case "vector": {
+        if (!pathData) break;
+        try {
+          const path = new Path2D(pathData);
+          ctx.save();
+          if (x || y) ctx.translate(x, y);
+          if (fill) {
+            ctx.fillStyle = rgbToCSS(fill, fillOpacity);
+            ctx.fill(path);
+          }
+          if (stroke && strokeWeight) {
+            ctx.strokeStyle = rgbToCSS(stroke);
+            ctx.lineWidth = strokeWeight;
+            ctx.stroke(path);
+          }
+          if (!fill && !stroke) {
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+            ctx.lineWidth = 1;
+            ctx.stroke(path);
+          }
+          ctx.restore();
+        } catch {
+        }
+        break;
+      }
+      case "image": {
+        if (!imageBytes?.length) break;
+        try {
+          const blob = new Blob([new Uint8Array(imageBytes)], { type: "image/png" });
+          const url = URL.createObjectURL(blob);
+          const img = new Image();
+          img.onload = () => {
+            ctx.drawImage(img, x, y, width, height);
+            URL.revokeObjectURL(url);
+          };
+          img.src = url;
+        } catch {
+        }
+        break;
+      }
+      case "frame": {
+        if (fill) {
+          ctx.fillStyle = rgbToCSS(fill, fillOpacity);
+          ctx.fillRect(x, y, width, height);
+        }
+        break;
+      }
+    }
+  }
+  function roundRect(ctx, x, y, w, h, r) {
+    const radius = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + w - radius, y);
+    ctx.arcTo(x + w, y, x + w, y + radius, radius);
+    ctx.lineTo(x + w, y + h - radius);
+    ctx.arcTo(x + w, y + h, x + w - radius, y + h, radius);
+    ctx.lineTo(x + radius, y + h);
+    ctx.arcTo(x, y + h, x, y + h - radius, radius);
+    ctx.lineTo(x, y + radius);
+    ctx.arcTo(x, y, x + radius, y, radius);
+    ctx.closePath();
+  }
+
   // src/ui/template.ts
   function getControlDefaultValue(control) {
     const props = control.props ?? {};
@@ -36334,6 +37413,8 @@ ${text.slice(0, 300)}` };
         return typeof props.defaultValue === "string" ? props.defaultValue : "#000000";
       case "text":
         return typeof props.defaultValue === "string" ? props.defaultValue : "";
+      case "angle":
+        return typeof props.defaultValue === "number" ? props.defaultValue : 0;
       case "button":
         return null;
       case "section":
@@ -36387,242 +37468,6 @@ ${text.slice(0, 300)}` };
       parentId: resolveValue(action.parentId, values),
       args: resolveValue(action.args, values)
     }));
-  }
-
-  // src/ui/renderer/UIRenderer.tsx
-  var import_jsx_runtime19 = __toESM(require_jsx_runtime());
-  function ControlRenderer({ control, mode, onControlChange, onControlValueChange }) {
-    const { id: id3, type, label = "", props = {}, action } = control;
-    const onChange = (0, import_react37.useCallback)(
-      (value) => {
-        onControlValueChange(id3, value);
-        if (mode === "live") {
-          onControlChange(id3, value, action, control.actions);
-        }
-      },
-      [id3, action, control.actions, mode, onControlChange, onControlValueChange]
-    );
-    switch (type) {
-      case "slider": {
-        const [val, setVal] = (0, import_react37.useState)(
-          typeof props.defaultValue === "number" ? props.defaultValue : typeof props.min === "number" ? props.min : 0
-        );
-        return /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
-          Slider,
-          {
-            label,
-            value: val,
-            min: typeof props.min === "number" ? props.min : 0,
-            max: typeof props.max === "number" ? props.max : 1,
-            step: typeof props.step === "number" ? props.step : 0.01,
-            onChange: (v2) => {
-              setVal(v2);
-              onChange(v2);
-            }
-          }
-        );
-      }
-      case "toggle": {
-        const [val, setVal] = (0, import_react37.useState)(props.defaultValue === true);
-        return /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
-          Toggle,
-          {
-            label,
-            checked: val,
-            onChange: (v2) => {
-              setVal(v2);
-              onChange(v2);
-            }
-          }
-        );
-      }
-      case "number": {
-        const [val, setVal] = (0, import_react37.useState)(
-          typeof props.defaultValue === "number" ? props.defaultValue : typeof props.min === "number" ? props.min : 0
-        );
-        return /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
-          NumberInput,
-          {
-            label,
-            value: val,
-            min: typeof props.min === "number" ? props.min : void 0,
-            max: typeof props.max === "number" ? props.max : void 0,
-            step: typeof props.step === "number" ? props.step : 1,
-            onChange: (v2) => {
-              setVal(v2);
-              onChange(v2);
-            }
-          }
-        );
-      }
-      case "select": {
-        const options = Array.isArray(props.options) ? props.options : ["Option A", "Option B"];
-        const [val, setVal] = (0, import_react37.useState)(
-          typeof props.defaultValue === "string" ? props.defaultValue : options[0] ?? ""
-        );
-        return /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
-          SelectControl,
-          {
-            label,
-            value: val,
-            options,
-            onChange: (v2) => {
-              setVal(v2);
-              onChange(v2);
-            }
-          }
-        );
-      }
-      case "segmented": {
-        const options = Array.isArray(props.options) ? props.options : [{ value: "a", label: "A" }, { value: "b", label: "B" }];
-        const [val, setVal] = (0, import_react37.useState)(
-          typeof props.defaultValue === "string" ? props.defaultValue : options[0]?.value ?? ""
-        );
-        return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { className: "dialkit-labeled-control", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { className: "dialkit-labeled-control-label", children: label }),
-          /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
-            SegmentedControl,
-            {
-              options,
-              value: val,
-              onChange: (v2) => {
-                setVal(v2);
-                onChange(v2);
-              }
-            }
-          )
-        ] });
-      }
-      case "color": {
-        const [val, setVal] = (0, import_react37.useState)(
-          typeof props.defaultValue === "string" ? props.defaultValue : "#000000"
-        );
-        return /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
-          ColorControl,
-          {
-            label,
-            value: val,
-            onChange: (v2) => {
-              setVal(v2);
-              onChange(v2);
-            }
-          }
-        );
-      }
-      case "spring": {
-        const [val, setVal] = (0, import_react37.useState)({
-          type: "spring",
-          visualDuration: 0.3,
-          bounce: 0.2,
-          ...typeof props.defaultValue === "object" && props.defaultValue !== null ? props.defaultValue : {}
-        });
-        return /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
-          SpringControl,
-          {
-            label,
-            value: val,
-            onChange: (v2) => {
-              setVal(v2);
-              onChange(v2);
-            }
-          }
-        );
-      }
-      case "text": {
-        const [val, setVal] = (0, import_react37.useState)(
-          typeof props.defaultValue === "string" ? props.defaultValue : ""
-        );
-        return /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
-          TextControl,
-          {
-            label,
-            value: val,
-            placeholder: typeof props.placeholder === "string" ? props.placeholder : void 0,
-            onChange: (v2) => {
-              setVal(v2);
-              onChange(v2);
-            }
-          }
-        );
-      }
-      case "button":
-        return /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
-          "button",
-          {
-            className: "dialkit-button",
-            style: { width: "100%" },
-            onClick: () => onChange(null),
-            children: label
-          }
-        );
-      case "section": {
-        const children = control.children ?? [];
-        return /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
-          Folder,
-          {
-            title: label,
-            defaultOpen: props.defaultOpen !== false,
-            children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: children.map((child) => /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
-              ControlRenderer,
-              {
-                control: child,
-                mode,
-                onControlChange,
-                onControlValueChange
-              },
-              child.id
-            )) })
-          }
-        );
-      }
-      default:
-        return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { style: { fontSize: 10, color: "rgba(255,80,80,0.7)", padding: "4px 8px" }, children: [
-          "Unknown control type: ",
-          type
-        ] });
-    }
-  }
-  function UIRenderer({ spec, onApply }) {
-    const mode = spec.mode === "apply" ? "apply" : "live";
-    const [controlValues, setControlValues] = (0, import_react37.useState)(() => collectControlDefaults(spec.controls));
-    (0, import_react37.useEffect)(() => {
-      setControlValues(collectControlDefaults(spec.controls));
-    }, [spec]);
-    const handleControlChange = (0, import_react37.useCallback)(
-      (controlId, value, action, actions) => {
-        if (!action && !actions?.length) return;
-        postToMain({
-          type: "CONTROL_CHANGE",
-          payload: { controlId, value, action, actions }
-        });
-      },
-      []
-    );
-    const handleControlValueChange = (0, import_react37.useCallback)((controlId, value) => {
-      setControlValues((prev) => ({ ...prev, [controlId]: value }));
-    }, []);
-    if (!spec.controls || spec.controls.length === 0) return null;
-    return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { className: "ui-renderer", style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
-      spec.controls.map((control) => /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
-        ControlRenderer,
-        {
-          control,
-          mode,
-          onControlChange: handleControlChange,
-          onControlValueChange: handleControlValueChange
-        },
-        control.id
-      )),
-      mode === "apply" && onApply && /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
-        "button",
-        {
-          className: "dialkit-button",
-          style: { width: "100%" },
-          onClick: () => onApply(controlValues),
-          children: "Apply"
-        }
-      )
-    ] });
   }
 
   // node_modules/chroma-js/src/utils/limit.js
@@ -41445,6 +42290,143 @@ ${text.slice(0, 300)}` };
     const [r, g, b] = c.rgb();
     return { r: r / 255, g: g / 255, b: b / 255 };
   }
+  function rotate3D(p, rx, ry, rz) {
+    const toR = (d) => d * Math.PI / 180;
+    const [ax, ay, az] = [toR(rx), toR(ry), toR(rz)];
+    let { x, y, z } = p;
+    let y1 = y * Math.cos(ax) - z * Math.sin(ax);
+    let z1 = y * Math.sin(ax) + z * Math.cos(ax);
+    let x2 = x * Math.cos(ay) + z1 * Math.sin(ay);
+    let z2 = -x * Math.sin(ay) + z1 * Math.cos(ay);
+    let x3 = x2 * Math.cos(az) - y1 * Math.sin(az);
+    let y3 = x2 * Math.sin(az) + y1 * Math.cos(az);
+    return { x: x3, y: y3, z: z2 };
+  }
+  function project3D(p, focalLength) {
+    const denom = focalLength + p.z;
+    if (Math.abs(denom) < 1e-3) {
+      const sign = denom >= 0 ? 1 : -1;
+      const clampedScale = focalLength / (sign * 1e-3);
+      return { x: p.x * clampedScale, y: p.y * clampedScale };
+    }
+    const scale3 = focalLength / denom;
+    return { x: p.x * scale3, y: p.y * scale3 };
+  }
+  function make3DCube(size) {
+    const h = size / 2;
+    const vertices = [
+      { x: -h, y: -h, z: -h },
+      { x: h, y: -h, z: -h },
+      { x: h, y: h, z: -h },
+      { x: -h, y: h, z: -h },
+      { x: -h, y: -h, z: h },
+      { x: h, y: -h, z: h },
+      { x: h, y: h, z: h },
+      { x: -h, y: h, z: h }
+    ];
+    const faces = [
+      [0, 1, 2, 3],
+      // back
+      [4, 5, 6, 7],
+      // front
+      [0, 4, 7, 3],
+      // left
+      [1, 5, 6, 2],
+      // right
+      [0, 1, 5, 4],
+      // bottom
+      [3, 2, 6, 7]
+      // top
+    ];
+    return { vertices, faces };
+  }
+  function make3DSphere(radius, segments = 12) {
+    const vertices = [];
+    const faces = [];
+    for (let lat = 0; lat <= segments; lat++) {
+      const theta = lat / segments * Math.PI;
+      for (let lon = 0; lon <= segments; lon++) {
+        const phi = lon / segments * 2 * Math.PI;
+        vertices.push({
+          x: radius * Math.sin(theta) * Math.cos(phi),
+          y: radius * Math.cos(theta),
+          z: radius * Math.sin(theta) * Math.sin(phi)
+        });
+      }
+    }
+    for (let lat = 0; lat < segments; lat++) {
+      for (let lon = 0; lon < segments; lon++) {
+        const a = lat * (segments + 1) + lon;
+        const b = a + segments + 1;
+        faces.push([a, b, b + 1, a + 1]);
+      }
+    }
+    return { vertices, faces };
+  }
+  function make3DTorus(major, minor, segments = 16) {
+    const vertices = [];
+    const faces = [];
+    for (let i = 0; i <= segments; i++) {
+      const u4 = i / segments * 2 * Math.PI;
+      for (let j = 0; j <= segments; j++) {
+        const v2 = j / segments * 2 * Math.PI;
+        vertices.push({
+          x: (major + minor * Math.cos(v2)) * Math.cos(u4),
+          y: minor * Math.sin(v2),
+          z: (major + minor * Math.cos(v2)) * Math.sin(u4)
+        });
+      }
+    }
+    for (let i = 0; i < segments; i++) {
+      for (let j = 0; j < segments; j++) {
+        const a = i * (segments + 1) + j;
+        const b = a + segments + 1;
+        faces.push([a, b, b + 1, a + 1]);
+      }
+    }
+    return { vertices, faces };
+  }
+  function pointsToSvgPath(points, closed = true) {
+    if (points.length === 0) return "";
+    const valid = points.filter((p) => isFinite(p.x) && isFinite(p.y));
+    if (valid.length === 0) return "";
+    const parts = valid.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(3)} ${p.y.toFixed(3)}`);
+    if (closed) parts.push("Z");
+    return parts.join(" ");
+  }
+  function superformula(theta, m2, n1, n2, n3, a = 1, b = 1) {
+    const t1 = Math.abs(Math.cos(m2 * theta / 4) / a);
+    const t2 = Math.abs(Math.sin(m2 * theta / 4) / b);
+    const sum2 = Math.pow(t1, n2) + Math.pow(t2, n3);
+    if (sum2 === 0) return 0;
+    return Math.pow(sum2, -1 / n1);
+  }
+  function superformulaPath(config, numPoints = 128, size = 100) {
+    const { m: m2, n1, n2, n3, a = 1, b = 1 } = config;
+    const points = [];
+    for (let i = 0; i < numPoints; i++) {
+      const theta = i / numPoints * 2 * Math.PI;
+      const r = superformula(theta, m2, n1, n2, n3, a, b);
+      points.push({
+        x: size * r * Math.cos(theta),
+        y: size * r * Math.sin(theta)
+      });
+    }
+    return pointsToSvgPath(points, true);
+  }
+  function renderCanvas(width, height, fn) {
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    fn(ctx, canvas);
+    const dataUrl = canvas.toDataURL("image/png");
+    const base64 = dataUrl.split(",")[1];
+    const binary = atob(base64);
+    const bytes = new Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
   function getPixel(data, x, y) {
     const cx = Math.max(0, Math.min(data.width - 1, Math.round(x)));
     const cy = Math.max(0, Math.min(data.height - 1, Math.round(y)));
@@ -41535,6 +42517,20 @@ ${text.slice(0, 300)}` };
       const step = (max6 - min6) / (count - 1);
       return Array.from({ length: count }, (_, i) => min6 + step * i);
     },
+    // --- 3D projection ---
+    rotate3D,
+    project3D,
+    cube: (size) => make3DCube(size),
+    sphere: (radius, segments) => make3DSphere(radius, segments),
+    torus: (major, minor, segments) => make3DTorus(major, minor, segments),
+    pointsToSvgPath,
+    // --- Superformula organic shapes ---
+    superformula,
+    superformulaPath,
+    // --- Canvas rendering (blank canvas, for pattern tiles etc.) ---
+    renderCanvas,
+    // --- Currently selected node ID (populated before generator runs) ---
+    selectionId: null,
     // --- Image pixel data (populated before generator runs when imageNodeId is set) ---
     imageData: null,
     getPixel(x, y) {
@@ -41579,6 +42575,9 @@ ${text.slice(0, 300)}` };
   function setImageData(data) {
     generatorLib.imageData = data;
   }
+  function setSelectionId(id3) {
+    generatorLib.selectionId = id3;
+  }
   function compileGenerator(code) {
     let body = code.trim();
     const fnMatch = body.match(
@@ -41606,8 +42605,334 @@ ${text.slice(0, 300)}` };
     return result;
   }
 
+  // src/ui/renderer/UIRenderer.tsx
+  var import_jsx_runtime22 = __toESM(require_jsx_runtime());
+  function ControlRenderer({ control, mode, onControlChange, onControlValueChange }) {
+    const { id: id3, type, label = "", props = {}, action } = control;
+    const onChange = (0, import_react40.useCallback)(
+      (value) => {
+        onControlValueChange(id3, value);
+        if (mode === "live") {
+          onControlChange(id3, value, action, control.actions);
+        }
+      },
+      [id3, action, control.actions, mode, onControlChange, onControlValueChange]
+    );
+    switch (type) {
+      case "slider": {
+        const [val, setVal] = (0, import_react40.useState)(
+          typeof props.defaultValue === "number" ? props.defaultValue : typeof props.min === "number" ? props.min : 0
+        );
+        return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+          Slider,
+          {
+            label,
+            value: val,
+            min: typeof props.min === "number" ? props.min : 0,
+            max: typeof props.max === "number" ? props.max : 1,
+            step: typeof props.step === "number" ? props.step : 0.01,
+            onChange: (v2) => {
+              setVal(v2);
+              onChange(v2);
+            }
+          }
+        );
+      }
+      case "toggle": {
+        const [val, setVal] = (0, import_react40.useState)(props.defaultValue === true);
+        return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+          Toggle,
+          {
+            label,
+            checked: val,
+            onChange: (v2) => {
+              setVal(v2);
+              onChange(v2);
+            }
+          }
+        );
+      }
+      case "number": {
+        const [val, setVal] = (0, import_react40.useState)(
+          typeof props.defaultValue === "number" ? props.defaultValue : typeof props.min === "number" ? props.min : 0
+        );
+        return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+          NumberInput,
+          {
+            label,
+            value: val,
+            min: typeof props.min === "number" ? props.min : void 0,
+            max: typeof props.max === "number" ? props.max : void 0,
+            step: typeof props.step === "number" ? props.step : 1,
+            onChange: (v2) => {
+              setVal(v2);
+              onChange(v2);
+            }
+          }
+        );
+      }
+      case "select": {
+        const options = Array.isArray(props.options) ? props.options : ["Option A", "Option B"];
+        const [val, setVal] = (0, import_react40.useState)(
+          typeof props.defaultValue === "string" ? props.defaultValue : options[0] ?? ""
+        );
+        return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+          SelectControl,
+          {
+            label,
+            value: val,
+            options,
+            onChange: (v2) => {
+              setVal(v2);
+              onChange(v2);
+            }
+          }
+        );
+      }
+      case "segmented": {
+        const options = Array.isArray(props.options) ? props.options : [{ value: "a", label: "A" }, { value: "b", label: "B" }];
+        const [val, setVal] = (0, import_react40.useState)(
+          typeof props.defaultValue === "string" ? props.defaultValue : options[0]?.value ?? ""
+        );
+        return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "dialkit-labeled-control", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "dialkit-labeled-control-label", children: label }),
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+            SegmentedControl,
+            {
+              options,
+              value: val,
+              onChange: (v2) => {
+                setVal(v2);
+                onChange(v2);
+              }
+            }
+          )
+        ] });
+      }
+      case "color": {
+        const [val, setVal] = (0, import_react40.useState)(
+          typeof props.defaultValue === "string" ? props.defaultValue : "#000000"
+        );
+        return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+          ColorControl,
+          {
+            label,
+            value: val,
+            onChange: (v2) => {
+              setVal(v2);
+              onChange(v2);
+            }
+          }
+        );
+      }
+      case "spring": {
+        const [val, setVal] = (0, import_react40.useState)({
+          type: "spring",
+          visualDuration: 0.3,
+          bounce: 0.2,
+          ...typeof props.defaultValue === "object" && props.defaultValue !== null ? props.defaultValue : {}
+        });
+        return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+          SpringControl,
+          {
+            label,
+            value: val,
+            onChange: (v2) => {
+              setVal(v2);
+              onChange(v2);
+            }
+          }
+        );
+      }
+      case "text": {
+        const [val, setVal] = (0, import_react40.useState)(
+          typeof props.defaultValue === "string" ? props.defaultValue : ""
+        );
+        return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+          TextControl,
+          {
+            label,
+            value: val,
+            placeholder: typeof props.placeholder === "string" ? props.placeholder : void 0,
+            onChange: (v2) => {
+              setVal(v2);
+              onChange(v2);
+            }
+          }
+        );
+      }
+      case "angle": {
+        const [val, setVal] = (0, import_react40.useState)(
+          typeof props.defaultValue === "number" ? props.defaultValue : 0
+        );
+        return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+          AngleWheel,
+          {
+            label,
+            value: val,
+            min: typeof props.min === "number" ? props.min : -180,
+            max: typeof props.max === "number" ? props.max : 180,
+            step: typeof props.step === "number" ? props.step : 1,
+            onChange: (v2) => {
+              setVal(v2);
+              onChange(v2);
+            }
+          }
+        );
+      }
+      case "button":
+        return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+          "button",
+          {
+            className: "dialkit-button",
+            style: { width: "100%" },
+            onClick: () => onChange(null),
+            children: label
+          }
+        );
+      case "section": {
+        const children = control.children ?? [];
+        return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+          Folder,
+          {
+            title: label,
+            defaultOpen: props.defaultOpen !== false,
+            children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: children.map((child) => /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+              ControlRenderer,
+              {
+                control: child,
+                mode,
+                onControlChange,
+                onControlValueChange
+              },
+              child.id
+            )) })
+          }
+        );
+      }
+      default:
+        return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { fontSize: 10, color: "rgba(255,80,80,0.7)", padding: "4px 8px" }, children: [
+          "Unknown control type: ",
+          type
+        ] });
+    }
+  }
+  function findAngleControls(controls) {
+    const angleControls = controls.filter((c) => c.type === "angle");
+    if (angleControls.length < 2) return null;
+    const rxPatterns = ["rx", "rotateX", "rotate_x", "rotatex", "angleX", "angle_x"];
+    const ryPatterns = ["ry", "rotateY", "rotate_y", "rotatey", "angleY", "angle_y"];
+    const rzPatterns = ["rz", "rotateZ", "rotate_z", "rotatez", "angleZ", "angle_z"];
+    const match = (id3, patterns) => patterns.some((p) => id3.toLowerCase() === p.toLowerCase());
+    const rxCtrl = angleControls.find((c) => match(c.id, rxPatterns));
+    const ryCtrl = angleControls.find((c) => match(c.id, ryPatterns));
+    const rzCtrl = angleControls.find((c) => match(c.id, rzPatterns));
+    if (!rxCtrl || !ryCtrl) {
+      return { rx: angleControls[0].id, ry: angleControls[1].id, rz: angleControls[2]?.id };
+    }
+    return { rx: rxCtrl.id, ry: ryCtrl.id, rz: rzCtrl?.id };
+  }
+  function UIRenderer({ spec, onApply, onValueChange }) {
+    const mode = spec.mode === "apply" ? "apply" : "live";
+    const [controlValues, setControlValues] = (0, import_react40.useState)(() => collectControlDefaults(spec.controls));
+    const [previewActions, setPreviewActions] = (0, import_react40.useState)(null);
+    const previewTimerRef = (0, import_react40.useRef)(null);
+    const controlValuesRef = (0, import_react40.useRef)(controlValues);
+    controlValuesRef.current = controlValues;
+    const hasPreview = mode === "apply" && !!spec.generate && !spec.imageNodeId;
+    const angleIds = findAngleControls(spec.controls);
+    const hasCubePreview = hasPreview && !!angleIds;
+    (0, import_react40.useEffect)(() => {
+      setControlValues(collectControlDefaults(spec.controls));
+    }, [spec]);
+    (0, import_react40.useEffect)(() => {
+      if (!hasPreview || hasCubePreview || !spec.generate) return;
+      try {
+        const fn = compileGenerator(spec.generate);
+        const actions = executeGenerator(fn, controlValuesRef.current);
+        setPreviewActions(actions);
+      } catch {
+        setPreviewActions(null);
+      }
+    }, [spec.generate, hasPreview, hasCubePreview]);
+    const runPreview = (0, import_react40.useCallback)(() => {
+      if (!hasPreview || hasCubePreview || !spec.generate) return;
+      try {
+        const fn = compileGenerator(spec.generate);
+        const actions = executeGenerator(fn, controlValuesRef.current);
+        setPreviewActions(actions);
+      } catch {
+        setPreviewActions(null);
+      }
+    }, [hasPreview, hasCubePreview, spec.generate]);
+    const handleControlChange = (0, import_react40.useCallback)(
+      (controlId, value, action, actions) => {
+        if (!action && !actions?.length) return;
+        postToMain({
+          type: "CONTROL_CHANGE",
+          payload: { controlId, value, action, actions }
+        });
+      },
+      []
+    );
+    const handleControlValueChange = (0, import_react40.useCallback)((controlId, value) => {
+      setControlValues((prev) => {
+        const next = { ...prev, [controlId]: value };
+        controlValuesRef.current = next;
+        return next;
+      });
+      onValueChange?.(controlId, value);
+      if (hasPreview && !hasCubePreview) {
+        if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+        previewTimerRef.current = setTimeout(runPreview, 80);
+      }
+    }, [onValueChange, hasPreview, hasCubePreview, runPreview]);
+    const handleCubeRotate = (0, import_react40.useCallback)((newRx, newRy) => {
+      if (!angleIds) return;
+      setControlValues((prev) => {
+        const next = { ...prev, [angleIds.rx]: newRx, [angleIds.ry]: newRy };
+        controlValuesRef.current = next;
+        return next;
+      });
+      onValueChange?.(angleIds.rx, newRx);
+      onValueChange?.(angleIds.ry, newRy);
+    }, [angleIds, onValueChange]);
+    if (!spec.controls || spec.controls.length === 0) return null;
+    return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "ui-renderer", style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+      hasCubePreview && angleIds && /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+        CubePreview,
+        {
+          rx: controlValues[angleIds.rx] ?? 0,
+          ry: controlValues[angleIds.ry] ?? 0,
+          rz: angleIds.rz ? controlValues[angleIds.rz] ?? 0 : 0,
+          onRotate: handleCubeRotate
+        }
+      ),
+      spec.controls.filter((control) => !(hasCubePreview && control.type === "angle")).map((control) => /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+        ControlRenderer,
+        {
+          control,
+          mode,
+          onControlChange: handleControlChange,
+          onControlValueChange: handleControlValueChange
+        },
+        control.id
+      )),
+      hasPreview && !hasCubePreview && previewActions && previewActions.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(PreviewCanvas, { actions: previewActions }),
+      mode === "apply" && onApply && /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+        "button",
+        {
+          className: "dialkit-button",
+          style: { width: "100%" },
+          onClick: () => onApply(controlValues),
+          children: "Apply"
+        }
+      )
+    ] });
+  }
+
   // src/ui/App.tsx
-  var import_jsx_runtime20 = __toESM(require_jsx_runtime());
+  var import_jsx_runtime23 = __toESM(require_jsx_runtime());
   function rewriteTempIds(spec, map) {
     function rewriteAction(a) {
       const nodeId = a.nodeId && map[a.nodeId] ? map[a.nodeId] : a.nodeId;
@@ -41622,10 +42947,21 @@ ${text.slice(0, 300)}` };
     }
     return { ...spec, controls: spec.controls.map(rewriteControl) };
   }
+  function specWithCurrentValues(spec, values) {
+    function updateControl(c) {
+      const val = values[c.id];
+      const updated = val !== void 0 ? { ...c, props: { ...c.props, defaultValue: val } } : c;
+      if (updated.children) {
+        return { ...updated, children: updated.children.map(updateControl) };
+      }
+      return updated;
+    }
+    return { ...spec, controls: spec.controls.map(updateControl) };
+  }
   var PLUGIN_WIDTH = 300;
   var MAX_HEIGHT = 600;
   function useShellResize() {
-    (0, import_react38.useEffect)(() => {
+    (0, import_react41.useEffect)(() => {
       parent.postMessage(
         { pluginMessage: { type: "resize", width: PLUGIN_WIDTH, height: MAX_HEIGHT } },
         "*"
@@ -41633,27 +42969,27 @@ ${text.slice(0, 300)}` };
     }, []);
   }
   function EmptyState({ hasSelection }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "render-zone-empty", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("svg", { className: "render-zone-empty-icon", width: "24", height: "24", viewBox: "0 0 24 24", fill: "none", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("rect", { x: "3", y: "3", width: "7", height: "7", rx: "1.5", stroke: "currentColor", strokeWidth: "1.5" }),
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("rect", { x: "14", y: "3", width: "7", height: "7", rx: "1.5", stroke: "currentColor", strokeWidth: "1.5" }),
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("rect", { x: "3", y: "14", width: "7", height: "7", rx: "1.5", stroke: "currentColor", strokeWidth: "1.5" }),
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("rect", { x: "14", y: "14", width: "7", height: "7", rx: "1.5", stroke: "currentColor", strokeWidth: "1.5" })
+    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { className: "render-zone-empty", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("svg", { className: "render-zone-empty-icon", width: "24", height: "24", viewBox: "0 0 24 24", fill: "none", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("rect", { x: "3", y: "3", width: "7", height: "7", rx: "1.5", stroke: "currentColor", strokeWidth: "1.5" }),
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("rect", { x: "14", y: "3", width: "7", height: "7", rx: "1.5", stroke: "currentColor", strokeWidth: "1.5" }),
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("rect", { x: "3", y: "14", width: "7", height: "7", rx: "1.5", stroke: "currentColor", strokeWidth: "1.5" }),
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("rect", { x: "14", y: "14", width: "7", height: "7", rx: "1.5", stroke: "currentColor", strokeWidth: "1.5" })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { className: "render-zone-empty-text", children: hasSelection ? "Describe what you want to build" : "Select something on the canvas, then describe what you want" })
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "render-zone-empty-text", children: hasSelection ? "Describe what you want to build" : "Select something on the canvas, then describe what you want" })
     ] });
   }
   function App() {
     useShellResize();
-    const [messages, setMessages] = (0, import_react38.useState)([]);
-    const [currentUISpec, setCurrentUISpec] = (0, import_react38.useState)(null);
-    const [isLoading, setIsLoading] = (0, import_react38.useState)(false);
-    const [selectionContext, setSelectionContext] = (0, import_react38.useState)(null);
-    const createdNodeIdsRef = (0, import_react38.useRef)([]);
-    const rootFrameIdRef = (0, import_react38.useRef)(void 0);
-    const messagesRef = (0, import_react38.useRef)(messages);
+    const [messages, setMessages] = (0, import_react41.useState)([]);
+    const [currentUISpec, setCurrentUISpec] = (0, import_react41.useState)(null);
+    const [isLoading, setIsLoading] = (0, import_react41.useState)(false);
+    const [selectionContext, setSelectionContext] = (0, import_react41.useState)(null);
+    const createdNodeIdsRef = (0, import_react41.useRef)([]);
+    const rootFrameIdRef = (0, import_react41.useRef)(void 0);
+    const messagesRef = (0, import_react41.useRef)(messages);
     messagesRef.current = messages;
-    (0, import_react38.useEffect)(() => {
+    (0, import_react41.useEffect)(() => {
       postToMain({ type: "PLUGIN_READY" });
       return onMainMessage((msg) => {
         if (msg.type === "SELECTION_CONTEXT") {
@@ -41670,6 +43006,11 @@ ${text.slice(0, 300)}` };
             } catch {
               console.warn("[app] failed to parse stored pluginSpec");
             }
+          } else {
+            setCurrentUISpec(null);
+            rootFrameIdRef.current = void 0;
+            createdNodeIdsRef.current = [];
+            setMessages([]);
           }
         } else if (msg.type === "EXECUTION_RESULT") {
           const { errorCount, errors, tempIdMap, createdNodeIds, rootFrameId } = msg.payload;
@@ -41689,13 +43030,13 @@ ${errors.join("\n")}`);
         }
       });
     }, []);
-    const addMessage = (0, import_react38.useCallback)((role, content) => {
+    const addMessage = (0, import_react41.useCallback)((role, content) => {
       setMessages((prev) => [
         ...prev,
         { id: `${Date.now()}-${Math.random()}`, role, content }
       ]);
     }, []);
-    const fetchImageData = (0, import_react38.useCallback)((nodeId, maxWidth = 100) => {
+    const fetchImageData = (0, import_react41.useCallback)((nodeId, maxWidth = 100) => {
       return new Promise((resolve, reject) => {
         const requestId = `img-${Date.now()}-${Math.random()}`;
         const cleanup = onMainMessage((msg) => {
@@ -41710,11 +43051,15 @@ ${errors.join("\n")}`);
         postToMain({ type: "REQUEST_IMAGE_DATA", payload: { requestId, nodeId, maxWidth } });
       });
     }, []);
-    const handleApply = (0, import_react38.useCallback)(async (values) => {
+    const handleApply = (0, import_react41.useCallback)(async (values) => {
       if (!currentUISpec || currentUISpec.mode !== "apply") return;
+      const stampedSpec = specWithCurrentValues(currentUISpec, values);
+      setCurrentUISpec(stampedSpec);
+      const specJson = JSON.stringify(stampedSpec);
       let resolved;
       if (currentUISpec.generate) {
         try {
+          setSelectionId(selectionContext?.nodes[0]?.id ?? null);
           if (currentUISpec.imageNodeId) {
             const maxW = currentUISpec.imageMaxWidth ?? 100;
             const imgData = await fetchImageData(currentUISpec.imageNodeId, maxW);
@@ -41723,8 +43068,10 @@ ${errors.join("\n")}`);
           const fn = compileGenerator(currentUISpec.generate);
           resolved = executeGenerator(fn, values);
           setImageData(null);
+          setSelectionId(null);
         } catch (err) {
           setImageData(null);
+          setSelectionId(null);
           addMessage("error", `Generator error: ${err instanceof Error ? err.message : String(err)}`);
           return;
         }
@@ -41759,7 +43106,7 @@ ${errors.join("\n")}`);
             type: "EXECUTE_ACTIONS",
             payload: {
               actions: [...cleanupActions2, ...rewrittenActions],
-              pluginSpec: JSON.stringify(currentUISpec)
+              pluginSpec: specJson
             }
           });
           return;
@@ -41774,11 +43121,25 @@ ${errors.join("\n")}`);
         type: "EXECUTE_ACTIONS",
         payload: {
           actions: [...cleanupActions, ...resolved],
-          pluginSpec: JSON.stringify(currentUISpec)
+          pluginSpec: specJson
         }
       });
     }, [addMessage, currentUISpec, fetchImageData]);
-    const handleSubmit = (0, import_react38.useCallback)(async (text) => {
+    const handleDetach = (0, import_react41.useCallback)(() => {
+      const nodeId = rootFrameIdRef.current;
+      if (nodeId) {
+        postToMain({ type: "CLEAR_PLUGIN_DATA", payload: { nodeId } });
+      }
+      setCurrentUISpec(null);
+      rootFrameIdRef.current = void 0;
+      createdNodeIdsRef.current = [];
+      setMessages([]);
+    }, []);
+    const handleSubmit = (0, import_react41.useCallback)(async (text) => {
+      if (text.trim().toLowerCase() === "/clear") {
+        handleDetach();
+        return;
+      }
       addMessage("user", text);
       setIsLoading(true);
       const selCtx = selectionContext;
@@ -41839,6 +43200,7 @@ ${errors.join("\n")}`);
       } else if (mergedUi.mode === "apply" && mergedUi.generate) {
         const defaults = collectControlDefaults(mergedUi.controls);
         try {
+          setSelectionId(selectionContext?.nodes[0]?.id ?? null);
           if (mergedUi.imageNodeId) {
             const maxW = mergedUi.imageMaxWidth ?? 100;
             const imgData = await fetchImageData(mergedUi.imageNodeId, maxW);
@@ -41847,6 +43209,7 @@ ${errors.join("\n")}`);
           const fn = compileGenerator(mergedUi.generate);
           const generated = executeGenerator(fn, defaults);
           setImageData(null);
+          setSelectionId(null);
           if (existingFrameId) {
             const rootIdx = generated.findIndex((a) => a.method === "createFrame" && !a.parentId);
             if (rootIdx !== -1) {
@@ -41882,6 +43245,7 @@ ${errors.join("\n")}`);
           }
         } catch (err) {
           setImageData(null);
+          setSelectionId(null);
           addMessage("error", `Generator error: ${err instanceof Error ? err.message : String(err)}`);
         }
       } else if (mergedUi.mode === "apply" && mergedUi.actionTemplate?.length) {
@@ -41894,22 +43258,40 @@ ${errors.join("\n")}`);
       }
       setCurrentUISpec(mergedUi);
       setIsLoading(false);
-    }, [addMessage, selectionContext, currentUISpec, fetchImageData]);
+    }, [addMessage, selectionContext, currentUISpec, fetchImageData, handleDetach]);
+    const persistTimerRef = (0, import_react41.useRef)(null);
+    const handleValueChange = (0, import_react41.useCallback)((controlId, value) => {
+      setCurrentUISpec((prev) => {
+        if (!prev) return prev;
+        const updated = specWithCurrentValues(prev, { [controlId]: value });
+        if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = setTimeout(() => {
+          const targetId = rootFrameIdRef.current;
+          if (targetId) {
+            postToMain({
+              type: "EXECUTE_ACTIONS",
+              payload: { actions: [], pluginSpec: JSON.stringify(updated) }
+            });
+          }
+        }, 500);
+        return updated;
+      });
+    }, []);
     const hasSpec = currentUISpec !== null && currentUISpec.controls.length > 0;
     const hasSelection = selectionContext !== null && selectionContext.nodes.length > 0;
-    return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "shell", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "render-zone", children: [
-        !hasSpec && !isLoading && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(EmptyState, { hasSelection }),
-        hasSpec && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(UIRenderer, { spec: currentUISpec, onApply: handleApply })
+    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { className: "shell", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { className: "render-zone", children: [
+        !hasSpec && !isLoading && /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(EmptyState, { hasSelection }),
+        hasSpec && /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(UIRenderer, { spec: currentUISpec, onApply: handleApply, onValueChange: handleValueChange })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "chat-area", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(ChatHistory, { messages }),
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(ChatInput, { onSubmit: handleSubmit, disabled: isLoading, isLoading })
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { className: "chat-area", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(ChatHistory, { messages }),
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(ChatInput, { onSubmit: handleSubmit, disabled: isLoading, isLoading })
       ] })
     ] });
   }
   var root = (0, import_client.createRoot)(document.getElementById("root"));
-  root.render(/* @__PURE__ */ (0, import_jsx_runtime20.jsx)(App, {}));
+  root.render(/* @__PURE__ */ (0, import_jsx_runtime23.jsx)(App, {}));
 })();
 /*! Bundled license information:
 

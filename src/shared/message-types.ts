@@ -225,13 +225,21 @@ export type MainToIframeMessage =
   | ClaudeResponseMessage
   | ImageDataMessage;
 
+export interface ClearPluginDataMessage {
+  type: 'CLEAR_PLUGIN_DATA';
+  payload: {
+    nodeId: string;
+  };
+}
+
 export type IframeToMainMessage =
   | PluginReadyMessage
   | ControlChangeMessage
   | ExecuteActionsMessage
   | ErrorMessage
   | ClaudeRequestMessage
-  | RequestImageDataMessage;
+  | RequestImageDataMessage
+  | ClearPluginDataMessage;
 
 // ─── UI spec (LLM → renderer) ─────────────────────────────────────────────────
 
@@ -264,7 +272,8 @@ export interface UIControl {
     | 'text'
     | 'button'
     | 'number'
-    | 'segmented';
+    | 'segmented'
+    | 'angle';
   label?: string;
   props?: Record<string, unknown>;
   /** Single Figma API update when this control changes (simple case). */

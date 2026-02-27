@@ -240,6 +240,11 @@ Spring curve editor.
 Props: defaultValue (spring config object, optional)
 Value type: { type: "spring", visualDuration: number, bounce: number } | { type: "tween", duration: number, ease: string }
 
+### angle
+Circular rotation dial for angle values. Use instead of slider for rotation, direction, or any angular parameter.
+Props: min (number, default -180), max (number, default 180), step (number, default 1), defaultValue (number)
+Value type: number (degrees)
+
 ### section
 Collapsible container. Use to group related controls.
 Props: defaultOpen (boolean, default true)
@@ -468,6 +473,137 @@ image and returns PNG bytes that feed directly into applyImageFill.
   - targetNodeId: if set, applies fill to existing node instead of creating new one
   - scaleMode: image fill mode, default "FILL"
 
+#### Canvas rendering from scratch (lib.renderCanvas)
+
+For generating pattern tiles or any canvas-drawn image without a source image, use
+lib.renderCanvas. Unlike lib.processImage, it does NOT require imageNodeId — it creates
+a blank canvas and lets the generator draw on it freely.
+
+  - lib.renderCanvas(width, height, fn) — creates a blank offscreen canvas, calls
+    fn(ctx, canvas) with the Canvas2D context, encodes to PNG, returns number[] for
+    applyImageFill. Synchronous.
+
+  Use with applyImageFill and scaleMode "TILE" for seamless repeating pattern fills:
+    const bytes = lib.renderCanvas(64, 64, (ctx) => {
+      // draw one tile — Figma repeats it infinitely
+      ctx.fillStyle = '#3B82F6';
+      ctx.fillRect(0, 0, 64, 64);
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(32, 32, 8, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    // then: { method: 'applyImageFill', args: { imageBytes: bytes, scaleMode: 'TILE', width: 400, height: 400 } }
+
+#### 3D projection (lib.rotate3D, lib.project3D)
+
+Pure-math 3D rendering pipeline. Rotates and perspective-projects 3D points to 2D,
+then uses createVector to create editable Figma vectors from the projected geometry.
+
+  Point types:
+  - Point3D: { x, y, z }
+  - Mesh3D: { vertices: Point3D[], faces: number[][] } — faces are arrays of vertex indices
+
+  Core functions:
+  - lib.rotate3D(point, rx, ry, rz) — rotate a {x,y,z} point by Euler angles in degrees.
+    Returns {x,y,z}. Apply to each vertex before projecting.
+  - lib.project3D(point, focalLength) — perspective-project {x,y,z} to {x,y}.
+    focalLength controls perspective strength: 300 = dramatic, 800 = subtle.
+
+  Primitive generators (return Mesh3D):
+  - lib.cube(size) — centered cube, 8 vertices, 6 quad faces
+  - lib.sphere(radius, segments) — UV sphere. segments controls resolution (default 12)
+  - lib.torus(majorRadius, minorRadius, segments) — torus/donut (default segments 16)
+
+  Path utility:
+  - lib.pointsToSvgPath(points2D, closed) — converts [{x,y}...] to SVG path string.
+    closed defaults to true. Use as the "data" arg for createVector.
+
+  Typical workflow:
+  1. Get a mesh: const mesh = lib.cube(200)
+  2. Rotate all vertices: const rotated = mesh.vertices.map(v => lib.rotate3D(v, params.rx, params.ry, 0))
+  3. Project to 2D: const projected = rotated.map(v => lib.project3D(v, 500))
+  4. For each face: get the 4 projected points, call lib.pointsToSvgPath, emit createVector
+  5. Sort faces by average Z (back to front) for correct painter's algorithm rendering
+  6. Color faces by Z depth using lib.chroma for shading
+
+  Example face rendering loop:
+    const mesh = lib.cube(200);
+    const rotated = mesh.vertices.map(v => lib.rotate3D(v, params.rx, params.ry, 0));
+    const projected = rotated.map(v => lib.project3D(v, 500));
+    // Sort faces back-to-front
+    const sorted = mesh.faces.slice().sort((a, b) => {
+      const avgZ = f => f.reduce((s, i) => s + rotated[i].z, 0) / f.length;
+      return avgZ(a) - avgZ(b);
+    });
+    for (const face of sorted) {
+      const pts = face.map(i => projected[i]);
+      const path = lib.pointsToSvgPath(pts, true);
+      actions.push({ method: 'createVector', parentId: 'root', args: { data: path } });
+      // Add fill based on Z depth...
+    }
+
+#### Organic shapes (lib.superformula)
+
+The Gielis superformula generates an infinite variety of organic shapes from 6 parameters.
+One equation produces circles, stars, flowers, starfish, blobs, leaves, and everything between.
+
+  - lib.superformula(theta, m, n1, n2, n3, a, b) — evaluates the superformula at angle theta
+    (radians). Returns the radius at that angle. Use for custom point generation.
+  - lib.superformulaPath(config, numPoints, size) — generates a complete closed SVG path
+    string ready for createVector. numPoints defaults to 128, size is the scale in pixels.
+    config: { m, n1, n2, n3, a?, b? }
+
+  Parameter intuition (use these as control names):
+  - m — symmetry / petal count. Integer values: 0=circle, 3=triangle, 4=square, 5=star, 6=flower
+  - n1 — roundness / inflation. High values (>10) = very round/blob, low values (<1) = pinched
+  - n2 / n3 — pinch / spikiness. Equal values = symmetric, unequal = asymmetric spikes
+  - a / b — horizontal / vertical stretch (default 1 = no stretch)
+
+  Example shapes:
+  - Circle:   { m: 0, n1: 1, n2: 1, n3: 1 }
+  - Star:     { m: 5, n1: 0.3, n2: 0.3, n3: 0.3 }
+  - Flower:   { m: 6, n1: 1, n2: 1, n3: 1 }
+  - Blob:     { m: 3, n1: 10, n2: 1.7, n3: 1.7 }
+  - Leaf:     { m: 2, n1: 1, n2: 4, n3: 8, a: 1, b: 2 }
+
+  Usage: generate the path, center it on the frame, emit one createVector action.
+    const path = lib.superformulaPath({ m: params.petals, n1: params.roundness, n2: 1, n3: 1 }, 256, params.size / 2);
+    actions.push({ method: 'createVector', parentId: 'root', args: { data: path, x: cx, y: cy, name: 'Shape' } });
+
+#### Native vector patterns (lib.selectionId, applyPatternFill)
+
+For resolution-independent tiled patterns, use the native Figma PATTERN fill type. The tile
+source is any node — one the generator creates (referenced by tempId) or the currently selected
+node. Unlike renderCanvas patterns, the output is fully vector and the tile source remains
+editable on the canvas after generation.
+
+  lib.selectionId — the currently selected node's Figma ID. Use as sourceNodeId to "patternize"
+  whatever the user has selected, with no node creation needed.
+
+  applyPatternFill action args:
+  - sourceNodeId (required) — Figma node ID or tempId of the tile source
+  - tileType — 'RECTANGULAR' (default) | 'HORIZONTAL_HEXAGONAL' | 'VERTICAL_HEXAGONAL'
+  - scalingFactor — scale of the tile: 1 = 100%, 0.5 = 50% (default 1)
+  - spacingX / spacingY — gap between tiles as a ratio (0 = no gap, 0.2 = 20% gap, default 0)
+  - width, height, x, y, name — target fill rectangle dimensions and position
+  - targetNodeId — if set, applies fill to an existing node instead of creating a new rectangle
+
+  IMPORTANT: Must use setFillsAsync (not fills=) — handled automatically by the executor.
+
+  Typical workflow for generated vector tile:
+  1. Create a small frame (e.g., 40x40) to serve as the tile: { method: 'createFrame', tempId: 'tile', args: { width: 40, height: 40 } }
+  2. Add vector shapes inside it: { method: 'createEllipse', parentId: 'tile', args: { x: 5, y: 5, width: 30, height: 30 } }
+  3. Apply as pattern fill on a large rectangle:
+     { method: 'applyPatternFill', parentId: 'root', args: { sourceNodeId: 'tile', tileType: 'HORIZONTAL_HEXAGONAL', spacingX: 0.1, spacingY: 0.1, width: 600, height: 600, name: 'Pattern' } }
+
+  Patternize selection workflow (no tile creation needed):
+  1. Check lib.selectionId is not null
+  2. Emit one action: { method: 'applyPatternFill', args: { sourceNodeId: lib.selectionId, tileType: params.tileType, scalingFactor: params.scale, spacingX: params.spacing, spacingY: params.spacing, width: 600, height: 600, name: 'Pattern' } }
+
+  Prefer applyPatternFill over renderCanvas + applyImageFill whenever the tile can be drawn
+  as vector nodes — vector patterns are resolution-independent and the tile stays editable.
+
 ### Supported create methods
 
 In addition to createRectangle, createFrame, and createText, generators can also use:
@@ -569,6 +705,108 @@ The generator processes the source image through Canvas2D and writes back a new 
   "generate": "const r = params.radius || 4;\\nconst img = lib.imageData;\\nconst W = img.width;\\nconst H = img.height;\\nconst bytes = lib.processImage((ctx, canvas) => {\\n  ctx.filter = 'blur(' + r + 'px)';\\n  ctx.drawImage(canvas, 0, 0);\\n});\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: W, height: H, name: 'Blurred' } });\\nactions.push({ method: 'applyImageFill', parentId: 'root', args: { imageBytes: bytes, width: W, height: H, name: 'result' } });\\nreturn actions;"
 }
 
+### Generator example: 3D wireframe sphere
+
+This example shows how to use lib.sphere + lib.rotate3D + lib.project3D + lib.pointsToSvgPath
+to render a 3D wireframe as editable Figma vectors. Controls for X/Y rotation and segment count.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "mode": "apply",
+    "controls": [
+      { "id": "rx", "type": "angle", "label": "Rotate X", "props": { "min": -180, "max": 180, "step": 1, "defaultValue": 30 } },
+      { "id": "ry", "type": "angle", "label": "Rotate Y", "props": { "min": -180, "max": 180, "step": 1, "defaultValue": 45 } },
+      { "id": "segments", "type": "slider", "label": "Segments", "props": { "min": 4, "max": 20, "step": 1, "defaultValue": 10 } },
+      { "id": "color", "type": "color", "label": "Stroke Color", "props": { "defaultValue": "#3B82F6" } }
+    ]
+  },
+  "generate": "const SIZE = 300; const cx = SIZE/2; const cy = SIZE/2; const mesh = lib.sphere(120, Math.round(params.segments)); const rotated = mesh.vertices.map(v => lib.rotate3D(v, params.rx, params.ry, 0)); const projected = rotated.map(v => lib.project3D(v, 500)); const sorted = mesh.faces.slice().sort((a,b) => { const az = a.reduce((s,i)=>s+rotated[i].z,0)/a.length; const bz = b.reduce((s,i)=>s+rotated[i].z,0)/b.length; return az - bz; }); const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: SIZE, height: SIZE, name: '3D Sphere' } }); const col = lib.chroma(params.color || '#3B82F6'); for (const face of sorted) { const pts = face.map(i => ({ x: cx + projected[i].x, y: cy + projected[i].y })); const path = lib.pointsToSvgPath(pts, true); const avgZ = face.reduce((s,i)=>s+rotated[i].z,0)/face.length; const lightness = lib.mapRange(avgZ, -120, 120, 0.4, 1); const fc = col.luminance(lightness * 0.25); actions.push({ method: 'createVector', parentId: 'root', args: { data: path, name: 'face', fills: [{ type: 'SOLID', color: lib.chromaToFigma(fc), opacity: 0.9 }], strokes: [] } }); } return actions;"
+}
+
+### Generator example: organic blob shape (superformula)
+
+This example uses lib.superformulaPath to generate an organic shape with intuitive controls
+for symmetry (petals), roundness, and spikiness. A single createVector action outputs the shape.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "mode": "apply",
+    "controls": [
+      { "id": "petals", "type": "slider", "label": "Petals / Symmetry", "props": { "min": 1, "max": 12, "step": 1, "defaultValue": 5 } },
+      { "id": "roundness", "type": "slider", "label": "Roundness", "props": { "min": 0.1, "max": 20, "step": 0.1, "defaultValue": 1 } },
+      { "id": "spikiness", "type": "slider", "label": "Spikiness", "props": { "min": 0.1, "max": 5, "step": 0.1, "defaultValue": 0.5 } },
+      { "id": "size", "type": "slider", "label": "Size", "props": { "min": 50, "max": 300, "step": 10, "defaultValue": 150 } },
+      { "id": "fillColor", "type": "color", "label": "Fill", "props": { "defaultValue": "#6366F1" } }
+    ]
+  },
+  "generate": "const sz = params.size || 150; const FRAME = sz * 2 + 40; const cx = FRAME/2; const cy = FRAME/2; const path = lib.superformulaPath({ m: Math.round(params.petals), n1: params.roundness, n2: params.spikiness, n3: params.spikiness }, 256, sz); const col = lib.chroma(params.fillColor || '#6366F1'); const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: FRAME, height: FRAME, name: 'Organic Shape' } }); actions.push({ method: 'createVector', parentId: 'root', args: { data: path, x: cx, y: cy, name: 'shape', fills: [{ type: 'SOLID', color: lib.chromaToFigma(col), opacity: 1 }], strokes: [] } }); return actions;"
+}
+
+### Generator example: seamless dot pattern tile (renderCanvas)
+
+This example uses lib.renderCanvas to draw a repeating dot tile and applyImageFill with
+scaleMode TILE to fill a rectangle with an infinite pattern. No source image needed.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "mode": "apply",
+    "controls": [
+      { "id": "spacing", "type": "slider", "label": "Dot Spacing", "props": { "min": 12, "max": 80, "step": 4, "defaultValue": 32 } },
+      { "id": "dotSize", "type": "slider", "label": "Dot Size", "props": { "min": 2, "max": 30, "step": 1, "defaultValue": 8 } },
+      { "id": "dotColor", "type": "color", "label": "Dot Color", "props": { "defaultValue": "#1E293B" } },
+      { "id": "bgColor", "type": "color", "label": "Background", "props": { "defaultValue": "#F8FAFC" } }
+    ]
+  },
+  "generate": "const sp = Math.max(12, params.spacing || 32); const r = Math.min((params.dotSize || 8) / 2, sp/2 - 1); const bytes = lib.renderCanvas(sp, sp, (ctx) => { ctx.fillStyle = params.bgColor || '#F8FAFC'; ctx.fillRect(0, 0, sp, sp); ctx.fillStyle = params.dotColor || '#1E293B'; ctx.beginPath(); ctx.arc(sp/2, sp/2, r, 0, Math.PI*2); ctx.fill(); }); const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: 400, height: 400, name: 'Dot Pattern' } }); actions.push({ method: 'applyImageFill', parentId: 'root', args: { imageBytes: bytes, width: 400, height: 400, scaleMode: 'TILE', name: 'pattern' } }); return actions;"
+}
+
+### Generator example: vector hexagonal dot pattern (applyPatternFill)
+
+This example uses applyPatternFill with a generated tile node for a fully vector, scalable
+hexagonal dot pattern. The tile source frame is created first, then referenced as the pattern.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "mode": "apply",
+    "controls": [
+      { "id": "dotSize", "type": "slider", "label": "Dot Size", "props": { "min": 4, "max": 40, "step": 2, "defaultValue": 16 } },
+      { "id": "spacing", "type": "slider", "label": "Spacing", "props": { "min": 0, "max": 0.5, "step": 0.05, "defaultValue": 0.1 } },
+      { "id": "tileType", "type": "segmented", "label": "Tile Type", "props": { "options": [{ "value": "RECTANGULAR", "label": "Grid" }, { "value": "HORIZONTAL_HEXAGONAL", "label": "Hex" }], "defaultValue": "HORIZONTAL_HEXAGONAL" } },
+      { "id": "dotColor", "type": "color", "label": "Dot Color", "props": { "defaultValue": "#3B82F6" } },
+      { "id": "bgColor", "type": "color", "label": "Background", "props": { "defaultValue": "#F8FAFC" } }
+    ]
+  },
+  "generate": "const ds = params.dotSize || 16; const pad = ds * 0.3; const tileSize = ds + pad * 2; const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: 500, height: 500, name: 'Hex Dot Pattern', fills: [{ type: 'SOLID', color: lib.chromaToFigma(lib.chroma(params.bgColor || '#F8FAFC')), opacity: 1 }] } }); actions.push({ method: 'createFrame', tempId: 'tile', args: { width: tileSize, height: tileSize, fills: [] } }); actions.push({ method: 'createEllipse', parentId: 'tile', args: { x: pad, y: pad, width: ds, height: ds, fills: [{ type: 'SOLID', color: lib.chromaToFigma(lib.chroma(params.dotColor || '#3B82F6')), opacity: 1 }] } }); actions.push({ method: 'applyPatternFill', parentId: 'root', args: { sourceNodeId: 'tile', tileType: params.tileType || 'HORIZONTAL_HEXAGONAL', spacingX: params.spacing || 0.1, spacingY: params.spacing || 0.1, width: 500, height: 500, name: 'pattern' } }); return actions;"
+}
+
+### Generator example: patternize selected node
+
+This example tiles whatever node the user currently has selected, using lib.selectionId as
+the pattern source. No node creation — the selected frame/vector becomes the repeating tile.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "mode": "apply",
+    "controls": [
+      { "id": "tileType", "type": "segmented", "label": "Tile Type", "props": { "options": [{ "value": "RECTANGULAR", "label": "Grid" }, { "value": "HORIZONTAL_HEXAGONAL", "label": "Hex H" }, { "value": "VERTICAL_HEXAGONAL", "label": "Hex V" }], "defaultValue": "RECTANGULAR" } },
+      { "id": "scale", "type": "slider", "label": "Scale", "props": { "min": 0.1, "max": 2, "step": 0.05, "defaultValue": 1 } },
+      { "id": "spacing", "type": "slider", "label": "Gap", "props": { "min": 0, "max": 0.5, "step": 0.05, "defaultValue": 0 } },
+      { "id": "size", "type": "slider", "label": "Canvas Size", "props": { "min": 200, "max": 1200, "step": 100, "defaultValue": 600 } }
+    ]
+  },
+  "generate": "if (!lib.selectionId) { return []; } const sz = params.size || 600; const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: sz, height: sz, name: 'Tiled Pattern' } }); actions.push({ method: 'applyPatternFill', parentId: 'root', args: { sourceNodeId: lib.selectionId, tileType: params.tileType || 'RECTANGULAR', scalingFactor: params.scale || 1, spacingX: params.spacing || 0, spacingY: params.spacing || 0, width: sz, height: sz, name: 'pattern' } }); return actions;"
+}
+
 ### Key rules for generators
 
 1. The generate value is a STRING (not a function declaration). It is the function body.
@@ -609,6 +847,25 @@ The generator processes the source image through Canvas2D and writes back a new 
 18. lib.processImage(fn) is synchronous. The fn callback receives (ctx, canvas). Use
     ctx.getImageData / ctx.putImageData for manual pixel manipulation, or ctx.filter for
     CSS filter shortcuts (blur, contrast, brightness, etc.).
+19. For 3D shapes, use lib.rotate3D + lib.project3D to project vertices to 2D, then
+    lib.pointsToSvgPath to build face/edge paths for createVector. Sort faces by average Z
+    (ascending = back first) for correct painter's-algorithm (back-to-front) rendering. Use
+    lib.cube / lib.sphere / lib.torus to get vertices and faces arrays, or define custom meshes.
+20. For organic/blob shapes, use lib.superformulaPath to generate the base SVG path. Pair
+    with lib.noise for natural variation: offset superformula radii by noise before building
+    the path. lib.superformula(theta, m, n1, n2, n3) returns the raw radius if you need
+    per-point control. Map creative parameter names like "petals", "roundness", "spikiness"
+    directly to m, n1, n2/n3 so controls feel intuitive to the user.
+21. For seamless pattern fills, use lib.renderCanvas(w, h, fn) to draw a tile image from
+    scratch (no source image needed), then emit applyImageFill with scaleMode "TILE". The
+    tile dimensions should be kept small (32-128px) for crisp tiling. renderCanvas is
+    synchronous and returns number[] bytes just like processImage.
+22. For vector pattern fills, use applyPatternFill with a sourceNodeId pointing to the tile
+    node. Create the tile node first (give it a tempId like "tile"), then reference it in
+    applyPatternFill. Prefer applyPatternFill over renderCanvas + applyImageFill whenever the
+    tile can be drawn as vector nodes — the result is resolution-independent and the tile
+    source remains editable. For "patternize this" requests, use lib.selectionId as the
+    sourceNodeId and skip tile creation entirely.
 
 ### When to use generate vs live mode
 

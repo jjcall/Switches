@@ -25,6 +25,10 @@ function getControlDefaultValue(control: UIControl): unknown {
       return typeof props.defaultValue === 'string' ? props.defaultValue : '#000000';
     case 'text':
       return typeof props.defaultValue === 'string' ? props.defaultValue : '';
+    case 'angle':
+      return typeof props.defaultValue === 'number'
+        ? props.defaultValue
+        : 0;
     case 'button':
       return null;
     case 'section':

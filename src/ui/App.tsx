@@ -10,7 +10,7 @@ import { callClaude } from './api/claude';
 import { composePrompt, parseLLMResponse } from './prompt/prompt-composer';
 import { UIRenderer } from './renderer/UIRenderer';
 import { resolveTemplate, collectControlDefaults } from './template';
-import { compileGenerator, executeGenerator, setImageData } from './codegen';
+import { compileGenerator, executeGenerator, setImageData, setSelectionId } from './codegen';
 import type { ImagePixelData } from './codegen';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -35,6 +35,25 @@ function rewriteTempIds(spec: UISpec, map: Record<string, string>): UISpec {
   }
 
   return { ...spec, controls: spec.controls.map(rewriteControl) };
+}
+
+/**
+ * Stamps current control values into the UISpec's defaultValue fields so that
+ * persisted specs restore with the user's last-applied settings, not the
+ * original defaults.
+ */
+function specWithCurrentValues(spec: UISpec, values: Record<string, unknown>): UISpec {
+  function updateControl(c: UIControl): UIControl {
+    const val = values[c.id];
+    const updated = val !== undefined
+      ? { ...c, props: { ...c.props, defaultValue: val } }
+      : c;
+    if (updated.children) {
+      return { ...updated, children: updated.children.map(updateControl) };
+    }
+    return updated;
+  }
+  return { ...spec, controls: spec.controls.map(updateControl) };
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -114,6 +133,11 @@ function App() {
           } catch {
             console.warn('[app] failed to parse stored pluginSpec');
           }
+        } else {
+          setCurrentUISpec(null);
+          rootFrameIdRef.current = undefined;
+          createdNodeIdsRef.current = [];
+          setMessages([]);
         }
       } else if (msg.type === 'EXECUTION_RESULT') {
         const { errorCount, errors, tempIdMap, createdNodeIds, rootFrameId } = msg.payload;
@@ -164,10 +188,15 @@ function App() {
   const handleApply = useCallback(async (values: Record<string, unknown>) => {
     if (!currentUISpec || currentUISpec.mode !== 'apply') return;
 
+    const stampedSpec = specWithCurrentValues(currentUISpec, values);
+    setCurrentUISpec(stampedSpec);
+    const specJson = JSON.stringify(stampedSpec);
+
     let resolved: ActionDescriptor[];
 
     if (currentUISpec.generate) {
       try {
+        setSelectionId(selectionContext?.nodes[0]?.id ?? null);
         if (currentUISpec.imageNodeId) {
           const maxW = currentUISpec.imageMaxWidth ?? 100;
           const imgData = await fetchImageData(currentUISpec.imageNodeId, maxW);
@@ -176,8 +205,10 @@ function App() {
         const fn = compileGenerator(currentUISpec.generate);
         resolved = executeGenerator(fn, values);
         setImageData(null);
+        setSelectionId(null);
       } catch (err) {
         setImageData(null);
+        setSelectionId(null);
         addMessage('error', `Generator error: ${err instanceof Error ? err.message : String(err)}`);
         return;
       }
@@ -191,9 +222,6 @@ function App() {
     const existingFrameId = rootFrameIdRef.current;
 
     if (existingFrameId) {
-      // Reuse the existing frame: delete its children, then re-populate.
-      // Find the generator's root createFrame action and replace it with a
-      // deleteChildren + property updates on the existing frame.
       const rootIdx = resolved.findIndex(
         a => a.method === 'createFrame' && !a.parentId,
       );
@@ -202,15 +230,12 @@ function App() {
         const rootAction = resolved[rootIdx];
         const rootTempId = rootAction.tempId;
 
-        // Build cleanup: delete children of the existing frame.
         const cleanupActions: ActionDescriptor[] = [{
           method: 'deleteChildren',
           nodeId: existingFrameId,
           args: {},
         }];
 
-        // Keep layout/property actions that target the root frame, but rewrite
-        // them to use the real frame ID instead of the tempId.
         const rewrittenActions = resolved.slice(rootIdx + 1).map((a) => {
           const rewritten = { ...a };
           if (rootTempId) {
@@ -224,14 +249,13 @@ function App() {
           type: 'EXECUTE_ACTIONS',
           payload: {
             actions: [...cleanupActions, ...rewrittenActions],
-            pluginSpec: JSON.stringify(currentUISpec),
+            pluginSpec: specJson,
           },
         });
         return;
       }
     }
 
-    // No existing frame — full cleanup and create from scratch.
     const cleanupActions: ActionDescriptor[] = createdNodeIdsRef.current.map((id) => ({
       method: 'deleteNode',
       nodeId: id,
@@ -242,14 +266,30 @@ function App() {
       type: 'EXECUTE_ACTIONS',
       payload: {
         actions: [...cleanupActions, ...resolved],
-        pluginSpec: JSON.stringify(currentUISpec),
+        pluginSpec: specJson,
       },
     });
   }, [addMessage, currentUISpec, fetchImageData]);
 
+  const handleDetach = useCallback(() => {
+    const nodeId = rootFrameIdRef.current;
+    if (nodeId) {
+      postToMain({ type: 'CLEAR_PLUGIN_DATA', payload: { nodeId } });
+    }
+    setCurrentUISpec(null);
+    rootFrameIdRef.current = undefined;
+    createdNodeIdsRef.current = [];
+    setMessages([]);
+  }, []);
+
   // ── Submit ─────────────────────────────────────────────────────────────────
 
   const handleSubmit = useCallback(async (text: string) => {
+    if (text.trim().toLowerCase() === '/clear') {
+      handleDetach();
+      return;
+    }
+
     addMessage('user', text);
     setIsLoading(true);
 
@@ -333,6 +373,7 @@ function App() {
       const defaults = collectControlDefaults(mergedUi.controls);
 
       try {
+        setSelectionId(selectionContext?.nodes[0]?.id ?? null);
         if (mergedUi.imageNodeId) {
           const maxW = mergedUi.imageMaxWidth ?? 100;
           const imgData = await fetchImageData(mergedUi.imageNodeId, maxW);
@@ -341,6 +382,7 @@ function App() {
         const fn = compileGenerator(mergedUi.generate);
         const generated = executeGenerator(fn, defaults);
         setImageData(null);
+        setSelectionId(null);
 
         if (existingFrameId) {
           // Reuse the existing frame: strip createFrame, deleteChildren, rewrite tempIds.
@@ -378,6 +420,7 @@ function App() {
         }
       } catch (err) {
         setImageData(null);
+        setSelectionId(null);
         addMessage('error', `Generator error: ${err instanceof Error ? err.message : String(err)}`);
       }
     } else if (mergedUi.mode === 'apply' && mergedUi.actionTemplate?.length) {
@@ -393,9 +436,30 @@ function App() {
     setCurrentUISpec(mergedUi);
 
     setIsLoading(false);
-  }, [addMessage, selectionContext, currentUISpec, fetchImageData]);
+  }, [addMessage, selectionContext, currentUISpec, fetchImageData, handleDetach]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
+
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleValueChange = useCallback((controlId: string, value: unknown) => {
+    setCurrentUISpec(prev => {
+      if (!prev) return prev;
+      const updated = specWithCurrentValues(prev, { [controlId]: value });
+      // Debounce re-persistence to avoid spamming on every slider tick.
+      if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = setTimeout(() => {
+        const targetId = rootFrameIdRef.current;
+        if (targetId) {
+          postToMain({
+            type: 'EXECUTE_ACTIONS',
+            payload: { actions: [], pluginSpec: JSON.stringify(updated) },
+          });
+        }
+      }, 500);
+      return updated;
+    });
+  }, []);
 
   const hasSpec = currentUISpec !== null && currentUISpec.controls.length > 0;
   const hasSelection = selectionContext !== null && selectionContext.nodes.length > 0;
@@ -405,7 +469,7 @@ function App() {
       {/* Controls zone */}
       <div className="render-zone">
         {!hasSpec && !isLoading && <EmptyState hasSelection={hasSelection} />}
-        {hasSpec && <UIRenderer spec={currentUISpec!} onApply={handleApply} />}
+        {hasSpec && <UIRenderer spec={currentUISpec!} onApply={handleApply} onValueChange={handleValueChange} />}
       </div>
 
       {/* Chat area */}

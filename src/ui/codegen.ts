@@ -87,6 +87,173 @@ function chromaToFigma(c: chroma.Color): { r: number; g: number; b: number } {
   return { r: r / 255, g: g / 255, b: b / 255 };
 }
 
+// ─── 3D projection helpers ───────────────────────────────────────────────────
+
+interface Point3D { x: number; y: number; z: number }
+interface Point2D { x: number; y: number }
+interface Mesh3D { vertices: Point3D[]; faces: number[][] }
+
+function rotate3D(p: Point3D, rx: number, ry: number, rz: number): Point3D {
+  const toR = (d: number) => d * Math.PI / 180;
+  const [ax, ay, az] = [toR(rx), toR(ry), toR(rz)];
+
+  // Rotate around X
+  let { x, y, z } = p;
+  let y1 = y * Math.cos(ax) - z * Math.sin(ax);
+  let z1 = y * Math.sin(ax) + z * Math.cos(ax);
+
+  // Rotate around Y
+  let x2 = x * Math.cos(ay) + z1 * Math.sin(ay);
+  let z2 = -x * Math.sin(ay) + z1 * Math.cos(ay);
+
+  // Rotate around Z
+  let x3 = x2 * Math.cos(az) - y1 * Math.sin(az);
+  let y3 = x2 * Math.sin(az) + y1 * Math.cos(az);
+
+  return { x: x3, y: y3, z: z2 };
+}
+
+function project3D(p: Point3D, focalLength: number): Point2D {
+  const denom = focalLength + p.z;
+  if (Math.abs(denom) < 0.001) {
+    const sign = denom >= 0 ? 1 : -1;
+    const clampedScale = focalLength / (sign * 0.001);
+    return { x: p.x * clampedScale, y: p.y * clampedScale };
+  }
+  const scale = focalLength / denom;
+  return { x: p.x * scale, y: p.y * scale };
+}
+
+function make3DCube(size: number): Mesh3D {
+  const h = size / 2;
+  const vertices: Point3D[] = [
+    { x: -h, y: -h, z: -h }, { x:  h, y: -h, z: -h },
+    { x:  h, y:  h, z: -h }, { x: -h, y:  h, z: -h },
+    { x: -h, y: -h, z:  h }, { x:  h, y: -h, z:  h },
+    { x:  h, y:  h, z:  h }, { x: -h, y:  h, z:  h },
+  ];
+  const faces = [
+    [0, 1, 2, 3], // back
+    [4, 5, 6, 7], // front
+    [0, 4, 7, 3], // left
+    [1, 5, 6, 2], // right
+    [0, 1, 5, 4], // bottom
+    [3, 2, 6, 7], // top
+  ];
+  return { vertices, faces };
+}
+
+function make3DSphere(radius: number, segments = 12): Mesh3D {
+  const vertices: Point3D[] = [];
+  const faces: number[][] = [];
+
+  for (let lat = 0; lat <= segments; lat++) {
+    const theta = (lat / segments) * Math.PI;
+    for (let lon = 0; lon <= segments; lon++) {
+      const phi = (lon / segments) * 2 * Math.PI;
+      vertices.push({
+        x: radius * Math.sin(theta) * Math.cos(phi),
+        y: radius * Math.cos(theta),
+        z: radius * Math.sin(theta) * Math.sin(phi),
+      });
+    }
+  }
+
+  for (let lat = 0; lat < segments; lat++) {
+    for (let lon = 0; lon < segments; lon++) {
+      const a = lat * (segments + 1) + lon;
+      const b = a + segments + 1;
+      faces.push([a, b, b + 1, a + 1]);
+    }
+  }
+
+  return { vertices, faces };
+}
+
+function make3DTorus(major: number, minor: number, segments = 16): Mesh3D {
+  const vertices: Point3D[] = [];
+  const faces: number[][] = [];
+
+  for (let i = 0; i <= segments; i++) {
+    const u = (i / segments) * 2 * Math.PI;
+    for (let j = 0; j <= segments; j++) {
+      const v = (j / segments) * 2 * Math.PI;
+      vertices.push({
+        x: (major + minor * Math.cos(v)) * Math.cos(u),
+        y: minor * Math.sin(v),
+        z: (major + minor * Math.cos(v)) * Math.sin(u),
+      });
+    }
+  }
+
+  for (let i = 0; i < segments; i++) {
+    for (let j = 0; j < segments; j++) {
+      const a = i * (segments + 1) + j;
+      const b = a + segments + 1;
+      faces.push([a, b, b + 1, a + 1]);
+    }
+  }
+
+  return { vertices, faces };
+}
+
+function pointsToSvgPath(points: Point2D[], closed = true): string {
+  if (points.length === 0) return '';
+  const valid = points.filter(p => isFinite(p.x) && isFinite(p.y));
+  if (valid.length === 0) return '';
+  const parts = valid.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(3)} ${p.y.toFixed(3)}`);
+  if (closed) parts.push('Z');
+  return parts.join(' ');
+}
+
+// ─── Superformula helpers ─────────────────────────────────────────────────────
+
+interface SuperformulaConfig {
+  m: number; n1: number; n2: number; n3: number; a?: number; b?: number;
+}
+
+function superformula(theta: number, m: number, n1: number, n2: number, n3: number, a = 1, b = 1): number {
+  const t1 = Math.abs(Math.cos(m * theta / 4) / a);
+  const t2 = Math.abs(Math.sin(m * theta / 4) / b);
+  const sum = Math.pow(t1, n2) + Math.pow(t2, n3);
+  if (sum === 0) return 0;
+  return Math.pow(sum, -1 / n1);
+}
+
+function superformulaPath(config: SuperformulaConfig, numPoints = 128, size = 100): string {
+  const { m, n1, n2, n3, a = 1, b = 1 } = config;
+  const points: Point2D[] = [];
+  for (let i = 0; i < numPoints; i++) {
+    const theta = (i / numPoints) * 2 * Math.PI;
+    const r = superformula(theta, m, n1, n2, n3, a, b);
+    points.push({
+      x: size * r * Math.cos(theta),
+      y: size * r * Math.sin(theta),
+    });
+  }
+  return pointsToSvgPath(points, true);
+}
+
+// ─── Canvas rendering helper (for pattern tiles, no source image needed) ──────
+
+function renderCanvas(
+  width: number,
+  height: number,
+  fn: (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => void,
+): number[] {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d')!;
+  fn(ctx, canvas);
+  const dataUrl = canvas.toDataURL('image/png');
+  const base64 = dataUrl.split(',')[1];
+  const binary = atob(base64);
+  const bytes = new Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
 // ─── Image data types & helpers ───────────────────────────────────────────────
 
 export interface ImagePixelData {
@@ -213,6 +380,24 @@ const generatorLib = {
     return Array.from({ length: count }, (_, i) => min + step * i);
   },
 
+  // --- 3D projection ---
+  rotate3D,
+  project3D,
+  cube: (size: number) => make3DCube(size),
+  sphere: (radius: number, segments?: number) => make3DSphere(radius, segments),
+  torus: (major: number, minor: number, segments?: number) => make3DTorus(major, minor, segments),
+  pointsToSvgPath,
+
+  // --- Superformula organic shapes ---
+  superformula,
+  superformulaPath,
+
+  // --- Canvas rendering (blank canvas, for pattern tiles etc.) ---
+  renderCanvas,
+
+  // --- Currently selected node ID (populated before generator runs) ---
+  selectionId: null as string | null,
+
   // --- Image pixel data (populated before generator runs when imageNodeId is set) ---
   imageData: null as ImagePixelData | null,
 
@@ -271,6 +456,14 @@ const generatorLib = {
  */
 export function setImageData(data: ImagePixelData | null): void {
   generatorLib.imageData = data;
+}
+
+/**
+ * Set the currently selected node ID on lib.selectionId.
+ * Call before running the generator so "patternize this node" flows work.
+ */
+export function setSelectionId(id: string | null): void {
+  generatorLib.selectionId = id;
 }
 
 export type GeneratorLib = typeof generatorLib;

@@ -269,6 +269,52 @@ async function execApplyImageFill(args: Args, tempMap: TempNodeMap, tempId?: str
   return node;
 }
 
+async function execApplyPatternFill(args: Args, tempMap: TempNodeMap, tempId?: string, parentId?: string): Promise<SceneNode> {
+  const sourceId = typeof args.sourceNodeId === 'string' ? args.sourceNodeId : undefined;
+  if (!sourceId) throw new Error('applyPatternFill requires sourceNodeId');
+  const sourceNode = await resolveNode(sourceId, tempMap);
+
+  let node: SceneNode;
+  const targetId = typeof args.targetNodeId === 'string' ? args.targetNodeId : undefined;
+  if (targetId) {
+    node = await resolveNode(targetId, tempMap);
+  } else {
+    const rect = figma.createRectangle();
+    if (typeof args.x === 'number') rect.x = args.x;
+    if (typeof args.y === 'number') rect.y = args.y;
+    if (typeof args.width === 'number' && typeof args.height === 'number')
+      rect.resize(args.width as number, args.height as number);
+    if (typeof args.name === 'string') rect.name = args.name;
+    const parent = await resolveParent(parentId, tempMap);
+    parent.appendChild(rect);
+    node = rect;
+  }
+
+  const validTileTypes: PatternPaint['tileType'][] = ['RECTANGULAR', 'HORIZONTAL_HEXAGONAL', 'VERTICAL_HEXAGONAL'];
+  const tileType: PatternPaint['tileType'] =
+    typeof args.tileType === 'string' && validTileTypes.includes(args.tileType as PatternPaint['tileType'])
+      ? (args.tileType as PatternPaint['tileType'])
+      : 'RECTANGULAR';
+
+  const patternPaint: PatternPaint = {
+    type: 'PATTERN',
+    sourceNodeId: sourceNode.id,
+    tileType,
+    scalingFactor: typeof args.scalingFactor === 'number' ? args.scalingFactor : 1,
+    spacing: {
+      x: typeof args.spacingX === 'number' ? args.spacingX : 0,
+      y: typeof args.spacingY === 'number' ? args.spacingY : 0,
+    },
+  };
+
+  if ('setFillsAsync' in node) {
+    await (node as GeometryMixin & { setFillsAsync: (fills: ReadonlyArray<Paint>) => Promise<void> }).setFillsAsync([patternPaint]);
+  }
+
+  if (tempId) tempMap.set(tempId, node);
+  return node;
+}
+
 async function execCreateText(args: Args, tempMap: TempNodeMap, tempId?: string, parentId?: string): Promise<SceneNode> {
   const node = figma.createText();
   await figma.loadFontAsync(node.fontName as FontName);
@@ -638,6 +684,12 @@ async function dispatchAction(action: ActionDescriptor, tempMap: TempNodeMap): P
       return created;
     }
 
+    case 'applyPatternFill': {
+      const created = await execApplyPatternFill(a, tempMap, tempId, parentId);
+      lastCreatedNode = created;
+      return created;
+    }
+
     case 'createText': {
       const created = await execCreateText(a, tempMap, tempId, parentId);
       lastCreatedNode = created;
@@ -810,21 +862,32 @@ export async function executeActions(
 
   figma.commitUndo();
 
-  // Pan & zoom the viewport to show newly created content.
-  const nodesToFocus: SceneNode[] = [];
-  if (rootFrameId) {
+  // Only reposition and scroll on first creation, not on re-apply.
+  const isReapply = actions.length > 0 && actions[0].method === 'deleteChildren';
+
+  if (!isReapply && rootFrameId) {
+    try {
+      const rootNode = tempMap.get(rootFrameId)
+        ?? await figma.getNodeByIdAsync(rootFrameId);
+      if (rootNode && ('x' in rootNode)) {
+        const vp = figma.viewport.center;
+        const node = rootNode as SceneNode;
+        node.x = vp.x - node.width / 2;
+        node.y = vp.y - node.height / 2;
+      }
+    } catch (err) {
+      console.warn('[action-executor] failed to center root frame:', err);
+    }
+
+    const savedZoom = figma.viewport.zoom;
+    const nodesToFocus: SceneNode[] = [];
     const root = tempMap.get(rootFrameId)
       ?? await figma.getNodeByIdAsync(rootFrameId);
     if (root) nodesToFocus.push(root as SceneNode);
-  } else {
-    for (const id of createdNodeIds) {
-      const node = tempMap.get(id) ?? await figma.getNodeByIdAsync(id);
-      if (node) nodesToFocus.push(node as SceneNode);
+    if (nodesToFocus.length > 0) {
+      figma.viewport.scrollAndZoomIntoView(nodesToFocus);
+      figma.viewport.zoom = savedZoom;
     }
-  }
-  if (nodesToFocus.length > 0) {
-    figma.viewport.scrollAndZoomIntoView(nodesToFocus);
-    figma.viewport.zoom = figma.viewport.zoom * 0.85;
   }
 
   // Build a tempId → real node ID map so the iframe can rewrite control actions.

@@ -13,6 +13,7 @@ import type {
   ClaudeResponseMessage,
   RequestImageDataMessage,
   ImageDataMessage,
+  ClearPluginDataMessage,
 } from '../shared/message-types';
 import { serializeSelection } from './selection-serializer';
 import { executeActions, applyControlChange } from './action-executor';
@@ -152,6 +153,17 @@ async function handleRequestImageData(msg: RequestImageDataMessage): Promise<voi
   }
 }
 
+async function handleClearPluginData(msg: ClearPluginDataMessage): Promise<void> {
+  try {
+    const node = await figma.getNodeByIdAsync(msg.payload.nodeId);
+    if (node && 'setPluginData' in node) {
+      (node as SceneNode).setPluginData('pluginSpec', '');
+    }
+  } catch (err) {
+    console.warn('[main] handleClearPluginData failed:', err);
+  }
+}
+
 // ─── Outbound helpers ─────────────────────────────────────────────────────────
 
 /** Serializes the current page selection and sends it to the iframe. */
@@ -221,6 +233,9 @@ export function registerMessageHandler(): void {
         break;
       case 'REQUEST_IMAGE_DATA':
         void handleRequestImageData(msg);
+        break;
+      case 'CLEAR_PLUGIN_DATA':
+        void handleClearPluginData(msg);
         break;
       default: {
         // Narrow to never to catch unhandled message types at compile time.
