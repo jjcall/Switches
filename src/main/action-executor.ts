@@ -234,6 +234,41 @@ async function execCreateVector(args: Args, tempMap: TempNodeMap, tempId?: strin
   return node;
 }
 
+async function execApplyImageFill(args: Args, tempMap: TempNodeMap, tempId?: string, parentId?: string): Promise<SceneNode> {
+  const bytes = args.imageBytes as number[];
+  const uint8 = new Uint8Array(bytes);
+  const image = figma.createImage(uint8);
+
+  let node: SceneNode;
+  const targetId = typeof args.targetNodeId === 'string' ? args.targetNodeId : undefined;
+  if (targetId) {
+    node = await resolveNode(targetId, tempMap);
+  } else {
+    const rect = figma.createRectangle();
+    if (typeof args.x === 'number') rect.x = args.x;
+    if (typeof args.y === 'number') rect.y = args.y;
+    if (typeof args.width === 'number' && typeof args.height === 'number') {
+      rect.resize(args.width as number, args.height as number);
+    }
+    if (typeof args.name === 'string') rect.name = args.name;
+    const parent = await resolveParent(parentId, tempMap);
+    parent.appendChild(rect);
+    node = rect;
+  }
+
+  if ('fills' in node) {
+    const scaleMode = (typeof args.scaleMode === 'string' ? args.scaleMode : 'FILL') as ImagePaint['scaleMode'];
+    (node as GeometryMixin).fills = [{
+      type: 'IMAGE',
+      scaleMode,
+      imageHash: image.hash,
+    } as ImagePaint];
+  }
+
+  if (tempId) tempMap.set(tempId, node);
+  return node;
+}
+
 async function execCreateText(args: Args, tempMap: TempNodeMap, tempId?: string, parentId?: string): Promise<SceneNode> {
   const node = figma.createText();
   await figma.loadFontAsync(node.fontName as FontName);
@@ -593,6 +628,12 @@ async function dispatchAction(action: ActionDescriptor, tempMap: TempNodeMap): P
 
     case 'createVector': {
       const created = await execCreateVector(a, tempMap, tempId, parentId);
+      lastCreatedNode = created;
+      return created;
+    }
+
+    case 'applyImageFill': {
+      const created = await execApplyImageFill(a, tempMap, tempId, parentId);
       lastCreatedNode = created;
       return created;
     }

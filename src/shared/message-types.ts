@@ -247,6 +247,8 @@ export interface UISpec {
   /** When set, the runtime pre-fetches pixel data for this node before running the generator.
    *  The data is available as lib.imageData inside the generate function. */
   imageNodeId?: string;
+  /** Max pixel width for image export. Default 100 for sampling generators, set 400-800 for bitmap effects. */
+  imageMaxWidth?: number;
   controls: UIControl[];
 }
 

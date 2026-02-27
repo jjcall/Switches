@@ -230,6 +230,39 @@ const generatorLib = {
     if (!generatorLib.imageData) throw new Error('No image data loaded. Set imageNodeId on the UISpec.');
     return sampleGrid(generatorLib.imageData, cols, rows);
   },
+
+  // --- Bitmap image processing (Canvas2D) ---
+
+  toImageData(): ImageData {
+    if (!generatorLib.imageData) throw new Error('No image data loaded. Set imageNodeId on the UISpec.');
+    const { width, height, pixels } = generatorLib.imageData;
+    const clamped = new Uint8ClampedArray(pixels);
+    return new ImageData(clamped, width, height);
+  },
+
+  processImage(fn: (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => void): number[] {
+    if (!generatorLib.imageData) throw new Error('No image data loaded. Set imageNodeId on the UISpec.');
+    const { width, height, pixels } = generatorLib.imageData;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d')!;
+
+    const imgData = new ImageData(new Uint8ClampedArray(pixels), width, height);
+    ctx.putImageData(imgData, 0, 0);
+
+    fn(ctx, canvas);
+
+    const dataUrl = canvas.toDataURL('image/png');
+    const base64 = dataUrl.split(',')[1];
+    const binary = atob(base64);
+    const bytes = new Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+  },
 };
 
 /**

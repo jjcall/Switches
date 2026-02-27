@@ -169,7 +169,8 @@ function App() {
     if (currentUISpec.generate) {
       try {
         if (currentUISpec.imageNodeId) {
-          const imgData = await fetchImageData(currentUISpec.imageNodeId);
+          const maxW = currentUISpec.imageMaxWidth ?? 100;
+          const imgData = await fetchImageData(currentUISpec.imageNodeId, maxW);
           setImageData(imgData);
         }
         const fn = compileGenerator(currentUISpec.generate);
@@ -333,7 +334,8 @@ function App() {
 
       try {
         if (mergedUi.imageNodeId) {
-          const imgData = await fetchImageData(mergedUi.imageNodeId);
+          const maxW = mergedUi.imageMaxWidth ?? 100;
+          const imgData = await fetchImageData(mergedUi.imageNodeId, maxW);
           setImageData(imgData);
         }
         const fn = compileGenerator(mergedUi.generate);

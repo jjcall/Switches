@@ -5645,6 +5645,37 @@
     if (tempId) tempMap.set(tempId, node);
     return node;
   }
+  async function execApplyImageFill(args, tempMap, tempId, parentId) {
+    const bytes = args.imageBytes;
+    const uint8 = new Uint8Array(bytes);
+    const image = figma.createImage(uint8);
+    let node;
+    const targetId = typeof args.targetNodeId === "string" ? args.targetNodeId : void 0;
+    if (targetId) {
+      node = await resolveNode(targetId, tempMap);
+    } else {
+      const rect = figma.createRectangle();
+      if (typeof args.x === "number") rect.x = args.x;
+      if (typeof args.y === "number") rect.y = args.y;
+      if (typeof args.width === "number" && typeof args.height === "number") {
+        rect.resize(args.width, args.height);
+      }
+      if (typeof args.name === "string") rect.name = args.name;
+      const parent = await resolveParent(parentId, tempMap);
+      parent.appendChild(rect);
+      node = rect;
+    }
+    if ("fills" in node) {
+      const scaleMode = typeof args.scaleMode === "string" ? args.scaleMode : "FILL";
+      node.fills = [{
+        type: "IMAGE",
+        scaleMode,
+        imageHash: image.hash
+      }];
+    }
+    if (tempId) tempMap.set(tempId, node);
+    return node;
+  }
   async function execCreateText(args, tempMap, tempId, parentId) {
     const node = figma.createText();
     await figma.loadFontAsync(node.fontName);
@@ -5950,6 +5981,11 @@
         lastCreatedNode = created;
         return created;
       }
+      case "applyImageFill": {
+        const created = await execApplyImageFill(a, tempMap, tempId, parentId);
+        lastCreatedNode = created;
+        return created;
+      }
       case "createText": {
         const created = await execCreateText(a, tempMap, tempId, parentId);
         lastCreatedNode = created;
@@ -6219,7 +6255,7 @@
       const sceneNode = node;
       const pngBytes = await sceneNode.exportAsync({
         format: "PNG",
-        constraint: { type: "WIDTH", value: Math.min(maxWidth, 200) }
+        constraint: { type: "WIDTH", value: Math.min(maxWidth, 800) }
       });
       const decoded = import_upng_js.default.decode(pngBytes.buffer);
       const rgba = new Uint8Array(import_upng_js.default.toRGBA8(decoded)[0]);

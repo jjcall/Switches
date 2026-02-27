@@ -130,7 +130,7 @@ async function handleRequestImageData(msg: RequestImageDataMessage): Promise<voi
     const sceneNode = node as SceneNode;
     const pngBytes = await (sceneNode as ExportMixin).exportAsync({
       format: 'PNG',
-      constraint: { type: 'WIDTH', value: Math.min(maxWidth, 200) },
+      constraint: { type: 'WIDTH', value: Math.min(maxWidth, 800) },
     });
 
     const decoded = UPNG.decode(pngBytes.buffer);

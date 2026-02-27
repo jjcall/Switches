@@ -25597,6 +25597,7 @@ Supported methods:
 | setCornerRadius     | Sets corner radius                     | radius (number)                                         |
 | setLayoutProperties | Sets auto-layout props                 | layoutMode, primaryAxisSizing, counterAxisSizing, padding, itemSpacing |
 | resize              | Resizes a node                         | width, height                                           |
+| applyImageFill      | Creates/updates rect with processed PNG as image fill | imageBytes (number[]), targetNodeId, width, height, x, y, name, scaleMode |
 | appendChild         | Moves a node into a parent             | (use parentId on the action)                            |
 | deleteNode          | Deletes a node                         | (nodeId is the target)                                  |
 
@@ -25945,6 +25946,42 @@ The data is available on lib and is ready to sample.
   When to use: any request involving processing an image or frame into art \u2014 ASCII art, halftone,
   mosaic, pixel art, pattern-based rendering, image analysis, color extraction, etc.
 
+#### Bitmap image processing (lib.processImage)
+
+For pixel-level image effects (blur, sharpen, posterize, color grading, vignette, glitch,
+pixelate, etc.), use Canvas2D manipulation via lib.processImage. This processes the source
+image and returns PNG bytes that feed directly into applyImageFill.
+
+  - lib.toImageData() \u2014 creates a Canvas2D ImageData from lib.imageData pixels.
+  - lib.processImage(fn) \u2014 convenience wrapper that:
+    1. Creates an offscreen canvas sized to lib.imageData
+    2. Puts the source pixels onto it
+    3. Calls fn(ctx, canvas) \u2014 your effect code using Canvas2D APIs
+    4. Encodes the result to PNG
+    5. Returns PNG bytes as number[] for applyImageFill
+
+  The fn receives a CanvasRenderingContext2D and the canvas. Use standard Canvas2D:
+    - ctx.getImageData(0, 0, w, h) to read pixels
+    - ctx.putImageData(imgData, 0, 0) to write pixels
+    - ctx.filter = 'blur(5px)' for CSS filters
+    - ctx.drawImage(canvas, 0, 0) to redraw with transforms
+    - ctx.globalCompositeOperation for blend modes
+
+  lib.processImage is synchronous. The generator returns the PNG bytes in an
+  applyImageFill action, and the main thread creates the Figma image fill.
+
+  IMPORTANT: Set "imageMaxWidth" on the UISpec to 400-800 for bitmap effects.
+  The default is 100 (used for sampling generators like halftone/Voronoi).
+  Bitmap effects need higher resolution for acceptable output quality.
+
+  The applyImageFill action:
+  - imageBytes: number[] \u2014 the PNG byte array from lib.processImage
+  - width, height: size of the output rectangle (match the original node)
+  - x, y: position (optional)
+  - name: node name (optional)
+  - targetNodeId: if set, applies fill to existing node instead of creating new one
+  - scaleMode: image fill mode, default "FILL"
+
 ### Supported create methods
 
 In addition to createRectangle, createFrame, and createText, generators can also use:
@@ -26027,6 +26064,25 @@ stained-glass mosaic from a selected image. Each cell is a real editable Figma v
   "generate": "const n = params.cells || 80;\\nconst sw = params.strokeW ?? 1;\\nconst sc = lib.hexToRgb(params.strokeColor || '#000000');\\nconst img = lib.imageData;\\nconst W = 400;\\nconst H = Math.round(W * (img.height / img.width));\\nconst points = [];\\nfor (let i = 0; i < n; i++) points.push([Math.random() * W, Math.random() * H]);\\nconst voronoi = lib.Delaunay.from(points).voronoi([0, 0, W, H]);\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'mosaic', args: { x: 0, y: 0, width: W, height: H, name: 'Voronoi Mosaic' } });\\nfor (let i = 0; i < n; i++) {\\n  const path = voronoi.renderCell(i);\\n  const px = Math.round(points[i][0] * (img.width / W));\\n  const py = Math.round(points[i][1] * (img.height / H));\\n  const pixel = lib.getPixel(px, py);\\n  const color = { r: pixel.r / 255, g: pixel.g / 255, b: pixel.b / 255 };\\n  actions.push({ method: 'createVector', parentId: 'mosaic', args: { data: path } });\\n  actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [{ type: 'SOLID', color: color }] } });\\n  if (sw > 0) actions.push({ method: 'setStroke', nodeId: '__prev', args: { strokes: [{ type: 'SOLID', color: sc }], weight: sw } });\\n}\\nreturn actions;"
 }
 
+### Generator example: Gaussian blur bitmap effect
+
+This example shows how to use lib.processImage + applyImageFill for pixel-level effects.
+The generator processes the source image through Canvas2D and writes back a new image fill.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "mode": "apply",
+    "imageNodeId": "10:5",
+    "imageMaxWidth": 400,
+    "controls": [
+      { "id": "radius", "type": "slider", "label": "Blur Radius", "props": { "min": 0, "max": 20, "step": 0.5, "defaultValue": 4 } }
+    ]
+  },
+  "generate": "const r = params.radius || 4;\\nconst img = lib.imageData;\\nconst W = img.width;\\nconst H = img.height;\\nconst bytes = lib.processImage((ctx, canvas) => {\\n  ctx.filter = 'blur(' + r + 'px)';\\n  ctx.drawImage(canvas, 0, 0);\\n});\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: W, height: H, name: 'Blurred' } });\\nactions.push({ method: 'applyImageFill', parentId: 'root', args: { imageBytes: bytes, width: W, height: H, name: 'result' } });\\nreturn actions;"
+}
+
 ### Key rules for generators
 
 1. The generate value is a STRING (not a function declaration). It is the function body.
@@ -26059,6 +26115,14 @@ stained-glass mosaic from a selected image. Each cell is a real editable Figma v
     Pass an SVG path string as the "data" arg. lib.Delaunay produces these directly.
 16. For Voronoi/Delaunay art: lib.Delaunay.from(points) creates the triangulation, then
     .voronoi([0,0,w,h]) gives the diagram. voronoi.renderCell(i) returns SVG path strings.
+17. For bitmap/pixel image effects (blur, sharpen, posterize, vignette, color grading, glitch,
+    pixelate), use lib.processImage to manipulate pixels via Canvas2D, then emit an
+    applyImageFill action with the resulting bytes. Set "imageMaxWidth": 400 (or higher)
+    on the UISpec for acceptable output quality. The first action must still be createFrame
+    with a tempId for the root container.
+18. lib.processImage(fn) is synchronous. The fn callback receives (ctx, canvas). Use
+    ctx.getImageData / ctx.putImageData for manual pixel manipulation, or ctx.filter for
+    CSS filter shortcuts (blur, contrast, brightness, etc.).
 
 ### When to use generate vs live mode
 
@@ -26090,6 +26154,10 @@ Key points for the live-mode example above:
 - The "generate" field is a string containing JavaScript function body code. It is the ONLY
   place where executable JS is allowed. Never put JS in "actions" or control "action" fields.
 - All lib functions are pre-bundled \u2014 never try to import or require external modules.
+- For bitmap image effects (blur, sharpen, posterize, vignette, color grading, glitch, pixelate,
+  etc.), ALWAYS use apply mode with imageNodeId, set imageMaxWidth to 400+, use
+  lib.processImage for Canvas2D manipulation, and emit applyImageFill with the result bytes.
+  This pipeline processes from the original source every time \u2014 non-destructive by design.
 `;
 
   // src/ui/prompt/prompt-composer.ts
@@ -41480,6 +41548,32 @@ ${text.slice(0, 300)}` };
     sampleGrid(cols, rows) {
       if (!generatorLib.imageData) throw new Error("No image data loaded. Set imageNodeId on the UISpec.");
       return sampleGrid(generatorLib.imageData, cols, rows);
+    },
+    // --- Bitmap image processing (Canvas2D) ---
+    toImageData() {
+      if (!generatorLib.imageData) throw new Error("No image data loaded. Set imageNodeId on the UISpec.");
+      const { width, height, pixels } = generatorLib.imageData;
+      const clamped = new Uint8ClampedArray(pixels);
+      return new ImageData(clamped, width, height);
+    },
+    processImage(fn) {
+      if (!generatorLib.imageData) throw new Error("No image data loaded. Set imageNodeId on the UISpec.");
+      const { width, height, pixels } = generatorLib.imageData;
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      const imgData = new ImageData(new Uint8ClampedArray(pixels), width, height);
+      ctx.putImageData(imgData, 0, 0);
+      fn(ctx, canvas);
+      const dataUrl = canvas.toDataURL("image/png");
+      const base64 = dataUrl.split(",")[1];
+      const binary = atob(base64);
+      const bytes = new Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return bytes;
     }
   };
   function setImageData(data) {
@@ -41622,7 +41716,8 @@ ${errors.join("\n")}`);
       if (currentUISpec.generate) {
         try {
           if (currentUISpec.imageNodeId) {
-            const imgData = await fetchImageData(currentUISpec.imageNodeId);
+            const maxW = currentUISpec.imageMaxWidth ?? 100;
+            const imgData = await fetchImageData(currentUISpec.imageNodeId, maxW);
             setImageData(imgData);
           }
           const fn = compileGenerator(currentUISpec.generate);
@@ -41745,7 +41840,8 @@ ${errors.join("\n")}`);
         const defaults = collectControlDefaults(mergedUi.controls);
         try {
           if (mergedUi.imageNodeId) {
-            const imgData = await fetchImageData(mergedUi.imageNodeId);
+            const maxW = mergedUi.imageMaxWidth ?? 100;
+            const imgData = await fetchImageData(mergedUi.imageNodeId, maxW);
             setImageData(imgData);
           }
           const fn = compileGenerator(mergedUi.generate);
