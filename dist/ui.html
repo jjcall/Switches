@@ -815,8 +815,6 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  transition: opacity 0.3s ease, transform 0.3s ease;
-  transform-origin: center bottom;
 }
 .chat-prompt + .chat-prompt {
   margin-top: -6px;
@@ -25595,7 +25593,7 @@ body {
 
   // src/ui/App.tsx
   var import_client = __toESM(require_client());
-  var import_react42 = __toESM(require_react());
+  var import_react43 = __toESM(require_react());
 
   // src/ui/messaging.ts
   function postToMain(message) {
@@ -25690,1092 +25688,8 @@ body {
     ] });
   }
 
-  // src/ui/chat/ChatHistory.tsx
-  var import_jsx_runtime2 = __toESM(require_jsx_runtime());
-  var OPACITIES = [0.25, 0.55, 0.9];
-  var SCALES = [0.9, 0.95, 1];
-  function ChatHistory({ messages }) {
-    if (messages.length === 0) return null;
-    const recent = messages.slice(-3);
-    const opacities = OPACITIES.slice(-recent.length);
-    const scales = SCALES.slice(-recent.length);
-    return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "chat-history", children: recent.map((msg, i2) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-      "div",
-      {
-        className: `chat-prompt chat-prompt--${msg.role}`,
-        style: {
-          opacity: opacities[i2],
-          transform: `scale(${scales[i2]})`
-        },
-        children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "chat-prompt-text", children: msg.content })
-      },
-      msg.id
-    )) });
-  }
-
-  // src/ui/api/claude.ts
-  var ANTHROPIC_API_KEY = "sk-ant-REDACTED";
-  var PROXY_URL = "http://localhost:3333/v1/messages";
-  var MODEL = "claude-sonnet-4-5";
-  var MAX_TOKENS = 16384;
-  async function callClaude(messages, systemPrompt) {
-    if (!ANTHROPIC_API_KEY || ANTHROPIC_API_KEY === "YOUR_API_KEY_HERE") {
-      return {
-        ok: false,
-        error: "No API key configured. Set ANTHROPIC_API_KEY in src/ui/api/claude.ts."
-      };
-    }
-    let response;
-    try {
-      response = await fetch(PROXY_URL, {
-        method: "POST",
-        headers: {
-          "x-api-key": ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-          "content-type": "application/json"
-        },
-        body: JSON.stringify({
-          model: MODEL,
-          max_tokens: MAX_TOKENS,
-          system: systemPrompt,
-          messages
-        })
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return {
-        ok: false,
-        error: `Cannot reach proxy at ${PROXY_URL}. Run \`node proxy.mjs\` in the project root. (${msg})`
-      };
-    }
-    if (!response.ok) {
-      let detail = "";
-      try {
-        const body = await response.json();
-        const raw = body.error?.message;
-        if (typeof raw === "string") detail = raw;
-        else if (raw !== void 0) detail = JSON.stringify(raw);
-      } catch {
-      }
-      const prefix = response.status === 429 ? "Rate limited" : `API error ${response.status}`;
-      return { ok: false, error: detail ? `${prefix}: ${detail}` : prefix };
-    }
-    let data;
-    let rawText = "";
-    try {
-      rawText = await response.text();
-      data = JSON.parse(rawText);
-    } catch {
-      return { ok: false, error: `Failed to parse API response as JSON. Raw: ${rawText.slice(0, 200)}` };
-    }
-    const textBlock = data.content?.find((b2) => b2.type === "text");
-    if (!textBlock?.text) {
-      return { ok: false, error: "API returned no text content." };
-    }
-    return { ok: true, text: textBlock.text };
-  }
-
-  // src/ui/prompt/system-prompt.ts
-  var SYSTEM_PROMPT = `You are a plugin designer embedded inside Figma. The user describes what they want, and you
-build them a custom plugin on the fly \u2014 both the canvas changes (actions) and the control panel
-(UI) to tweak the result live.
-
-You are creative. Invent the best control panel for each request. There is no fixed template \u2014
-choose controls, groupings, and coordinated actions that make the most useful, most delightful
-plugin for the task. Think beyond Figma's native UI: one slider can drive many properties at once,
-a single "depth" control can coordinate blur + spread + offset + opacity together, etc.
-
-The user will iterate with you through conversation. They might say "create a drop shadow," then
-"add a color picker," then "make spread go up to 100." Treat each message as an edit to the
-current plugin. Preserve existing controls unless told to replace them.
-
-## Response format
-
-Respond with a single JSON object \u2014 no prose, no markdown fences:
-
-{
-  "actions": [ ... ],
-  "ui": {
-    "replace": <true|false>,
-    "mode": <"live"|"apply">,
-    "controls": [ ... ]
-  },
-  "generate": "<JS function body string, optional>"
-}
-
-- "actions": canvas changes to execute NOW (once). Omit actions that were already executed in a
-  previous turn \u2014 do not re-run them.
-- "ui.replace": set true on the first response or when rebuilding from scratch. Set false when
-  adding or updating individual controls (the renderer merges by control id).
-- "ui.mode": the runtime chooses this automatically based on the task:
-  * Use "live" when modifying properties on existing nodes (e.g. shadow, fill, stroke, opacity).
-    Controls patch nodes immediately on every slider drag.
-  * Use "apply" when creating/generating multiple nodes (grids, patterns, layouts, carousels),
-    when ANY control requires computation (randomness, loops, formulas, conditional logic),
-    or when a control needs a library function (color manipulation, noise, easing, etc.).
-    Controls collect values locally and an Apply button re-executes the full batch.
-  The user should NEVER have to ask for a mode \u2014 you decide based on the nature of the request.
-- "ui.controls": the full or partial control list.
-- "generate": a JavaScript function body string for apply-mode plugins that need computation.
-  See the "Generator functions" section below. When "generate" is present, set "actions": []
-  (the generator auto-executes with default control values on first load).
-
-If you need to ask a clarifying question or cannot fulfill the request, return
-"actions": [], "ui": { "replace": false, "controls": [] }, and add a "message" key with your
-question.
-
----
-
-## Action format
-
-{
-  "method":   "<method name>",
-  "nodeId":   "<existing node id, optional>",
-  "parentId": "<parent node id for appendChild, optional>",
-  "tempId":   "<temp id you assign to a new node, optional>",
-  "args":     { ... }
-}
-
-Supported methods:
-
-| method              | description                            | key args                                                |
-|---------------------|----------------------------------------|---------------------------------------------------------|
-| createRectangle     | Creates a rectangle                    | x, y, width, height, cornerRadius, name                |
-| createFrame         | Creates a frame                        | x, y, width, height, name                              |
-| createEllipse       | Creates an ellipse / circle            | x, y, width, height, name                              |
-| createVector        | Creates a vector from SVG path data    | data (SVG path string), windingRule, x, y, name        |
-| createText          | Creates a text node                    | x, y, characters, fontSize                             |
-| setProperty         | Sets any scalar property               | property (string), value (any)                          |
-| setFill             | Replaces or patches fills              | Full replace: fills (paint array). Patch: property + value |
-| setStroke           | Replaces or patches strokes            | Full replace: strokes (paint array), weight, align. Patch: property + value |
-| setEffect           | Replaces or patches effects            | See below                                               |
-| setCornerRadius     | Sets corner radius                     | radius (number)                                         |
-| setLayoutProperties | Sets auto-layout props                 | layoutMode, primaryAxisSizing, counterAxisSizing, padding, itemSpacing |
-| resize              | Resizes a node                         | width, height                                           |
-| applyImageFill      | Creates/updates rect with processed PNG as image fill | imageBytes (number[]), targetNodeId, width, height, x, y, name, scaleMode |
-| appendChild         | Moves a node into a parent             | (use parentId on the action)                            |
-| deleteNode          | Deletes a node                         | (nodeId is the target)                                  |
-
-When referencing a node created in the same batch, use its tempId as nodeId in later actions.
-
-### Paint object
-  Solid: { "type": "SOLID", "color": { "r": 0-1, "g": 0-1, "b": 0-1 }, "opacity": 0-1 }
-
-### setFill / setStroke \u2014 two forms (same pattern as setEffect)
-
-1. **Full replace** (top-level actions): pass "fills"/"strokes" array.
-2. **Property patch** (control actions): pass "property" and the value comes from the control.
-   Patches the first fill/stroke in the array without replacing.
-
-   For setFill, patchable properties: "opacity", "color"
-   For setStroke, patchable properties: "opacity", "weight" (sets strokeWeight), "align" (sets strokeAlign)
-
-   Example control action for fill opacity slider:
-   { "method": "setFill", "nodeId": "10:5", "args": { "property": "opacity" } }
-
-   Example control action for stroke weight slider:
-   { "method": "setStroke", "nodeId": "10:5", "args": { "property": "weight" } }
-
-### Effect objects
-  Shadow: { "type": "DROP_SHADOW", "color": { "r":0,"g":0,"b":0,"a":0.25 }, "offset": { "x":0,"y":4 }, "radius":8, "spread":0, "visible":true }
-  Blur:   { "type": "LAYER_BLUR", "radius": 8, "visible": true }
-
-### setEffect \u2014 two forms
-
-1. **Full replace** (top-level actions only): pass "effects": [ ... ] to set the entire effects array.
-2. **Property patch** (control actions only): pass "property", "effectType", and optionally "effectIndex".
-   The executor reads the existing effects, patches just that property, and writes them back.
-   This preserves other effect properties during live slider drags.
-
-   Patchable properties for DROP_SHADOW / INNER_SHADOW: "radius", "spread", "visible", "offsetX", "offsetY"
-   Patchable properties for LAYER_BLUR / BACKGROUND_BLUR: "radius", "visible"
-
----
-
-## UI control spec
-
-Each control:
-
-{
-  "id":       "<unique stable string>",
-  "type":     "<control type>",
-  "label":    "<display label>",
-  "props":    { <type-specific props, including defaultValue> },
-  "action":   { <single action descriptor> },
-  "actions":  [ <array of action descriptors \u2014 for coordinated multi-property updates> ],
-  "children": [ <controls, only for type=section> ]
-}
-
-### How control actions work
-
-In **live mode** ("ui.mode": "live"), the "action" or "actions" on a control fire on each
-user interaction (slider drag, toggle click, etc.). The control value is passed as args.value.
-
-In **apply mode** ("ui.mode": "apply"), control changes DO NOT fire actions immediately.
-Instead, controls collect values locally and the user clicks Apply. On Apply, the runtime
-calls the "generate" function with current control values and executes the returned actions.
-Controls in apply mode do NOT need "action" or "actions" \u2014 the generator handles everything.
-
-CRITICAL RULES:
-
-1. Control actions for setEffect MUST use the property-patch form ({ "property": "...",
-   "effectType": "..." }). Never use "effects": [...] in a control action \u2014 that form is only
-   for top-level initial-setup actions.
-
-2. Do NOT duplicate work between top-level actions and control actions. Top-level actions run
-   once to set the initial canvas state. Control actions only run on user interaction.
-
-3. Set "props.defaultValue" on every control to match the initial value from the top-level
-   action. This keeps the UI and canvas in sync on first render.
-
-4. Use apply mode + "generate" whenever the plugin creates or arranges multiple nodes, uses
-   randomness, loops, computed values, color manipulation (saturate, desaturate, darken, lighten,
-   hue shift, color mixing, color scales, contrast), noise, easing, or any logic beyond simple
-   property patching. Signs: "grid", "pattern", "generate", "create N items", "layout",
-   "arrange", "distribute", "carousel", "randomize", "gradient", "spiral", "animate",
-   "saturate", "desaturate", "darken", "lighten", "palette", "color scale", "noise",
-   "organic", "scatter", "wavy", "easing", or any scenario needing computation.
-   The user will NEVER ask for apply mode explicitly \u2014 you detect it.
-
-   IMPORTANT: Figma's fill API only stores { r, g, b } colors \u2014 there is no "saturation",
-   "hue", or "lightness" property on a Figma paint. If a control needs to manipulate color
-   in HSL/LAB/LCH space, you MUST use apply mode with a generator that uses lib.chroma to
-   compute the final RGB, then emit a setFill action with the concrete color.
-
-### Coordinated actions (the power feature)
-
-Use "actions" (array) instead of "action" (single) when one control should drive multiple Figma
-properties simultaneously. This is what makes generated plugins more powerful than Figma's native
-UI. The executor applies a linear transform: actual_value = value * (args.scale ?? 1) + (args.offset ?? 0).
-
-Examples of creative coordinated controls:
-- A "depth" slider driving blur + spread + offsetY + opacity together
-- A "light angle" slider computing offsetX and offsetY from polar coordinates
-- A "warmth" slider adjusting shadow color and fill saturation simultaneously
-- A "card lift" slider coordinating shadow distance, blur, and element Y position
-
-### Iterative refinement
-
-When the user asks to add or modify controls on an existing plugin:
-- Use "replace": false to preserve existing controls.
-- Include ALL controls in the "controls" array \u2014 both existing and new/changed ones.
-  The runtime merges by control id, so including unchanged controls is safe and ensures
-  the generator and controls stay in sync.
-- Set "actions": [] if no new canvas changes are needed (the previous ones already ran).
-- Keep control IDs stable across turns so the user doesn't lose their current slider positions.
-- **CRITICAL: When updating a generator, you MUST include the complete generate function
-  that handles ALL controls \u2014 both existing and newly added.** The generator is replaced
-  wholesale. If you only handle the new control, all previous functionality will break.
-  Read the current control panel spec carefully and incorporate all existing params.
-
----
-
-## Component catalog
-
-Use ONLY these types. The type field is case-sensitive lowercase.
-
-### slider
-Drag slider with inline editable value.
-Props: min (number), max (number), step (number, default 0.01), defaultValue (number)
-Value type: number
-
-### toggle
-On/Off boolean pill.
-Props: defaultValue (boolean)
-Value type: boolean
-
-### number
-Numeric text input with arrow-key stepping.
-Props: min (number, optional), max (number, optional), step (number, default 1), defaultValue (number)
-Value type: number
-
-### select
-Dropdown.
-Props: options (string[]), defaultValue (string)
-Value type: string
-
-### segmented
-Multi-option pill selector.
-Props: options (Array<{ value: string, label: string }>), defaultValue (string)
-Value type: string
-
-### color
-Hex color + color picker swatch.
-Props: defaultValue (string, hex)
-Value type: string (e.g. "#FF0000")
-
-### spring
-Spring curve editor.
-Props: defaultValue (spring config object, optional)
-Value type: { type: "spring", visualDuration: number, bounce: number } | { type: "tween", duration: number, ease: string }
-
-### angle
-Circular rotation dial for angle values. Use instead of slider for rotation, direction, or any angular parameter.
-Props: min (number, default -180), max (number, default 180), step (number, default 1), defaultValue (number)
-Value type: number (degrees)
-
-### section
-Collapsible container. Use to group related controls.
-Props: defaultOpen (boolean, default true)
-Children: array of controls
-
-### text
-Labeled text input.
-Props: placeholder (string, optional), defaultValue (string)
-Value type: string
-
-### button
-Action button (fires once on click with the action's args \u2014 no value).
-Props: none beyond label
-Value type: void
-
----
-
-## Syntax reference
-
-This example shows the correct JSON structure for an effect plugin. It is NOT a template \u2014 design
-each plugin creatively for the user's specific request.
-
-{
-  "actions": [
-    {
-      "method": "setEffect", "nodeId": "10:5",
-      "args": { "effects": [{ "type": "DROP_SHADOW", "color": { "r":0,"g":0,"b":0,"a":0.25 }, "offset": { "x":0,"y":8 }, "radius":16, "spread":0, "visible":true }] }
-    }
-  ],
-  "ui": {
-    "replace": true,
-    "controls": [
-      { "id": "blur", "type": "slider", "label": "Blur", "props": { "min":0, "max":80, "step":1, "defaultValue":16 },
-        "action": { "method": "setEffect", "nodeId": "10:5", "args": { "property": "radius", "effectType": "DROP_SHADOW" } } },
-      { "id": "visible", "type": "toggle", "label": "Visible", "props": { "defaultValue": true },
-        "action": { "method": "setEffect", "nodeId": "10:5", "args": { "property": "visible", "effectType": "DROP_SHADOW" } } }
-    ]
-  }
-}
-
-## Generator functions (the power feature for bespoke plugins)
-
-For apply-mode plugins, provide a "generate" field at the top level of the JSON response.
-This is a JavaScript function body string that receives two arguments:
-  - params: object keyed by control IDs with their current values
-  - lib: utility library (see below)
-
-The function MUST return an array of ActionDescriptor objects (same format as "actions").
-
-### Helper library (lib)
-
-The lib object is available inside the generate function. It contains basic utilities,
-a full color science library (chroma.js), noise generators, easing functions, and
-vector/math helpers.
-
-#### Basic utilities
-  - lib.hslToRgb(h, s, l) \u2014 h in degrees (0-360), s and l in 0-1. Returns { r, g, b } in 0-1.
-  - lib.randomColor() \u2014 returns a random vibrant { r, g, b } in 0-1.
-  - lib.randomInt(min, max) \u2014 random integer in [min, max].
-  - lib.lerp(a, b, t) \u2014 linear interpolation.
-  - lib.clamp(val, min, max) \u2014 clamp to range.
-  - lib.hexToRgb(hex) \u2014 "#FF0000" to { r, g, b } in 0-1.
-
-#### Color science (lib.chroma) \u2014 chroma.js
-
-Full chroma.js library for professional color manipulation. Key methods:
-
-  Creating colors:
-  - lib.chroma('#ff0000')           \u2014 from hex
-  - lib.chroma(255, 0, 0)           \u2014 from RGB 0-255
-  - lib.chroma.hsl(330, 1, 0.6)     \u2014 from HSL
-  - lib.chroma.temperature(3500)    \u2014 from color temperature (K)
-
-  Manipulating colors (chainable, returns a new chroma color):
-  - .saturate(amount)    \u2014 increase saturation (amount ~0.5\u20133)
-  - .desaturate(amount)  \u2014 decrease saturation
-  - .darken(amount)      \u2014 darken (amount ~0.5\u20133)
-  - .brighten(amount)    \u2014 lighten
-  - .set('hsl.h', '+30') \u2014 shift hue by 30 degrees
-  - .set('hsl.s', 0.5)   \u2014 set saturation to 0.5
-  - .alpha(0.5)           \u2014 set alpha
-
-  Reading values:
-  - .hex()         \u2014 "#ff0000"
-  - .rgb()         \u2014 [255, 0, 0]
-  - .hsl()         \u2014 [h, s, l]
-  - .luminance()   \u2014 0-1 perceived brightness
-  - .get('hsl.h')  \u2014 read a single channel
-
-  Scales and palettes:
-  - lib.chroma.scale(['#fafa6e','#2A4858']).mode('lch').colors(6)  \u2014 6-color gradient
-  - lib.chroma.scale('OrRd').colors(5)        \u2014 named brewer palette
-  - lib.chroma.bezier(['#fff','#f00','#000']).scale().colors(5)    \u2014 bezier interpolation
-  - lib.chroma.mix('#ff0000', '#0000ff', 0.5, 'lab')  \u2014 perceptual mix
-
-  Accessibility:
-  - lib.chroma.contrast('#fff', '#333')  \u2014 WCAG contrast ratio
-  - lib.chroma.deltaE(colorA, colorB)    \u2014 perceptual color difference
-
-  Converting to Figma { r, g, b } (0-1 range):
-  - lib.chromaToFigma(chromaColor)  \u2014 e.g. lib.chromaToFigma(lib.chroma('#f00').saturate(2))
-    Returns { r, g, b } in 0-1 for direct use in setFill paint objects.
-
-#### Noise (lib.noise) \u2014 simplex-noise
-
-Deterministic noise for organic/procedural generation. Returns values in [-1, 1].
-
-  - lib.noise.noise2D(x, y)          \u2014 2D noise
-  - lib.noise.noise3D(x, y, z)       \u2014 3D noise (use z as "time" for animation)
-  - lib.noise.noise4D(x, y, z, w)    \u2014 4D noise
-
-  Custom-seeded noise (for reproducible results):
-  - lib.createNoise2D()              \u2014 new random-seeded 2D noise function
-  - lib.createNoise3D()              \u2014 new random-seeded 3D noise function
-
-  Typical usage: scale inputs to control frequency (smaller = smoother).
-  Example: lib.noise.noise2D(x * 0.02, y * 0.02) for large smooth variation.
-
-#### Easing (lib.easing / lib.easings) \u2014 bezier-easing
-
-Cubic-bezier easing identical to CSS transition-timing-function.
-
-  Custom easing:
-  - lib.easing(x1, y1, x2, y2)      \u2014 returns a function: (t: 0-1) => value: 0-1
-    Example: const ease = lib.easing(0.25, 0.1, 0.25, 1.0); ease(0.5) // 0.80
-
-  Presets (each is a function: (t: 0-1) => value):
-  - lib.easings.linear
-  - lib.easings.easeIn / easeOut / easeInOut
-  - lib.easings.easeInCubic / easeOutCubic / easeInOutCubic
-  - lib.easings.easeInBack / easeOutBack / easeInOutBack
-
-#### Vector & math utilities
-
-  - lib.vec2(x, y) \u2014 creates a 2D vector with methods:
-    .add(other), .sub(other), .scale(s), .rotate(angleDeg), .length(), .normalize()
-  - lib.polarToXY(angleDeg, radius) \u2014 returns { x, y }
-  - lib.degToRad(deg) / lib.radToDeg(rad) \u2014 angle conversion
-  - lib.mapRange(value, inMin, inMax, outMin, outMax) \u2014 remap a value between ranges
-  - lib.shuffle(array) \u2014 Fisher-Yates shuffle, returns new array
-  - lib.distribute(count, min, max) \u2014 returns array of evenly spaced values
-
-#### Geometry (lib.Delaunay) \u2014 d3-delaunay
-
-Compute Voronoi diagrams and Delaunay triangulations from 2D points. Produces SVG path
-strings that feed directly into createVector actions.
-
-  Creating a triangulation:
-  - lib.Delaunay.from(points)  \u2014 points is [[x1,y1], [x2,y2], ...]
-    Returns a Delaunay object.
-
-  Creating a Voronoi diagram:
-  - delaunay.voronoi([xmin, ymin, xmax, ymax])  \u2014 bounded Voronoi
-    Returns a Voronoi object.
-
-  Getting cell geometry (SVG path strings for createVector):
-  - voronoi.renderCell(i)      \u2014 SVG path string for cell i (use as createVector data arg)
-  - voronoi.cellPolygon(i)     \u2014 [[x,y], ...] vertex array for cell i
-  - delaunay.renderTriangle(i) \u2014 SVG path string for triangle i
-
-  Typical usage with image processing:
-  1. Generate seed points (random, grid-jittered, or brightness-weighted)
-  2. Compute Voronoi: const v = lib.Delaunay.from(points).voronoi([0,0,w,h])
-  3. For each cell i, get path: v.renderCell(i)
-  4. Create vector: { method: 'createVector', parentId: 'root', args: { data: path } }
-  5. Color by sampling image: lib.getPixel(points[i][0], points[i][1])
-
-#### Image pixel data (lib.imageData)
-
-When the UISpec includes an "imageNodeId" field, the runtime pre-fetches pixel data from
-that Figma node (downscaled to ~100px wide for performance) before running the generator.
-The data is available on lib and is ready to sample.
-
-  Properties:
-  - lib.imageData.width / lib.imageData.height  \u2014 pixel dimensions of the downscaled image
-  - lib.imageData.pixels  \u2014 flat RGBA array [r,g,b,a, r,g,b,a, ...], values 0-255
-
-  Helper functions (operate on lib.imageData automatically):
-  - lib.getPixel(x, y)      \u2014 returns { r, g, b, a } at integer coords, values 0-255
-  - lib.getBrightness(x, y)  \u2014 returns 0-1 perceived luminance (BT.601 weights)
-  - lib.sampleGrid(cols, rows) \u2014 returns 2D array of { r, g, b, a, brightness, srcX, srcY }
-    Divides the image into a cols\xD7rows grid and samples the center of each cell.
-
-  How to use imageNodeId:
-  - Set "imageNodeId" to the selected node's ID (from the selection context)
-  - The generator must be in apply mode
-  - The node can be any SceneNode with visible content (frame, rectangle with image fill, group, etc.)
-  - The runtime exports the node as a downscaled PNG, decodes it to pixels, and populates lib.imageData
-
-  When to use: any request involving processing an image or frame into art \u2014 ASCII art, halftone,
-  mosaic, pixel art, pattern-based rendering, image analysis, color extraction, etc.
-
-#### Bitmap image processing (lib.processImage)
-
-For pixel-level image effects (blur, sharpen, posterize, color grading, vignette, glitch,
-pixelate, etc.), use Canvas2D manipulation via lib.processImage. This processes the source
-image and returns PNG bytes that feed directly into applyImageFill.
-
-  - lib.toImageData() \u2014 creates a Canvas2D ImageData from lib.imageData pixels.
-  - lib.processImage(fn) \u2014 convenience wrapper that:
-    1. Creates an offscreen canvas sized to lib.imageData
-    2. Puts the source pixels onto it
-    3. Calls fn(ctx, canvas) \u2014 your effect code using Canvas2D APIs
-    4. Encodes the result to PNG
-    5. Returns PNG bytes as number[] for applyImageFill
-
-  The fn receives a CanvasRenderingContext2D and the canvas. Use standard Canvas2D:
-    - ctx.getImageData(0, 0, w, h) to read pixels
-    - ctx.putImageData(imgData, 0, 0) to write pixels
-    - ctx.filter = 'blur(5px)' for CSS filters
-    - ctx.drawImage(canvas, 0, 0) to redraw with transforms
-    - ctx.globalCompositeOperation for blend modes
-
-  lib.processImage is synchronous. The generator returns the PNG bytes in an
-  applyImageFill action, and the main thread creates the Figma image fill.
-
-  IMPORTANT: Set "imageMaxWidth" on the UISpec to 400-800 for bitmap effects.
-  The default is 100 (used for sampling generators like halftone/Voronoi).
-  Bitmap effects need higher resolution for acceptable output quality.
-
-  The applyImageFill action:
-  - imageBytes: number[] \u2014 the PNG byte array from lib.processImage
-  - width, height: size of the output rectangle (match the original node)
-  - x, y: position (optional)
-  - name: node name (optional)
-  - targetNodeId: if set, applies fill to existing node instead of creating new one
-  - scaleMode: image fill mode, default "FILL"
-
-#### Canvas rendering from scratch (lib.renderCanvas)
-
-For generating pattern tiles or any canvas-drawn image without a source image, use
-lib.renderCanvas. Unlike lib.processImage, it does NOT require imageNodeId \u2014 it creates
-a blank canvas and lets the generator draw on it freely.
-
-  - lib.renderCanvas(width, height, fn) \u2014 creates a blank offscreen canvas, calls
-    fn(ctx, canvas) with the Canvas2D context, encodes to PNG, returns number[] for
-    applyImageFill. Synchronous.
-
-  Use with applyImageFill and scaleMode "TILE" for seamless repeating pattern fills:
-    const bytes = lib.renderCanvas(64, 64, (ctx) => {
-      // draw one tile \u2014 Figma repeats it infinitely
-      ctx.fillStyle = '#3B82F6';
-      ctx.fillRect(0, 0, 64, 64);
-      ctx.fillStyle = '#fff';
-      ctx.beginPath();
-      ctx.arc(32, 32, 8, 0, Math.PI * 2);
-      ctx.fill();
-    });
-    // then: { method: 'applyImageFill', args: { imageBytes: bytes, scaleMode: 'TILE', width: 400, height: 400 } }
-
-#### 3D projection (lib.rotate3D, lib.project3D)
-
-Pure-math 3D rendering pipeline. Rotates and perspective-projects 3D points to 2D,
-then uses createVector to create editable Figma vectors from the projected geometry.
-
-  Point types:
-  - Point3D: { x, y, z }
-  - Mesh3D: { vertices: Point3D[], faces: number[][] } \u2014 faces are arrays of vertex indices
-
-  Core functions:
-  - lib.rotate3D(point, rx, ry, rz) \u2014 rotate a {x,y,z} point by Euler angles in degrees.
-    Returns {x,y,z}. Apply to each vertex before projecting.
-  - lib.project3D(point, focalLength) \u2014 perspective-project {x,y,z} to {x,y}.
-    focalLength controls perspective strength: 300 = dramatic, 800 = subtle.
-
-  Primitive generators (return Mesh3D):
-  - lib.cube(size) \u2014 centered cube, 8 vertices, 6 quad faces
-  - lib.sphere(radius, segments) \u2014 UV sphere. segments controls resolution (default 12)
-  - lib.torus(majorRadius, minorRadius, segments) \u2014 torus/donut (default segments 16)
-
-  Path utility:
-  - lib.pointsToSvgPath(points2D, closed) \u2014 converts [{x,y}...] to SVG path string.
-    closed defaults to true. Use as the "data" arg for createVector.
-
-  Typical workflow:
-  1. Get a mesh: const mesh = lib.cube(200)
-  2. Rotate all vertices: const rotated = mesh.vertices.map(v => lib.rotate3D(v, params.rx, params.ry, 0))
-  3. Project to 2D: const projected = rotated.map(v => lib.project3D(v, 500))
-  4. For each face: get the 4 projected points, call lib.pointsToSvgPath, emit createVector
-  5. Sort faces by average Z (back to front) for correct painter's algorithm rendering
-  6. Color faces by Z depth using lib.chroma for shading
-
-  Example face rendering loop:
-    const mesh = lib.cube(200);
-    const rotated = mesh.vertices.map(v => lib.rotate3D(v, params.rx, params.ry, 0));
-    const projected = rotated.map(v => lib.project3D(v, 500));
-    // Sort faces back-to-front
-    const sorted = mesh.faces.slice().sort((a, b) => {
-      const avgZ = f => f.reduce((s, i) => s + rotated[i].z, 0) / f.length;
-      return avgZ(a) - avgZ(b);
-    });
-    for (const face of sorted) {
-      const pts = face.map(i => projected[i]);
-      const path = lib.pointsToSvgPath(pts, true);
-      actions.push({ method: 'createVector', parentId: 'root', args: { data: path } });
-      // Add fill based on Z depth...
-    }
-
-#### Organic shapes (lib.superformula)
-
-The Gielis superformula generates an infinite variety of organic shapes from 6 parameters.
-One equation produces circles, stars, flowers, starfish, blobs, leaves, and everything between.
-
-  - lib.superformula(theta, m, n1, n2, n3, a, b) \u2014 evaluates the superformula at angle theta
-    (radians). Returns the radius at that angle. Use for custom point generation.
-  - lib.superformulaPath(config, numPoints, size) \u2014 generates a complete closed SVG path
-    string ready for createVector. numPoints defaults to 128, size is the scale in pixels.
-    config: { m, n1, n2, n3, a?, b? }
-
-  Parameter intuition (use these as control names):
-  - m \u2014 symmetry / petal count. Integer values: 0=circle, 3=triangle, 4=square, 5=star, 6=flower
-  - n1 \u2014 roundness / inflation. High values (>10) = very round/blob, low values (<1) = pinched
-  - n2 / n3 \u2014 pinch / spikiness. Equal values = symmetric, unequal = asymmetric spikes
-  - a / b \u2014 horizontal / vertical stretch (default 1 = no stretch)
-
-  Example shapes:
-  - Circle:   { m: 0, n1: 1, n2: 1, n3: 1 }
-  - Star:     { m: 5, n1: 0.3, n2: 0.3, n3: 0.3 }
-  - Flower:   { m: 6, n1: 1, n2: 1, n3: 1 }
-  - Blob:     { m: 3, n1: 10, n2: 1.7, n3: 1.7 }
-  - Leaf:     { m: 2, n1: 1, n2: 4, n3: 8, a: 1, b: 2 }
-
-  Usage: generate the path, center it on the frame, emit one createVector action.
-    const path = lib.superformulaPath({ m: params.petals, n1: params.roundness, n2: 1, n3: 1 }, 256, params.size / 2);
-    actions.push({ method: 'createVector', parentId: 'root', args: { data: path, x: cx, y: cy, name: 'Shape' } });
-
-#### Native vector patterns (lib.selectionId, applyPatternFill)
-
-For resolution-independent tiled patterns, use the native Figma PATTERN fill type. The tile
-source is any node \u2014 one the generator creates (referenced by tempId) or the currently selected
-node. Unlike renderCanvas patterns, the output is fully vector and the tile source remains
-editable on the canvas after generation.
-
-  lib.selectionId \u2014 the currently selected node's Figma ID. Use as sourceNodeId to "patternize"
-  whatever the user has selected, with no node creation needed.
-
-  applyPatternFill action args:
-  - sourceNodeId (required) \u2014 Figma node ID or tempId of the tile source
-  - tileType \u2014 'RECTANGULAR' (default) | 'HORIZONTAL_HEXAGONAL' | 'VERTICAL_HEXAGONAL'
-  - scalingFactor \u2014 scale of the tile: 1 = 100%, 0.5 = 50% (default 1)
-  - spacingX / spacingY \u2014 gap between tiles as a ratio (0 = no gap, 0.2 = 20% gap, default 0)
-  - width, height, x, y, name \u2014 target fill rectangle dimensions and position
-  - targetNodeId \u2014 if set, applies fill to an existing node instead of creating a new rectangle
-
-  IMPORTANT: Must use setFillsAsync (not fills=) \u2014 handled automatically by the executor.
-
-  Typical workflow for generated vector tile:
-  1. Create a small frame (e.g., 40x40) to serve as the tile: { method: 'createFrame', tempId: 'tile', args: { width: 40, height: 40 } }
-  2. Add vector shapes inside it: { method: 'createEllipse', parentId: 'tile', args: { x: 5, y: 5, width: 30, height: 30 } }
-  3. Apply as pattern fill on a large rectangle:
-     { method: 'applyPatternFill', parentId: 'root', args: { sourceNodeId: 'tile', tileType: 'HORIZONTAL_HEXAGONAL', spacingX: 0.1, spacingY: 0.1, width: 600, height: 600, name: 'Pattern' } }
-
-  Patternize selection workflow (no tile creation needed):
-  1. Check lib.selectionId is not null
-  2. Emit one action: { method: 'applyPatternFill', args: { sourceNodeId: lib.selectionId, tileType: params.tileType, scalingFactor: params.scale, spacingX: params.spacing, spacingY: params.spacing, width: 600, height: 600, name: 'Pattern' } }
-
-  Prefer applyPatternFill over renderCanvas + applyImageFill whenever the tile can be drawn
-  as vector nodes \u2014 vector patterns are resolution-independent and the tile stays editable.
-
-### Supported create methods
-
-In addition to createRectangle, createFrame, and createText, generators can also use:
-  - createEllipse: creates an ellipse node. Args: x, y, width, height, name (all optional).
-    Perfect for dot patterns, halftone art, circle-based designs.
-  - createVector: creates a vector node from an SVG path string. Args: data (SVG path string,
-    e.g. "M 0 0 L 100 0 L 50 86 Z"), windingRule ("NONZERO" or "EVENODD", default "NONZERO"),
-    x, y, name. Figma auto-sizes the node to fit the path vertices.
-    Use for arbitrary shapes: Voronoi cells, triangles, polygons, organic forms.
-
-### Generator example: colorful circle grid
-
-{
-  "actions": [],
-  "ui": {
-    "replace": true,
-    "mode": "apply",
-    "controls": [
-      { "id": "columns", "type": "slider", "label": "Columns", "props": { "min": 2, "max": 12, "step": 1, "defaultValue": 6 } },
-      { "id": "size", "type": "slider", "label": "Circle Size", "props": { "min": 8, "max": 48, "step": 1, "defaultValue": 16 } },
-      { "id": "spacing", "type": "slider", "label": "Spacing", "props": { "min": 0, "max": 24, "step": 1, "defaultValue": 8 } }
-    ]
-  },
-  "generate": "const cols = params.columns || 6;\\nconst size = params.size || 16;\\nconst spacing = params.spacing || 8;\\nconst frameW = cols * (size + spacing) - spacing;\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'grid', args: { x: 100, y: 100, width: frameW, height: frameW, name: 'Circle Grid' } });\\nfor (let row = 0; row < cols; row++) {\\n  for (let col = 0; col < cols; col++) {\\n    const x = col * (size + spacing);\\n    const y = row * (size + spacing);\\n    actions.push({ method: 'createEllipse', parentId: 'grid', args: { x: x, y: y, width: size, height: size } });\\n    const color = lib.randomColor();\\n    actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [{ type: 'SOLID', color: color }] } });\\n  }\\n}\\nreturn actions;"
-}
-
-### Generator example: color palette with saturation control
-
-{
-  "actions": [],
-  "ui": {
-    "replace": true,
-    "mode": "apply",
-    "controls": [
-      { "id": "baseColor", "type": "color", "label": "Base Color", "props": { "defaultValue": "#3B82F6" } },
-      { "id": "count", "type": "slider", "label": "Swatches", "props": { "min": 3, "max": 12, "step": 1, "defaultValue": 5 } },
-      { "id": "saturation", "type": "slider", "label": "Saturation", "props": { "min": 0, "max": 3, "step": 0.1, "defaultValue": 1 } }
-    ]
-  },
-  "generate": "const base = lib.chroma(params.baseColor || '#3B82F6');\\nconst count = params.count || 5;\\nconst sat = params.saturation ?? 1;\\nconst size = 48;\\nconst gap = 8;\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'palette', args: { x: 100, y: 100, width: count * (size + gap) - gap, height: size, name: 'Palette' } });\\nactions.push({ method: 'setLayoutProperties', nodeId: 'palette', args: { layoutMode: 'HORIZONTAL', itemSpacing: gap } });\\nfor (let i = 0; i < count; i++) {\\n  const hueShift = (i / count) * 60 - 30;\\n  const c = base.set('hsl.h', '+' + hueShift).saturate(sat - 1);\\n  const rgb = lib.chromaToFigma(c);\\n  actions.push({ method: 'createRectangle', parentId: 'palette', args: { width: size, height: size, cornerRadius: 8 } });\\n  actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [{ type: 'SOLID', color: rgb }] } });\\n}\\nreturn actions;"
-}
-
-### Generator example: halftone dot pattern from image
-
-This example shows how to use imageNodeId and pixel data to create a halftone effect.
-The generator samples brightness from the image and creates proportionally-sized dots.
-
-{
-  "actions": [],
-  "ui": {
-    "replace": true,
-    "mode": "apply",
-    "imageNodeId": "10:5",
-    "controls": [
-      { "id": "density", "type": "slider", "label": "Dot Density", "props": { "min": 10, "max": 60, "step": 1, "defaultValue": 30 } },
-      { "id": "maxDot", "type": "slider", "label": "Max Dot Size", "props": { "min": 2, "max": 20, "step": 1, "defaultValue": 8 } },
-      { "id": "bgColor", "type": "color", "label": "Background", "props": { "defaultValue": "#FFFFFF" } }
-    ]
-  },
-  "generate": "const cols = params.density || 30;\\nconst maxDot = params.maxDot || 8;\\nconst bg = lib.hexToRgb(params.bgColor || '#FFFFFF');\\nconst img = lib.imageData;\\nconst rows = Math.round(cols * (img.height / img.width));\\nconst cellW = maxDot + 2;\\nconst frameW = cols * cellW;\\nconst frameH = rows * cellW;\\nconst grid = lib.sampleGrid(cols, rows);\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'halftone', args: { x: 0, y: 0, width: frameW, height: frameH, name: 'Halftone' } });\\nactions.push({ method: 'setFill', nodeId: 'halftone', args: { fills: [{ type: 'SOLID', color: bg }] } });\\nfor (let r = 0; r < rows; r++) {\\n  for (let c = 0; c < cols; c++) {\\n    const b = 1 - grid[r][c].brightness;\\n    const size = Math.max(1, b * maxDot);\\n    const cx = c * cellW + cellW / 2 - size / 2;\\n    const cy = r * cellW + cellW / 2 - size / 2;\\n    actions.push({ method: 'createEllipse', parentId: 'halftone', args: { x: cx, y: cy, width: size, height: size } });\\n    actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }] } });\\n  }\\n}\\nreturn actions;"
-}
-
-### Generator example: Voronoi image mosaic
-
-This example uses lib.Delaunay + createVector + image pixel data to create an organic
-stained-glass mosaic from a selected image. Each cell is a real editable Figma vector.
-
-{
-  "actions": [],
-  "ui": {
-    "replace": true,
-    "mode": "apply",
-    "imageNodeId": "10:5",
-    "controls": [
-      { "id": "cells", "type": "slider", "label": "Cell Count", "props": { "min": 20, "max": 300, "step": 1, "defaultValue": 80 } },
-      { "id": "strokeW", "type": "slider", "label": "Border Width", "props": { "min": 0, "max": 6, "step": 0.5, "defaultValue": 1 } },
-      { "id": "strokeColor", "type": "color", "label": "Border Color", "props": { "defaultValue": "#000000" } }
-    ]
-  },
-  "generate": "const n = params.cells || 80;\\nconst sw = params.strokeW ?? 1;\\nconst sc = lib.hexToRgb(params.strokeColor || '#000000');\\nconst img = lib.imageData;\\nconst W = 400;\\nconst H = Math.round(W * (img.height / img.width));\\nconst points = [];\\nfor (let i = 0; i < n; i++) points.push([Math.random() * W, Math.random() * H]);\\nconst voronoi = lib.Delaunay.from(points).voronoi([0, 0, W, H]);\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'mosaic', args: { x: 0, y: 0, width: W, height: H, name: 'Voronoi Mosaic' } });\\nfor (let i = 0; i < n; i++) {\\n  const path = voronoi.renderCell(i);\\n  const px = Math.round(points[i][0] * (img.width / W));\\n  const py = Math.round(points[i][1] * (img.height / H));\\n  const pixel = lib.getPixel(px, py);\\n  const color = { r: pixel.r / 255, g: pixel.g / 255, b: pixel.b / 255 };\\n  actions.push({ method: 'createVector', parentId: 'mosaic', args: { data: path } });\\n  actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [{ type: 'SOLID', color: color }] } });\\n  if (sw > 0) actions.push({ method: 'setStroke', nodeId: '__prev', args: { strokes: [{ type: 'SOLID', color: sc }], weight: sw } });\\n}\\nreturn actions;"
-}
-
-### Generator example: Gaussian blur bitmap effect
-
-This example shows how to use lib.processImage + applyImageFill for pixel-level effects.
-The generator processes the source image through Canvas2D and writes back a new image fill.
-
-{
-  "actions": [],
-  "ui": {
-    "replace": true,
-    "mode": "apply",
-    "imageNodeId": "10:5",
-    "imageMaxWidth": 400,
-    "controls": [
-      { "id": "radius", "type": "slider", "label": "Blur Radius", "props": { "min": 0, "max": 20, "step": 0.5, "defaultValue": 4 } }
-    ]
-  },
-  "generate": "const r = params.radius || 4;\\nconst img = lib.imageData;\\nconst W = img.width;\\nconst H = img.height;\\nconst bytes = lib.processImage((ctx, canvas) => {\\n  ctx.filter = 'blur(' + r + 'px)';\\n  ctx.drawImage(canvas, 0, 0);\\n});\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: W, height: H, name: 'Blurred' } });\\nactions.push({ method: 'applyImageFill', parentId: 'root', args: { imageBytes: bytes, width: W, height: H, name: 'result' } });\\nreturn actions;"
-}
-
-### Generator example: 3D wireframe sphere
-
-This example shows how to use lib.sphere + lib.rotate3D + lib.project3D + lib.pointsToSvgPath
-to render a 3D wireframe as editable Figma vectors. Controls for X/Y rotation and segment count.
-
-{
-  "actions": [],
-  "ui": {
-    "replace": true,
-    "mode": "apply",
-    "controls": [
-      { "id": "rx", "type": "angle", "label": "Rotate X", "props": { "min": -180, "max": 180, "step": 1, "defaultValue": 30 } },
-      { "id": "ry", "type": "angle", "label": "Rotate Y", "props": { "min": -180, "max": 180, "step": 1, "defaultValue": 45 } },
-      { "id": "segments", "type": "slider", "label": "Segments", "props": { "min": 4, "max": 20, "step": 1, "defaultValue": 10 } },
-      { "id": "color", "type": "color", "label": "Stroke Color", "props": { "defaultValue": "#3B82F6" } }
-    ]
-  },
-  "generate": "const SIZE = 300; const cx = SIZE/2; const cy = SIZE/2; const mesh = lib.sphere(120, Math.round(params.segments)); const rotated = mesh.vertices.map(v => lib.rotate3D(v, params.rx, params.ry, 0)); const projected = rotated.map(v => lib.project3D(v, 500)); const sorted = mesh.faces.slice().sort((a,b) => { const az = a.reduce((s,i)=>s+rotated[i].z,0)/a.length; const bz = b.reduce((s,i)=>s+rotated[i].z,0)/b.length; return az - bz; }); const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: SIZE, height: SIZE, name: '3D Sphere' } }); const col = lib.chroma(params.color || '#3B82F6'); for (const face of sorted) { const pts = face.map(i => ({ x: cx + projected[i].x, y: cy + projected[i].y })); const path = lib.pointsToSvgPath(pts, true); const avgZ = face.reduce((s,i)=>s+rotated[i].z,0)/face.length; const lightness = lib.mapRange(avgZ, -120, 120, 0.4, 1); const fc = col.luminance(lightness * 0.25); actions.push({ method: 'createVector', parentId: 'root', args: { data: path, name: 'face', fills: [{ type: 'SOLID', color: lib.chromaToFigma(fc), opacity: 0.9 }], strokes: [] } }); } return actions;"
-}
-
-### Generator example: organic blob shape (superformula)
-
-This example uses lib.superformulaPath to generate an organic shape with intuitive controls
-for symmetry (petals), roundness, and spikiness. A single createVector action outputs the shape.
-
-{
-  "actions": [],
-  "ui": {
-    "replace": true,
-    "mode": "apply",
-    "controls": [
-      { "id": "petals", "type": "slider", "label": "Petals / Symmetry", "props": { "min": 1, "max": 12, "step": 1, "defaultValue": 5 } },
-      { "id": "roundness", "type": "slider", "label": "Roundness", "props": { "min": 0.1, "max": 20, "step": 0.1, "defaultValue": 1 } },
-      { "id": "spikiness", "type": "slider", "label": "Spikiness", "props": { "min": 0.1, "max": 5, "step": 0.1, "defaultValue": 0.5 } },
-      { "id": "size", "type": "slider", "label": "Size", "props": { "min": 50, "max": 300, "step": 10, "defaultValue": 150 } },
-      { "id": "fillColor", "type": "color", "label": "Fill", "props": { "defaultValue": "#6366F1" } }
-    ]
-  },
-  "generate": "const sz = params.size || 150; const FRAME = sz * 2 + 40; const cx = FRAME/2; const cy = FRAME/2; const path = lib.superformulaPath({ m: Math.round(params.petals), n1: params.roundness, n2: params.spikiness, n3: params.spikiness }, 256, sz); const col = lib.chroma(params.fillColor || '#6366F1'); const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: FRAME, height: FRAME, name: 'Organic Shape' } }); actions.push({ method: 'createVector', parentId: 'root', args: { data: path, x: cx, y: cy, name: 'shape', fills: [{ type: 'SOLID', color: lib.chromaToFigma(col), opacity: 1 }], strokes: [] } }); return actions;"
-}
-
-### Generator example: seamless dot pattern tile (renderCanvas)
-
-This example uses lib.renderCanvas to draw a repeating dot tile and applyImageFill with
-scaleMode TILE to fill a rectangle with an infinite pattern. No source image needed.
-
-{
-  "actions": [],
-  "ui": {
-    "replace": true,
-    "mode": "apply",
-    "controls": [
-      { "id": "spacing", "type": "slider", "label": "Dot Spacing", "props": { "min": 12, "max": 80, "step": 4, "defaultValue": 32 } },
-      { "id": "dotSize", "type": "slider", "label": "Dot Size", "props": { "min": 2, "max": 30, "step": 1, "defaultValue": 8 } },
-      { "id": "dotColor", "type": "color", "label": "Dot Color", "props": { "defaultValue": "#1E293B" } },
-      { "id": "bgColor", "type": "color", "label": "Background", "props": { "defaultValue": "#F8FAFC" } }
-    ]
-  },
-  "generate": "const sp = Math.max(12, params.spacing || 32); const r = Math.min((params.dotSize || 8) / 2, sp/2 - 1); const bytes = lib.renderCanvas(sp, sp, (ctx) => { ctx.fillStyle = params.bgColor || '#F8FAFC'; ctx.fillRect(0, 0, sp, sp); ctx.fillStyle = params.dotColor || '#1E293B'; ctx.beginPath(); ctx.arc(sp/2, sp/2, r, 0, Math.PI*2); ctx.fill(); }); const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: 400, height: 400, name: 'Dot Pattern' } }); actions.push({ method: 'applyImageFill', parentId: 'root', args: { imageBytes: bytes, width: 400, height: 400, scaleMode: 'TILE', name: 'pattern' } }); return actions;"
-}
-
-### Generator example: vector hexagonal dot pattern (applyPatternFill)
-
-This example uses applyPatternFill with a generated tile node for a fully vector, scalable
-hexagonal dot pattern. The tile source frame is created first, then referenced as the pattern.
-
-{
-  "actions": [],
-  "ui": {
-    "replace": true,
-    "mode": "apply",
-    "controls": [
-      { "id": "dotSize", "type": "slider", "label": "Dot Size", "props": { "min": 4, "max": 40, "step": 2, "defaultValue": 16 } },
-      { "id": "spacing", "type": "slider", "label": "Spacing", "props": { "min": 0, "max": 0.5, "step": 0.05, "defaultValue": 0.1 } },
-      { "id": "tileType", "type": "segmented", "label": "Tile Type", "props": { "options": [{ "value": "RECTANGULAR", "label": "Grid" }, { "value": "HORIZONTAL_HEXAGONAL", "label": "Hex" }], "defaultValue": "HORIZONTAL_HEXAGONAL" } },
-      { "id": "dotColor", "type": "color", "label": "Dot Color", "props": { "defaultValue": "#3B82F6" } },
-      { "id": "bgColor", "type": "color", "label": "Background", "props": { "defaultValue": "#F8FAFC" } }
-    ]
-  },
-  "generate": "const ds = params.dotSize || 16; const pad = ds * 0.3; const tileSize = ds + pad * 2; const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: 500, height: 500, name: 'Hex Dot Pattern', fills: [{ type: 'SOLID', color: lib.chromaToFigma(lib.chroma(params.bgColor || '#F8FAFC')), opacity: 1 }] } }); actions.push({ method: 'createFrame', tempId: 'tile', args: { width: tileSize, height: tileSize, fills: [] } }); actions.push({ method: 'createEllipse', parentId: 'tile', args: { x: pad, y: pad, width: ds, height: ds, fills: [{ type: 'SOLID', color: lib.chromaToFigma(lib.chroma(params.dotColor || '#3B82F6')), opacity: 1 }] } }); actions.push({ method: 'applyPatternFill', parentId: 'root', args: { sourceNodeId: 'tile', tileType: params.tileType || 'HORIZONTAL_HEXAGONAL', spacingX: params.spacing || 0.1, spacingY: params.spacing || 0.1, width: 500, height: 500, name: 'pattern' } }); return actions;"
-}
-
-### Generator example: patternize selected node
-
-This example tiles whatever node the user currently has selected, using lib.selectionId as
-the pattern source. No node creation \u2014 the selected frame/vector becomes the repeating tile.
-
-{
-  "actions": [],
-  "ui": {
-    "replace": true,
-    "mode": "apply",
-    "controls": [
-      { "id": "tileType", "type": "segmented", "label": "Tile Type", "props": { "options": [{ "value": "RECTANGULAR", "label": "Grid" }, { "value": "HORIZONTAL_HEXAGONAL", "label": "Hex H" }, { "value": "VERTICAL_HEXAGONAL", "label": "Hex V" }], "defaultValue": "RECTANGULAR" } },
-      { "id": "scale", "type": "slider", "label": "Scale", "props": { "min": 0.1, "max": 2, "step": 0.05, "defaultValue": 1 } },
-      { "id": "spacing", "type": "slider", "label": "Gap", "props": { "min": 0, "max": 0.5, "step": 0.05, "defaultValue": 0 } },
-      { "id": "size", "type": "slider", "label": "Canvas Size", "props": { "min": 200, "max": 1200, "step": 100, "defaultValue": 600 } }
-    ]
-  },
-  "generate": "if (!lib.selectionId) { return []; } const sz = params.size || 600; const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: sz, height: sz, name: 'Tiled Pattern' } }); actions.push({ method: 'applyPatternFill', parentId: 'root', args: { sourceNodeId: lib.selectionId, tileType: params.tileType || 'RECTANGULAR', scalingFactor: params.scale || 1, spacingX: params.spacing || 0, spacingY: params.spacing || 0, width: sz, height: sz, name: 'pattern' } }); return actions;"
-}
-
-### Key rules for generators
-
-1. The generate value is a STRING (not a function declaration). It is the function body.
-   Use \\n for newlines inside the JSON string. Do NOT wrap in function(...){...}.
-2. Always return an array of ActionDescriptor objects.
-3. **The very first action MUST be a createFrame with a tempId** (e.g. tempId: "root").
-   This root frame is how the runtime identifies and reuses the generated output.
-   All subsequent child nodes should use parentId referencing this root frame's tempId.
-4. Use tempId on created nodes and reference them in subsequent actions via nodeId or parentId.
-5. Use "__prev" as nodeId to target the most recently created node.
-6. For 2D grids, compute x/y positions explicitly using row and column math.
-   Do NOT use layoutWrap for grids \u2014 it is fragile and breaks when the frame width is off.
-   Use auto-layout (layoutMode: "HORIZONTAL") only for single-axis stacking (e.g. palette row).
-7. Use parentId on child nodes to place them inside a frame created in the same batch.
-8. You have full JavaScript: loops, Math.random(), conditionals, string manipulation, etc.
-9. Access control values via params.controlId (e.g. params.columns, params.size).
-10. Use lib helpers for color/noise/easing \u2014 do NOT try to import anything. Everything is on lib.
-11. When the user asks to iterate (add a control, change behavior), you MUST output the
-    complete updated generate function that includes ALL existing logic plus the new feature.
-    Generators are replaced wholesale, not merged. If the current plugin has controls for
-    spiralTightness, startingSize, sizeGrowth, and randomizeColors, and the user asks to add
-    cornerRadius \u2014 your new generate function must handle ALL SIX params, not just cornerRadius.
-12. To convert a chroma color to a Figma fill color, always use lib.chromaToFigma(chromaColor).
-    This returns { r, g, b } in 0-1 range, ready for paint objects.
-13. For image-processing plugins, set "imageNodeId" on the ui object to the selected node's ID.
-    The runtime will pre-fetch pixel data and make it available as lib.imageData before the
-    generator runs. Use lib.sampleGrid(cols, rows), lib.getPixel(x, y), and
-    lib.getBrightness(x, y) to read pixel values.
-14. Use createEllipse for circles and dot patterns (same args as createRectangle minus cornerRadius).
-15. Use createVector for arbitrary shapes (Voronoi cells, triangles, polygons, organic forms).
-    Pass an SVG path string as the "data" arg. lib.Delaunay produces these directly.
-16. For Voronoi/Delaunay art: lib.Delaunay.from(points) creates the triangulation, then
-    .voronoi([0,0,w,h]) gives the diagram. voronoi.renderCell(i) returns SVG path strings.
-17. For bitmap/pixel image effects (blur, sharpen, posterize, vignette, color grading, glitch,
-    pixelate), use lib.processImage to manipulate pixels via Canvas2D, then emit an
-    applyImageFill action with the resulting bytes. Set "imageMaxWidth": 400 (or higher)
-    on the UISpec for acceptable output quality. The first action must still be createFrame
-    with a tempId for the root container.
-18. lib.processImage(fn) is synchronous. The fn callback receives (ctx, canvas). Use
-    ctx.getImageData / ctx.putImageData for manual pixel manipulation, or ctx.filter for
-    CSS filter shortcuts (blur, contrast, brightness, etc.).
-19. For 3D shapes, use lib.rotate3D + lib.project3D to project vertices to 2D, then
-    lib.pointsToSvgPath to build face/edge paths for createVector. Sort faces by average Z
-    (ascending = back first) for correct painter's-algorithm (back-to-front) rendering. Use
-    lib.cube / lib.sphere / lib.torus to get vertices and faces arrays, or define custom meshes.
-20. For organic/blob shapes, use lib.superformulaPath to generate the base SVG path. Pair
-    with lib.noise for natural variation: offset superformula radii by noise before building
-    the path. lib.superformula(theta, m, n1, n2, n3) returns the raw radius if you need
-    per-point control. Map creative parameter names like "petals", "roundness", "spikiness"
-    directly to m, n1, n2/n3 so controls feel intuitive to the user.
-21. For seamless pattern fills, use lib.renderCanvas(w, h, fn) to draw a tile image from
-    scratch (no source image needed), then emit applyImageFill with scaleMode "TILE". The
-    tile dimensions should be kept small (32-128px) for crisp tiling. renderCanvas is
-    synchronous and returns number[] bytes just like processImage.
-22. For vector pattern fills, use applyPatternFill with a sourceNodeId pointing to the tile
-    node. Create the tile node first (give it a tempId like "tile"), then reference it in
-    applyPatternFill. Prefer applyPatternFill over renderCanvas + applyImageFill whenever the
-    tile can be drawn as vector nodes \u2014 the result is resolution-independent and the tile
-    source remains editable. For "patternize this" requests, use lib.selectionId as the
-    sourceNodeId and skip tile creation entirely.
-
-### When to use generate vs live mode
-
-- **Live mode** (no generate): Simple property manipulation on existing nodes.
-  Controls have "action"/"actions" that fire immediately. Good for shadows, fills, opacity, etc.
-- **Apply mode + generate**: Creating nodes, loops, randomness, computed layouts, patterns.
-  Controls have NO action/actions \u2014 the generator handles everything via the Apply button.
-
-Key points for the live-mode example above:
-- Top-level action uses "effects": [...] (full replace, runs once).
-- Control actions use "property" + "effectType" (patch form, runs per interaction).
-- defaultValue on each control matches the initial state.
-
----
-
-## Constraints
-
-- Only reference node IDs from the selection context, or tempIds assigned in the same batch.
-- Keep panels concise \u2014 3 to 8 controls is ideal. Use sections for grouping.
-- If the request can't be fulfilled with the selection, set actions to [] and explain in "message".
-- Do not add controls for properties that can't be live-updated (e.g. font loading).
-- When in doubt, produce fewer, better-chosen controls rather than a long list.
-- For generative plugins (grids, patterns, randomized content), ALWAYS use apply mode with
-  a "generate" function. The generator can use loops, Math.random(), and the lib helpers.
-- For ANY color manipulation beyond basic hex/opacity (saturate, desaturate, darken, lighten,
-  hue shift, palette generation, color mixing, contrast), ALWAYS use apply mode with a
-  generator that uses lib.chroma. Figma has no saturation/hue API \u2014 you must compute the
-  final RGB and emit it as a concrete color in a setFill/setStroke action.
-- The "generate" field is a string containing JavaScript function body code. It is the ONLY
-  place where executable JS is allowed. Never put JS in "actions" or control "action" fields.
-- All lib functions are pre-bundled \u2014 never try to import or require external modules.
-- For bitmap image effects (blur, sharpen, posterize, vignette, color grading, glitch, pixelate,
-  etc.), ALWAYS use apply mode with imageNodeId, set imageMaxWidth to 400+, use
-  lib.processImage for Canvas2D manipulation, and emit applyImageFill with the result bytes.
-  This pipeline processes from the original source every time \u2014 non-destructive by design.
-`;
-
-  // src/ui/prompt/prompt-composer.ts
-  function composePrompt(selectionContext, currentUISpec, chatHistory, userMessage) {
-    const apiMessages = [];
-    const preambleParts = [];
-    if (selectionContext && selectionContext.nodes.length > 0) {
-      preambleParts.push(
-        "## Current Figma selection\n```json\n" + JSON.stringify(selectionContext, null, 2) + "\n```"
-      );
-      if (selectionContext.truncated) {
-        preambleParts.push(
-          "_Note: selection context was truncated to fit the token budget._"
-        );
-      }
-    } else {
-      preambleParts.push("## Current Figma selection\nNo nodes selected.");
-    }
-    if (currentUISpec) {
-      preambleParts.push(
-        "## Current control panel spec (may be refined by this turn)\n```json\n" + JSON.stringify(currentUISpec, null, 2) + "\n```"
-      );
-    }
-    if (preambleParts.length > 0) {
-      apiMessages.push({ role: "user", content: preambleParts.join("\n\n") });
-      apiMessages.push({
-        role: "assistant",
-        content: "Understood. I have the selection context and will respond with the required JSON format."
-      });
-    }
-    const conversationHistory = chatHistory.filter((m3) => m3.role !== "error");
-    for (const msg of conversationHistory) {
-      apiMessages.push({
-        role: msg.role === "user" ? "user" : "assistant",
-        content: msg.content
-      });
-    }
-    const last = apiMessages[apiMessages.length - 1];
-    if (last && last.role === "user") {
-      apiMessages[apiMessages.length - 1] = {
-        role: "user",
-        content: last.content + "\n\n" + userMessage
-      };
-    } else {
-      apiMessages.push({ role: "user", content: userMessage });
-    }
-    return { system: SYSTEM_PROMPT, messages: apiMessages };
-  }
-  function parseLLMResponse(text) {
-    let raw = text.trim();
-    const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (fenceMatch) {
-      raw = fenceMatch[1].trim();
-    }
-    let parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      const objMatch = raw.match(/\{[\s\S]*\}/);
-      if (objMatch) {
-        try {
-          parsed = JSON.parse(objMatch[0]);
-        } catch {
-          return { ok: false, error: `LLM response is not valid JSON. Raw response:
-${text.slice(0, 300)}` };
-        }
-      } else {
-        return { ok: false, error: `LLM response contained no JSON object. Raw response:
-${text.slice(0, 300)}` };
-      }
-    }
-    if (typeof parsed !== "object" || parsed === null) {
-      return { ok: false, error: "LLM response parsed to a non-object." };
-    }
-    const obj = parsed;
-    if (!Array.isArray(obj.actions)) {
-      return { ok: false, error: 'LLM response missing required "actions" array.' };
-    }
-    if (typeof obj.ui !== "object" || obj.ui === null) {
-      return { ok: false, error: 'LLM response missing required "ui" object.' };
-    }
-    const ui = obj.ui;
-    if (!Array.isArray(ui.controls)) {
-      return { ok: false, error: 'LLM response "ui" object is missing "controls" array.' };
-    }
-    return {
-      ok: true,
-      data: {
-        actions: obj.actions,
-        ui: obj.ui,
-        message: typeof obj.message === "string" ? obj.message : void 0,
-        generate: typeof obj.generate === "string" ? obj.generate : void 0
-      }
-    };
-  }
-
-  // src/ui/renderer/UIRenderer.tsx
-  var import_react40 = __toESM(require_react());
-
-  // src/ui/components/Slider.tsx
-  var import_react26 = __toESM(require_react());
-
   // node_modules/framer-motion/dist/es/components/AnimatePresence/index.mjs
-  var import_jsx_runtime5 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime4 = __toESM(require_jsx_runtime(), 1);
   var import_react11 = __toESM(require_react(), 1);
 
   // node_modules/framer-motion/dist/es/context/LayoutGroupContext.mjs
@@ -26802,7 +25716,7 @@ ${text.slice(0, 300)}` };
   var useIsomorphicLayoutEffect = isBrowser ? import_react4.useLayoutEffect : import_react4.useEffect;
 
   // node_modules/framer-motion/dist/es/components/AnimatePresence/PresenceChild.mjs
-  var import_jsx_runtime4 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime3 = __toESM(require_jsx_runtime(), 1);
   var React3 = __toESM(require_react(), 1);
   var import_react8 = __toESM(require_react(), 1);
 
@@ -26811,7 +25725,7 @@ ${text.slice(0, 300)}` };
   var PresenceContext = /* @__PURE__ */ (0, import_react5.createContext)(null);
 
   // node_modules/framer-motion/dist/es/components/AnimatePresence/PopChild.mjs
-  var import_jsx_runtime3 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime2 = __toESM(require_jsx_runtime(), 1);
 
   // node_modules/motion-utils/dist/es/array.mjs
   function addUniqueItem(arr, item) {
@@ -33495,7 +32409,7 @@ ${text.slice(0, 300)}` };
         }
       };
     }, [isPresent]);
-    return (0, import_jsx_runtime3.jsx)(PopChildMeasure, { isPresent, childRef: ref, sizeRef: size, pop, children: pop === false ? children : React2.cloneElement(children, { ref: composedRef }) });
+    return (0, import_jsx_runtime2.jsx)(PopChildMeasure, { isPresent, childRef: ref, sizeRef: size, pop, children: pop === false ? children : React2.cloneElement(children, { ref: composedRef }) });
   }
 
   // node_modules/framer-motion/dist/es/components/AnimatePresence/PresenceChild.mjs
@@ -33533,8 +32447,8 @@ ${text.slice(0, 300)}` };
     React3.useEffect(() => {
       !isPresent && !presenceChildren.size && onExitComplete && onExitComplete();
     }, [isPresent]);
-    children = (0, import_jsx_runtime4.jsx)(PopChild, { pop: mode === "popLayout", isPresent, anchorX, anchorY, root: root2, children });
-    return (0, import_jsx_runtime4.jsx)(PresenceContext.Provider, { value: context, children });
+    children = (0, import_jsx_runtime3.jsx)(PopChild, { pop: mode === "popLayout", isPresent, anchorX, anchorY, root: root2, children });
+    return (0, import_jsx_runtime3.jsx)(PresenceContext.Provider, { value: context, children });
   };
   function newChildrenMap() {
     return /* @__PURE__ */ new Map();
@@ -33617,7 +32531,7 @@ ${text.slice(0, 300)}` };
       console.warn(`You're attempting to animate multiple children within AnimatePresence, but its mode is set to "wait". This will lead to odd visual behaviour.`);
     }
     const { forceRender } = (0, import_react11.useContext)(LayoutGroupContext);
-    return (0, import_jsx_runtime5.jsx)(import_jsx_runtime5.Fragment, { children: renderedChildren.map((child) => {
+    return (0, import_jsx_runtime4.jsx)(import_jsx_runtime4.Fragment, { children: renderedChildren.map((child) => {
       const key = getChildKey(child);
       const isPresent = propagate && !isParentPresent ? false : presentChildren === renderedChildren || presentKeys.includes(key);
       const onExit = () => {
@@ -33642,7 +32556,7 @@ ${text.slice(0, 300)}` };
           onExitComplete && onExitComplete();
         }
       };
-      return (0, import_jsx_runtime5.jsx)(PresenceChild, { isPresent, initial: !isInitialRender.current || initial ? void 0 : false, custom, presenceAffectsLayout, mode, root: root2, onExitComplete: isPresent ? void 0 : onExit, anchorX, anchorY, children: child }, key);
+      return (0, import_jsx_runtime4.jsx)(PresenceChild, { isPresent, initial: !isInitialRender.current || initial ? void 0 : false, custom, presenceAffectsLayout, mode, root: root2, onExitComplete: isPresent ? void 0 : onExit, anchorX, anchorY, children: child }, key);
     }) });
   };
 
@@ -33764,7 +32678,7 @@ ${text.slice(0, 300)}` };
   }
 
   // node_modules/framer-motion/dist/es/motion/index.mjs
-  var import_jsx_runtime6 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime5 = __toESM(require_jsx_runtime(), 1);
   var import_react22 = __toESM(require_react(), 1);
 
   // node_modules/framer-motion/dist/es/context/MotionContext/index.mjs
@@ -34178,7 +33092,7 @@ ${text.slice(0, 300)}` };
         MeasureLayout2 = layoutProjection.MeasureLayout;
         context.visualElement = useVisualElement(Component3, visualState, configAndProps, createVisualElement, layoutProjection.ProjectionNode, isSVG);
       }
-      return (0, import_jsx_runtime6.jsxs)(MotionContext.Provider, { value: context, children: [MeasureLayout2 && context.visualElement ? (0, import_jsx_runtime6.jsx)(MeasureLayout2, { visualElement: context.visualElement, ...configAndProps }) : null, useRender(Component3, props, useMotionRef(visualState, context.visualElement, externalRef), visualState, isStatic, forwardMotionProps, isSVG)] });
+      return (0, import_jsx_runtime5.jsxs)(MotionContext.Provider, { value: context, children: [MeasureLayout2 && context.visualElement ? (0, import_jsx_runtime5.jsx)(MeasureLayout2, { visualElement: context.visualElement, ...configAndProps }) : null, useRender(Component3, props, useMotionRef(visualState, context.visualElement, externalRef), visualState, isStatic, forwardMotionProps, isSVG)] });
     }
     MotionDOMComponent.displayName = `motion.${typeof Component3 === "string" ? Component3 : `create(${Component3.displayName ?? Component3.name ?? ""})`}`;
     const ForwardRefMotionComponent = (0, import_react22.forwardRef)(MotionDOMComponent);
@@ -35124,7 +34038,7 @@ ${text.slice(0, 300)}` };
   };
 
   // node_modules/framer-motion/dist/es/motion/features/layout/MeasureLayout.mjs
-  var import_jsx_runtime7 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime6 = __toESM(require_jsx_runtime(), 1);
   var import_react24 = __toESM(require_react(), 1);
   var hasTakenAnySnapshot = false;
   var MeasureLayoutWithContext = class extends import_react24.Component {
@@ -35222,7 +34136,7 @@ ${text.slice(0, 300)}` };
   function MeasureLayout(props) {
     const [isPresent, safeToRemove] = usePresence();
     const layoutGroup = (0, import_react24.useContext)(LayoutGroupContext);
-    return (0, import_jsx_runtime7.jsx)(MeasureLayoutWithContext, { ...props, layoutGroup, switchLayoutGroup: (0, import_react24.useContext)(SwitchLayoutGroupContext), isPresent, safeToRemove });
+    return (0, import_jsx_runtime6.jsx)(MeasureLayoutWithContext, { ...props, layoutGroup, switchLayoutGroup: (0, import_react24.useContext)(SwitchLayoutGroupContext), isPresent, safeToRemove });
   }
 
   // node_modules/framer-motion/dist/es/motion/features/drag.mjs
@@ -35903,7 +34817,1090 @@ ${text.slice(0, 300)}` };
   }
   var animate = createScopedAnimate();
 
+  // src/ui/chat/ChatHistory.tsx
+  var import_jsx_runtime7 = __toESM(require_jsx_runtime());
+  var OPACITIES = [0.25, 0.55, 0.9];
+  var SCALES = [0.9, 0.95, 1];
+  function ChatHistory({ messages }) {
+    if (messages.length === 0) return null;
+    const recent = messages.slice(-3);
+    const opacities = OPACITIES.slice(-recent.length);
+    const scales = SCALES.slice(-recent.length);
+    return /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "chat-history", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(AnimatePresence, { mode: "popLayout", children: recent.map((msg, i2) => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+      motion.div,
+      {
+        className: `chat-prompt chat-prompt--${msg.role}`,
+        layout: true,
+        initial: { opacity: 0, scale: 0.95, y: 8 },
+        animate: { opacity: opacities[i2], scale: scales[i2], y: 0 },
+        exit: { opacity: 0, scale: 0.9, y: -8 },
+        transition: { type: "spring", visualDuration: 0.3, bounce: 0.1 },
+        children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "chat-prompt-text", children: msg.content })
+      },
+      msg.id
+    )) }) });
+  }
+
+  // src/ui/api/claude.ts
+  var ANTHROPIC_API_KEY = "sk-ant-REDACTED";
+  var PROXY_URL = "http://localhost:3333/v1/messages";
+  var MODEL = "claude-sonnet-4-5";
+  var MAX_TOKENS = 16384;
+  async function callClaude(messages, systemPrompt) {
+    if (!ANTHROPIC_API_KEY || ANTHROPIC_API_KEY === "YOUR_API_KEY_HERE") {
+      return {
+        ok: false,
+        error: "No API key configured. Set ANTHROPIC_API_KEY in src/ui/api/claude.ts."
+      };
+    }
+    let response;
+    try {
+      response = await fetch(PROXY_URL, {
+        method: "POST",
+        headers: {
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: MAX_TOKENS,
+          system: systemPrompt,
+          messages
+        })
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        ok: false,
+        error: `Cannot reach proxy at ${PROXY_URL}. Run \`node proxy.mjs\` in the project root. (${msg})`
+      };
+    }
+    if (!response.ok) {
+      let detail = "";
+      try {
+        const body = await response.json();
+        const raw = body.error?.message;
+        if (typeof raw === "string") detail = raw;
+        else if (raw !== void 0) detail = JSON.stringify(raw);
+      } catch {
+      }
+      const prefix = response.status === 429 ? "Rate limited" : `API error ${response.status}`;
+      return { ok: false, error: detail ? `${prefix}: ${detail}` : prefix };
+    }
+    let data;
+    let rawText = "";
+    try {
+      rawText = await response.text();
+      data = JSON.parse(rawText);
+    } catch {
+      return { ok: false, error: `Failed to parse API response as JSON. Raw: ${rawText.slice(0, 200)}` };
+    }
+    const textBlock = data.content?.find((b2) => b2.type === "text");
+    if (!textBlock?.text) {
+      return { ok: false, error: "API returned no text content." };
+    }
+    return { ok: true, text: textBlock.text };
+  }
+
+  // src/ui/prompt/system-prompt.ts
+  var SYSTEM_PROMPT = `You are a plugin designer embedded inside Figma. The user describes what they want, and you
+build them a custom plugin on the fly \u2014 both the canvas changes (actions) and the control panel
+(UI) to tweak the result live.
+
+You are creative. Invent the best control panel for each request. There is no fixed template \u2014
+choose controls, groupings, and coordinated actions that make the most useful, most delightful
+plugin for the task. Think beyond Figma's native UI: one slider can drive many properties at once,
+a single "depth" control can coordinate blur + spread + offset + opacity together, etc.
+
+The user will iterate with you through conversation. They might say "create a drop shadow," then
+"add a color picker," then "make spread go up to 100." Treat each message as an edit to the
+current plugin. Preserve existing controls unless told to replace them.
+
+## Response format
+
+Respond with a single JSON object \u2014 no prose, no markdown fences:
+
+{
+  "actions": [ ... ],
+  "ui": {
+    "replace": <true|false>,
+    "mode": <"live"|"apply">,
+    "controls": [ ... ]
+  },
+  "generate": "<JS function body string, optional>"
+}
+
+- "actions": canvas changes to execute NOW (once). Omit actions that were already executed in a
+  previous turn \u2014 do not re-run them.
+- "ui.replace": set true on the first response or when rebuilding from scratch. Set false when
+  adding or updating individual controls (the renderer merges by control id).
+- "ui.mode": the runtime chooses this automatically based on the task:
+  * Use "live" when modifying properties on existing nodes (e.g. shadow, fill, stroke, opacity).
+    Controls patch nodes immediately on every slider drag.
+  * Use "apply" when creating/generating multiple nodes (grids, patterns, layouts, carousels),
+    when ANY control requires computation (randomness, loops, formulas, conditional logic),
+    or when a control needs a library function (color manipulation, noise, easing, etc.).
+    Controls collect values locally and an Apply button re-executes the full batch.
+  The user should NEVER have to ask for a mode \u2014 you decide based on the nature of the request.
+- "ui.controls": the full or partial control list.
+- "generate": a JavaScript function body string for apply-mode plugins that need computation.
+  See the "Generator functions" section below. When "generate" is present, set "actions": []
+  (the generator auto-executes with default control values on first load).
+
+If you need to ask a clarifying question or cannot fulfill the request, return
+"actions": [], "ui": { "replace": false, "controls": [] }, and add a "message" key with your
+question.
+
+---
+
+## Action format
+
+{
+  "method":   "<method name>",
+  "nodeId":   "<existing node id, optional>",
+  "parentId": "<parent node id for appendChild, optional>",
+  "tempId":   "<temp id you assign to a new node, optional>",
+  "args":     { ... }
+}
+
+Supported methods:
+
+| method              | description                            | key args                                                |
+|---------------------|----------------------------------------|---------------------------------------------------------|
+| createRectangle     | Creates a rectangle                    | x, y, width, height, cornerRadius, name                |
+| createFrame         | Creates a frame                        | x, y, width, height, name                              |
+| createEllipse       | Creates an ellipse / circle            | x, y, width, height, name                              |
+| createVector        | Creates a vector from SVG path data    | data (SVG path string), windingRule, x, y, name        |
+| createText          | Creates a text node                    | x, y, characters, fontSize                             |
+| setProperty         | Sets any scalar property               | property (string), value (any)                          |
+| setFill             | Replaces or patches fills              | Full replace: fills (paint array). Patch: property + value |
+| setStroke           | Replaces or patches strokes            | Full replace: strokes (paint array), weight, align. Patch: property + value |
+| setEffect           | Replaces or patches effects            | See below                                               |
+| setCornerRadius     | Sets corner radius                     | radius (number)                                         |
+| setLayoutProperties | Sets auto-layout props                 | layoutMode, primaryAxisSizing, counterAxisSizing, padding, itemSpacing |
+| resize              | Resizes a node                         | width, height                                           |
+| applyImageFill      | Creates/updates rect with processed PNG as image fill | imageBytes (number[]), targetNodeId, width, height, x, y, name, scaleMode |
+| appendChild         | Moves a node into a parent             | (use parentId on the action)                            |
+| deleteNode          | Deletes a node                         | (nodeId is the target)                                  |
+
+When referencing a node created in the same batch, use its tempId as nodeId in later actions.
+
+### Paint object
+  Solid: { "type": "SOLID", "color": { "r": 0-1, "g": 0-1, "b": 0-1 }, "opacity": 0-1 }
+
+### setFill / setStroke \u2014 two forms (same pattern as setEffect)
+
+1. **Full replace** (top-level actions): pass "fills"/"strokes" array.
+2. **Property patch** (control actions): pass "property" and the value comes from the control.
+   Patches the first fill/stroke in the array without replacing.
+
+   For setFill, patchable properties: "opacity", "color"
+   For setStroke, patchable properties: "opacity", "weight" (sets strokeWeight), "align" (sets strokeAlign)
+
+   Example control action for fill opacity slider:
+   { "method": "setFill", "nodeId": "10:5", "args": { "property": "opacity" } }
+
+   Example control action for stroke weight slider:
+   { "method": "setStroke", "nodeId": "10:5", "args": { "property": "weight" } }
+
+### Effect objects
+  Shadow: { "type": "DROP_SHADOW", "color": { "r":0,"g":0,"b":0,"a":0.25 }, "offset": { "x":0,"y":4 }, "radius":8, "spread":0, "visible":true }
+  Blur:   { "type": "LAYER_BLUR", "radius": 8, "visible": true }
+
+### setEffect \u2014 two forms
+
+1. **Full replace** (top-level actions only): pass "effects": [ ... ] to set the entire effects array.
+2. **Property patch** (control actions only): pass "property", "effectType", and optionally "effectIndex".
+   The executor reads the existing effects, patches just that property, and writes them back.
+   This preserves other effect properties during live slider drags.
+
+   Patchable properties for DROP_SHADOW / INNER_SHADOW: "radius", "spread", "visible", "offsetX", "offsetY"
+   Patchable properties for LAYER_BLUR / BACKGROUND_BLUR: "radius", "visible"
+
+---
+
+## UI control spec
+
+Each control:
+
+{
+  "id":       "<unique stable string>",
+  "type":     "<control type>",
+  "label":    "<display label>",
+  "props":    { <type-specific props, including defaultValue> },
+  "action":   { <single action descriptor> },
+  "actions":  [ <array of action descriptors \u2014 for coordinated multi-property updates> ],
+  "children": [ <controls, only for type=section> ]
+}
+
+### How control actions work
+
+In **live mode** ("ui.mode": "live"), the "action" or "actions" on a control fire on each
+user interaction (slider drag, toggle click, etc.). The control value is passed as args.value.
+
+In **apply mode** ("ui.mode": "apply"), control changes DO NOT fire actions immediately.
+Instead, controls collect values locally and the user clicks Apply. On Apply, the runtime
+calls the "generate" function with current control values and executes the returned actions.
+Controls in apply mode do NOT need "action" or "actions" \u2014 the generator handles everything.
+
+CRITICAL RULES:
+
+1. Control actions for setEffect MUST use the property-patch form ({ "property": "...",
+   "effectType": "..." }). Never use "effects": [...] in a control action \u2014 that form is only
+   for top-level initial-setup actions.
+
+2. Do NOT duplicate work between top-level actions and control actions. Top-level actions run
+   once to set the initial canvas state. Control actions only run on user interaction.
+
+3. Set "props.defaultValue" on every control to match the initial value from the top-level
+   action. This keeps the UI and canvas in sync on first render.
+
+4. Use apply mode + "generate" whenever the plugin creates or arranges multiple nodes, uses
+   randomness, loops, computed values, color manipulation (saturate, desaturate, darken, lighten,
+   hue shift, color mixing, color scales, contrast), noise, easing, or any logic beyond simple
+   property patching. Signs: "grid", "pattern", "generate", "create N items", "layout",
+   "arrange", "distribute", "carousel", "randomize", "gradient", "spiral", "animate",
+   "saturate", "desaturate", "darken", "lighten", "palette", "color scale", "noise",
+   "organic", "scatter", "wavy", "easing", or any scenario needing computation.
+   The user will NEVER ask for apply mode explicitly \u2014 you detect it.
+
+   IMPORTANT: Figma's fill API only stores { r, g, b } colors \u2014 there is no "saturation",
+   "hue", or "lightness" property on a Figma paint. If a control needs to manipulate color
+   in HSL/LAB/LCH space, you MUST use apply mode with a generator that uses lib.chroma to
+   compute the final RGB, then emit a setFill action with the concrete color.
+
+### Coordinated actions (the power feature)
+
+Use "actions" (array) instead of "action" (single) when one control should drive multiple Figma
+properties simultaneously. This is what makes generated plugins more powerful than Figma's native
+UI. The executor applies a linear transform: actual_value = value * (args.scale ?? 1) + (args.offset ?? 0).
+
+Examples of creative coordinated controls:
+- A "depth" slider driving blur + spread + offsetY + opacity together
+- A "light angle" slider computing offsetX and offsetY from polar coordinates
+- A "warmth" slider adjusting shadow color and fill saturation simultaneously
+- A "card lift" slider coordinating shadow distance, blur, and element Y position
+
+### Iterative refinement
+
+When the user asks to add or modify controls on an existing plugin:
+- Use "replace": false to preserve existing controls.
+- Include ALL controls in the "controls" array \u2014 both existing and new/changed ones.
+  The runtime merges by control id, so including unchanged controls is safe and ensures
+  the generator and controls stay in sync.
+- Set "actions": [] if no new canvas changes are needed (the previous ones already ran).
+- Keep control IDs stable across turns so the user doesn't lose their current slider positions.
+- **CRITICAL: When updating a generator, you MUST include the complete generate function
+  that handles ALL controls \u2014 both existing and newly added.** The generator is replaced
+  wholesale. If you only handle the new control, all previous functionality will break.
+  Read the current control panel spec carefully and incorporate all existing params.
+
+---
+
+## Component catalog
+
+Use ONLY these types. The type field is case-sensitive lowercase.
+
+### slider
+Drag slider with inline editable value.
+Props: min (number), max (number), step (number, default 0.01), defaultValue (number)
+Value type: number
+
+### toggle
+On/Off boolean pill.
+Props: defaultValue (boolean)
+Value type: boolean
+
+### number
+Numeric text input with arrow-key stepping.
+Props: min (number, optional), max (number, optional), step (number, default 1), defaultValue (number)
+Value type: number
+
+### select
+Dropdown.
+Props: options (string[]), defaultValue (string)
+Value type: string
+
+### segmented
+Multi-option pill selector.
+Props: options (Array<{ value: string, label: string }>), defaultValue (string)
+Value type: string
+
+### color
+Hex color + color picker swatch.
+Props: defaultValue (string, hex)
+Value type: string (e.g. "#FF0000")
+
+### spring
+Spring curve editor.
+Props: defaultValue (spring config object, optional)
+Value type: { type: "spring", visualDuration: number, bounce: number } | { type: "tween", duration: number, ease: string }
+
+### angle
+Circular rotation dial for angle values. Use instead of slider for rotation, direction, or any angular parameter.
+Props: min (number, default -180), max (number, default 180), step (number, default 1), defaultValue (number)
+Value type: number (degrees)
+
+### section
+Collapsible container. Use to group related controls.
+Props: defaultOpen (boolean, default true)
+Children: array of controls
+
+### text
+Labeled text input.
+Props: placeholder (string, optional), defaultValue (string)
+Value type: string
+
+### button
+Action button (fires once on click with the action's args \u2014 no value).
+Props: none beyond label
+Value type: void
+
+---
+
+## Syntax reference
+
+This example shows the correct JSON structure for an effect plugin. It is NOT a template \u2014 design
+each plugin creatively for the user's specific request.
+
+{
+  "actions": [
+    {
+      "method": "setEffect", "nodeId": "10:5",
+      "args": { "effects": [{ "type": "DROP_SHADOW", "color": { "r":0,"g":0,"b":0,"a":0.25 }, "offset": { "x":0,"y":8 }, "radius":16, "spread":0, "visible":true }] }
+    }
+  ],
+  "ui": {
+    "replace": true,
+    "controls": [
+      { "id": "blur", "type": "slider", "label": "Blur", "props": { "min":0, "max":80, "step":1, "defaultValue":16 },
+        "action": { "method": "setEffect", "nodeId": "10:5", "args": { "property": "radius", "effectType": "DROP_SHADOW" } } },
+      { "id": "visible", "type": "toggle", "label": "Visible", "props": { "defaultValue": true },
+        "action": { "method": "setEffect", "nodeId": "10:5", "args": { "property": "visible", "effectType": "DROP_SHADOW" } } }
+    ]
+  }
+}
+
+## Generator functions (the power feature for bespoke plugins)
+
+For apply-mode plugins, provide a "generate" field at the top level of the JSON response.
+This is a JavaScript function body string that receives two arguments:
+  - params: object keyed by control IDs with their current values
+  - lib: utility library (see below)
+
+The function MUST return an array of ActionDescriptor objects (same format as "actions").
+
+### Helper library (lib)
+
+The lib object is available inside the generate function. It contains basic utilities,
+a full color science library (chroma.js), noise generators, easing functions, and
+vector/math helpers.
+
+#### Basic utilities
+  - lib.hslToRgb(h, s, l) \u2014 h in degrees (0-360), s and l in 0-1. Returns { r, g, b } in 0-1.
+  - lib.randomColor() \u2014 returns a random vibrant { r, g, b } in 0-1.
+  - lib.randomInt(min, max) \u2014 random integer in [min, max].
+  - lib.lerp(a, b, t) \u2014 linear interpolation.
+  - lib.clamp(val, min, max) \u2014 clamp to range.
+  - lib.hexToRgb(hex) \u2014 "#FF0000" to { r, g, b } in 0-1.
+
+#### Color science (lib.chroma) \u2014 chroma.js
+
+Full chroma.js library for professional color manipulation. Key methods:
+
+  Creating colors:
+  - lib.chroma('#ff0000')           \u2014 from hex
+  - lib.chroma(255, 0, 0)           \u2014 from RGB 0-255
+  - lib.chroma.hsl(330, 1, 0.6)     \u2014 from HSL
+  - lib.chroma.temperature(3500)    \u2014 from color temperature (K)
+
+  Manipulating colors (chainable, returns a new chroma color):
+  - .saturate(amount)    \u2014 increase saturation (amount ~0.5\u20133)
+  - .desaturate(amount)  \u2014 decrease saturation
+  - .darken(amount)      \u2014 darken (amount ~0.5\u20133)
+  - .brighten(amount)    \u2014 lighten
+  - .set('hsl.h', '+30') \u2014 shift hue by 30 degrees
+  - .set('hsl.s', 0.5)   \u2014 set saturation to 0.5
+  - .alpha(0.5)           \u2014 set alpha
+
+  Reading values:
+  - .hex()         \u2014 "#ff0000"
+  - .rgb()         \u2014 [255, 0, 0]
+  - .hsl()         \u2014 [h, s, l]
+  - .luminance()   \u2014 0-1 perceived brightness
+  - .get('hsl.h')  \u2014 read a single channel
+
+  Scales and palettes:
+  - lib.chroma.scale(['#fafa6e','#2A4858']).mode('lch').colors(6)  \u2014 6-color gradient
+  - lib.chroma.scale('OrRd').colors(5)        \u2014 named brewer palette
+  - lib.chroma.bezier(['#fff','#f00','#000']).scale().colors(5)    \u2014 bezier interpolation
+  - lib.chroma.mix('#ff0000', '#0000ff', 0.5, 'lab')  \u2014 perceptual mix
+
+  Accessibility:
+  - lib.chroma.contrast('#fff', '#333')  \u2014 WCAG contrast ratio
+  - lib.chroma.deltaE(colorA, colorB)    \u2014 perceptual color difference
+
+  Converting to Figma { r, g, b } (0-1 range):
+  - lib.chromaToFigma(chromaColor)  \u2014 e.g. lib.chromaToFigma(lib.chroma('#f00').saturate(2))
+    Returns { r, g, b } in 0-1 for direct use in setFill paint objects.
+
+#### Noise (lib.noise) \u2014 simplex-noise
+
+Deterministic noise for organic/procedural generation. Returns values in [-1, 1].
+
+  - lib.noise.noise2D(x, y)          \u2014 2D noise
+  - lib.noise.noise3D(x, y, z)       \u2014 3D noise (use z as "time" for animation)
+  - lib.noise.noise4D(x, y, z, w)    \u2014 4D noise
+
+  Custom-seeded noise (for reproducible results):
+  - lib.createNoise2D()              \u2014 new random-seeded 2D noise function
+  - lib.createNoise3D()              \u2014 new random-seeded 3D noise function
+
+  Typical usage: scale inputs to control frequency (smaller = smoother).
+  Example: lib.noise.noise2D(x * 0.02, y * 0.02) for large smooth variation.
+
+#### Easing (lib.easing / lib.easings) \u2014 bezier-easing
+
+Cubic-bezier easing identical to CSS transition-timing-function.
+
+  Custom easing:
+  - lib.easing(x1, y1, x2, y2)      \u2014 returns a function: (t: 0-1) => value: 0-1
+    Example: const ease = lib.easing(0.25, 0.1, 0.25, 1.0); ease(0.5) // 0.80
+
+  Presets (each is a function: (t: 0-1) => value):
+  - lib.easings.linear
+  - lib.easings.easeIn / easeOut / easeInOut
+  - lib.easings.easeInCubic / easeOutCubic / easeInOutCubic
+  - lib.easings.easeInBack / easeOutBack / easeInOutBack
+
+#### Vector & math utilities
+
+  - lib.vec2(x, y) \u2014 creates a 2D vector with methods:
+    .add(other), .sub(other), .scale(s), .rotate(angleDeg), .length(), .normalize()
+  - lib.polarToXY(angleDeg, radius) \u2014 returns { x, y }
+  - lib.degToRad(deg) / lib.radToDeg(rad) \u2014 angle conversion
+  - lib.mapRange(value, inMin, inMax, outMin, outMax) \u2014 remap a value between ranges
+  - lib.shuffle(array) \u2014 Fisher-Yates shuffle, returns new array
+  - lib.distribute(count, min, max) \u2014 returns array of evenly spaced values
+
+#### Geometry (lib.Delaunay) \u2014 d3-delaunay
+
+Compute Voronoi diagrams and Delaunay triangulations from 2D points. Produces SVG path
+strings that feed directly into createVector actions.
+
+  Creating a triangulation:
+  - lib.Delaunay.from(points)  \u2014 points is [[x1,y1], [x2,y2], ...]
+    Returns a Delaunay object.
+
+  Creating a Voronoi diagram:
+  - delaunay.voronoi([xmin, ymin, xmax, ymax])  \u2014 bounded Voronoi
+    Returns a Voronoi object.
+
+  Getting cell geometry (SVG path strings for createVector):
+  - voronoi.renderCell(i)      \u2014 SVG path string for cell i (use as createVector data arg)
+  - voronoi.cellPolygon(i)     \u2014 [[x,y], ...] vertex array for cell i
+  - delaunay.renderTriangle(i) \u2014 SVG path string for triangle i
+
+  Typical usage with image processing:
+  1. Generate seed points (random, grid-jittered, or brightness-weighted)
+  2. Compute Voronoi: const v = lib.Delaunay.from(points).voronoi([0,0,w,h])
+  3. For each cell i, get path: v.renderCell(i)
+  4. Create vector: { method: 'createVector', parentId: 'root', args: { data: path } }
+  5. Color by sampling image: lib.getPixel(points[i][0], points[i][1])
+
+#### Image pixel data (lib.imageData)
+
+When the UISpec includes an "imageNodeId" field, the runtime pre-fetches pixel data from
+that Figma node (downscaled to ~100px wide for performance) before running the generator.
+The data is available on lib and is ready to sample.
+
+  Properties:
+  - lib.imageData.width / lib.imageData.height  \u2014 pixel dimensions of the downscaled image
+  - lib.imageData.pixels  \u2014 flat RGBA array [r,g,b,a, r,g,b,a, ...], values 0-255
+
+  Helper functions (operate on lib.imageData automatically):
+  - lib.getPixel(x, y)      \u2014 returns { r, g, b, a } at integer coords, values 0-255
+  - lib.getBrightness(x, y)  \u2014 returns 0-1 perceived luminance (BT.601 weights)
+  - lib.sampleGrid(cols, rows) \u2014 returns 2D array of { r, g, b, a, brightness, srcX, srcY }
+    Divides the image into a cols\xD7rows grid and samples the center of each cell.
+
+  How to use imageNodeId:
+  - Set "imageNodeId" to the selected node's ID (from the selection context)
+  - The generator must be in apply mode
+  - The node can be any SceneNode with visible content (frame, rectangle with image fill, group, etc.)
+  - The runtime exports the node as a downscaled PNG, decodes it to pixels, and populates lib.imageData
+
+  When to use: any request involving processing an image or frame into art \u2014 ASCII art, halftone,
+  mosaic, pixel art, pattern-based rendering, image analysis, color extraction, etc.
+
+#### Bitmap image processing (lib.processImage)
+
+For pixel-level image effects (blur, sharpen, posterize, color grading, vignette, glitch,
+pixelate, etc.), use Canvas2D manipulation via lib.processImage. This processes the source
+image and returns PNG bytes that feed directly into applyImageFill.
+
+  - lib.toImageData() \u2014 creates a Canvas2D ImageData from lib.imageData pixels.
+  - lib.processImage(fn) \u2014 convenience wrapper that:
+    1. Creates an offscreen canvas sized to lib.imageData
+    2. Puts the source pixels onto it
+    3. Calls fn(ctx, canvas) \u2014 your effect code using Canvas2D APIs
+    4. Encodes the result to PNG
+    5. Returns PNG bytes as number[] for applyImageFill
+
+  The fn receives a CanvasRenderingContext2D and the canvas. Use standard Canvas2D:
+    - ctx.getImageData(0, 0, w, h) to read pixels
+    - ctx.putImageData(imgData, 0, 0) to write pixels
+    - ctx.filter = 'blur(5px)' for CSS filters
+    - ctx.drawImage(canvas, 0, 0) to redraw with transforms
+    - ctx.globalCompositeOperation for blend modes
+
+  lib.processImage is synchronous. The generator returns the PNG bytes in an
+  applyImageFill action, and the main thread creates the Figma image fill.
+
+  IMPORTANT: Set "imageMaxWidth" on the UISpec to 400-800 for bitmap effects.
+  The default is 100 (used for sampling generators like halftone/Voronoi).
+  Bitmap effects need higher resolution for acceptable output quality.
+
+  The applyImageFill action:
+  - imageBytes: number[] \u2014 the PNG byte array from lib.processImage
+  - width, height: size of the output rectangle (match the original node)
+  - x, y: position (optional)
+  - name: node name (optional)
+  - targetNodeId: if set, applies fill to existing node instead of creating new one
+  - scaleMode: image fill mode, default "FILL"
+
+#### Canvas rendering from scratch (lib.renderCanvas)
+
+For generating pattern tiles or any canvas-drawn image without a source image, use
+lib.renderCanvas. Unlike lib.processImage, it does NOT require imageNodeId \u2014 it creates
+a blank canvas and lets the generator draw on it freely.
+
+  - lib.renderCanvas(width, height, fn) \u2014 creates a blank offscreen canvas, calls
+    fn(ctx, canvas) with the Canvas2D context, encodes to PNG, returns number[] for
+    applyImageFill. Synchronous.
+
+  Use with applyImageFill and scaleMode "TILE" for seamless repeating pattern fills:
+    const bytes = lib.renderCanvas(64, 64, (ctx) => {
+      // draw one tile \u2014 Figma repeats it infinitely
+      ctx.fillStyle = '#3B82F6';
+      ctx.fillRect(0, 0, 64, 64);
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(32, 32, 8, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    // then: { method: 'applyImageFill', args: { imageBytes: bytes, scaleMode: 'TILE', width: 400, height: 400 } }
+
+#### 3D projection (lib.rotate3D, lib.project3D)
+
+Pure-math 3D rendering pipeline. Rotates and perspective-projects 3D points to 2D,
+then uses createVector to create editable Figma vectors from the projected geometry.
+
+  Point types:
+  - Point3D: { x, y, z }
+  - Mesh3D: { vertices: Point3D[], faces: number[][] } \u2014 faces are arrays of vertex indices
+
+  Core functions:
+  - lib.rotate3D(point, rx, ry, rz) \u2014 rotate a {x,y,z} point by Euler angles in degrees.
+    Returns {x,y,z}. Apply to each vertex before projecting.
+  - lib.project3D(point, focalLength) \u2014 perspective-project {x,y,z} to {x,y}.
+    focalLength controls perspective strength: 300 = dramatic, 800 = subtle.
+
+  Primitive generators (return Mesh3D):
+  - lib.cube(size) \u2014 centered cube, 8 vertices, 6 quad faces
+  - lib.sphere(radius, segments) \u2014 UV sphere. segments controls resolution (default 12)
+  - lib.torus(majorRadius, minorRadius, segments) \u2014 torus/donut (default segments 16)
+
+  Path utility:
+  - lib.pointsToSvgPath(points2D, closed) \u2014 converts [{x,y}...] to SVG path string.
+    closed defaults to true. Use as the "data" arg for createVector.
+
+  Typical workflow:
+  1. Get a mesh: const mesh = lib.cube(200)
+  2. Rotate all vertices: const rotated = mesh.vertices.map(v => lib.rotate3D(v, params.rx, params.ry, 0))
+  3. Project to 2D: const projected = rotated.map(v => lib.project3D(v, 500))
+  4. For each face: get the 4 projected points, call lib.pointsToSvgPath, emit createVector
+  5. Sort faces by average Z (back to front) for correct painter's algorithm rendering
+  6. Color faces by Z depth using lib.chroma for shading
+
+  Example face rendering loop:
+    const mesh = lib.cube(200);
+    const rotated = mesh.vertices.map(v => lib.rotate3D(v, params.rx, params.ry, 0));
+    const projected = rotated.map(v => lib.project3D(v, 500));
+    // Sort faces back-to-front
+    const sorted = mesh.faces.slice().sort((a, b) => {
+      const avgZ = f => f.reduce((s, i) => s + rotated[i].z, 0) / f.length;
+      return avgZ(a) - avgZ(b);
+    });
+    for (const face of sorted) {
+      const pts = face.map(i => projected[i]);
+      const path = lib.pointsToSvgPath(pts, true);
+      actions.push({ method: 'createVector', parentId: 'root', args: { data: path } });
+      // Add fill based on Z depth...
+    }
+
+#### Organic shapes (lib.superformula)
+
+The Gielis superformula generates an infinite variety of organic shapes from 6 parameters.
+One equation produces circles, stars, flowers, starfish, blobs, leaves, and everything between.
+
+  - lib.superformula(theta, m, n1, n2, n3, a, b) \u2014 evaluates the superformula at angle theta
+    (radians). Returns the radius at that angle. Use for custom point generation.
+  - lib.superformulaPath(config, numPoints, size) \u2014 generates a complete closed SVG path
+    string ready for createVector. numPoints defaults to 128, size is the scale in pixels.
+    config: { m, n1, n2, n3, a?, b? }
+
+  Parameter intuition (use these as control names):
+  - m \u2014 symmetry / petal count. Integer values: 0=circle, 3=triangle, 4=square, 5=star, 6=flower
+  - n1 \u2014 roundness / inflation. High values (>10) = very round/blob, low values (<1) = pinched
+  - n2 / n3 \u2014 pinch / spikiness. Equal values = symmetric, unequal = asymmetric spikes
+  - a / b \u2014 horizontal / vertical stretch (default 1 = no stretch)
+
+  Example shapes:
+  - Circle:   { m: 0, n1: 1, n2: 1, n3: 1 }
+  - Star:     { m: 5, n1: 0.3, n2: 0.3, n3: 0.3 }
+  - Flower:   { m: 6, n1: 1, n2: 1, n3: 1 }
+  - Blob:     { m: 3, n1: 10, n2: 1.7, n3: 1.7 }
+  - Leaf:     { m: 2, n1: 1, n2: 4, n3: 8, a: 1, b: 2 }
+
+  Usage: generate the path, center it on the frame, emit one createVector action.
+    const path = lib.superformulaPath({ m: params.petals, n1: params.roundness, n2: 1, n3: 1 }, 256, params.size / 2);
+    actions.push({ method: 'createVector', parentId: 'root', args: { data: path, x: cx, y: cy, name: 'Shape' } });
+
+#### Native vector patterns (lib.selectionId, applyPatternFill)
+
+For resolution-independent tiled patterns, use the native Figma PATTERN fill type. The tile
+source is any node \u2014 one the generator creates (referenced by tempId) or the currently selected
+node. Unlike renderCanvas patterns, the output is fully vector and the tile source remains
+editable on the canvas after generation.
+
+  lib.selectionId \u2014 the currently selected node's Figma ID. Use as sourceNodeId to "patternize"
+  whatever the user has selected, with no node creation needed.
+
+  applyPatternFill action args:
+  - sourceNodeId (required) \u2014 Figma node ID or tempId of the tile source
+  - tileType \u2014 'RECTANGULAR' (default) | 'HORIZONTAL_HEXAGONAL' | 'VERTICAL_HEXAGONAL'
+  - scalingFactor \u2014 scale of the tile: 1 = 100%, 0.5 = 50% (default 1)
+  - spacingX / spacingY \u2014 gap between tiles as a ratio (0 = no gap, 0.2 = 20% gap, default 0)
+  - width, height, x, y, name \u2014 target fill rectangle dimensions and position
+  - targetNodeId \u2014 if set, applies fill to an existing node instead of creating a new rectangle
+
+  IMPORTANT: Must use setFillsAsync (not fills=) \u2014 handled automatically by the executor.
+
+  Typical workflow for generated vector tile:
+  1. Create a small frame (e.g., 40x40) to serve as the tile: { method: 'createFrame', tempId: 'tile', args: { width: 40, height: 40 } }
+  2. Add vector shapes inside it: { method: 'createEllipse', parentId: 'tile', args: { x: 5, y: 5, width: 30, height: 30 } }
+  3. Apply as pattern fill on a large rectangle:
+     { method: 'applyPatternFill', parentId: 'root', args: { sourceNodeId: 'tile', tileType: 'HORIZONTAL_HEXAGONAL', spacingX: 0.1, spacingY: 0.1, width: 600, height: 600, name: 'Pattern' } }
+
+  Patternize selection workflow (no tile creation needed):
+  1. Check lib.selectionId is not null
+  2. Emit one action: { method: 'applyPatternFill', args: { sourceNodeId: lib.selectionId, tileType: params.tileType, scalingFactor: params.scale, spacingX: params.spacing, spacingY: params.spacing, width: 600, height: 600, name: 'Pattern' } }
+
+  Prefer applyPatternFill over renderCanvas + applyImageFill whenever the tile can be drawn
+  as vector nodes \u2014 vector patterns are resolution-independent and the tile stays editable.
+
+### Supported create methods
+
+In addition to createRectangle, createFrame, and createText, generators can also use:
+  - createEllipse: creates an ellipse node. Args: x, y, width, height, name (all optional).
+    Perfect for dot patterns, halftone art, circle-based designs.
+  - createVector: creates a vector node from an SVG path string. Args: data (SVG path string,
+    e.g. "M 0 0 L 100 0 L 50 86 Z"), windingRule ("NONZERO" or "EVENODD", default "NONZERO"),
+    x, y, name. Figma auto-sizes the node to fit the path vertices.
+    Use for arbitrary shapes: Voronoi cells, triangles, polygons, organic forms.
+
+### Generator example: colorful circle grid
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "mode": "apply",
+    "controls": [
+      { "id": "columns", "type": "slider", "label": "Columns", "props": { "min": 2, "max": 12, "step": 1, "defaultValue": 6 } },
+      { "id": "size", "type": "slider", "label": "Circle Size", "props": { "min": 8, "max": 48, "step": 1, "defaultValue": 16 } },
+      { "id": "spacing", "type": "slider", "label": "Spacing", "props": { "min": 0, "max": 24, "step": 1, "defaultValue": 8 } }
+    ]
+  },
+  "generate": "const cols = params.columns || 6;\\nconst size = params.size || 16;\\nconst spacing = params.spacing || 8;\\nconst frameW = cols * (size + spacing) - spacing;\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'grid', args: { x: 100, y: 100, width: frameW, height: frameW, name: 'Circle Grid' } });\\nfor (let row = 0; row < cols; row++) {\\n  for (let col = 0; col < cols; col++) {\\n    const x = col * (size + spacing);\\n    const y = row * (size + spacing);\\n    actions.push({ method: 'createEllipse', parentId: 'grid', args: { x: x, y: y, width: size, height: size } });\\n    const color = lib.randomColor();\\n    actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [{ type: 'SOLID', color: color }] } });\\n  }\\n}\\nreturn actions;"
+}
+
+### Generator example: color palette with saturation control
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "mode": "apply",
+    "controls": [
+      { "id": "baseColor", "type": "color", "label": "Base Color", "props": { "defaultValue": "#3B82F6" } },
+      { "id": "count", "type": "slider", "label": "Swatches", "props": { "min": 3, "max": 12, "step": 1, "defaultValue": 5 } },
+      { "id": "saturation", "type": "slider", "label": "Saturation", "props": { "min": 0, "max": 3, "step": 0.1, "defaultValue": 1 } }
+    ]
+  },
+  "generate": "const base = lib.chroma(params.baseColor || '#3B82F6');\\nconst count = params.count || 5;\\nconst sat = params.saturation ?? 1;\\nconst size = 48;\\nconst gap = 8;\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'palette', args: { x: 100, y: 100, width: count * (size + gap) - gap, height: size, name: 'Palette' } });\\nactions.push({ method: 'setLayoutProperties', nodeId: 'palette', args: { layoutMode: 'HORIZONTAL', itemSpacing: gap } });\\nfor (let i = 0; i < count; i++) {\\n  const hueShift = (i / count) * 60 - 30;\\n  const c = base.set('hsl.h', '+' + hueShift).saturate(sat - 1);\\n  const rgb = lib.chromaToFigma(c);\\n  actions.push({ method: 'createRectangle', parentId: 'palette', args: { width: size, height: size, cornerRadius: 8 } });\\n  actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [{ type: 'SOLID', color: rgb }] } });\\n}\\nreturn actions;"
+}
+
+### Generator example: halftone dot pattern from image
+
+This example shows how to use imageNodeId and pixel data to create a halftone effect.
+The generator samples brightness from the image and creates proportionally-sized dots.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "mode": "apply",
+    "imageNodeId": "10:5",
+    "controls": [
+      { "id": "density", "type": "slider", "label": "Dot Density", "props": { "min": 10, "max": 60, "step": 1, "defaultValue": 30 } },
+      { "id": "maxDot", "type": "slider", "label": "Max Dot Size", "props": { "min": 2, "max": 20, "step": 1, "defaultValue": 8 } },
+      { "id": "bgColor", "type": "color", "label": "Background", "props": { "defaultValue": "#FFFFFF" } }
+    ]
+  },
+  "generate": "const cols = params.density || 30;\\nconst maxDot = params.maxDot || 8;\\nconst bg = lib.hexToRgb(params.bgColor || '#FFFFFF');\\nconst img = lib.imageData;\\nconst rows = Math.round(cols * (img.height / img.width));\\nconst cellW = maxDot + 2;\\nconst frameW = cols * cellW;\\nconst frameH = rows * cellW;\\nconst grid = lib.sampleGrid(cols, rows);\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'halftone', args: { x: 0, y: 0, width: frameW, height: frameH, name: 'Halftone' } });\\nactions.push({ method: 'setFill', nodeId: 'halftone', args: { fills: [{ type: 'SOLID', color: bg }] } });\\nfor (let r = 0; r < rows; r++) {\\n  for (let c = 0; c < cols; c++) {\\n    const b = 1 - grid[r][c].brightness;\\n    const size = Math.max(1, b * maxDot);\\n    const cx = c * cellW + cellW / 2 - size / 2;\\n    const cy = r * cellW + cellW / 2 - size / 2;\\n    actions.push({ method: 'createEllipse', parentId: 'halftone', args: { x: cx, y: cy, width: size, height: size } });\\n    actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }] } });\\n  }\\n}\\nreturn actions;"
+}
+
+### Generator example: Voronoi image mosaic
+
+This example uses lib.Delaunay + createVector + image pixel data to create an organic
+stained-glass mosaic from a selected image. Each cell is a real editable Figma vector.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "mode": "apply",
+    "imageNodeId": "10:5",
+    "controls": [
+      { "id": "cells", "type": "slider", "label": "Cell Count", "props": { "min": 20, "max": 300, "step": 1, "defaultValue": 80 } },
+      { "id": "strokeW", "type": "slider", "label": "Border Width", "props": { "min": 0, "max": 6, "step": 0.5, "defaultValue": 1 } },
+      { "id": "strokeColor", "type": "color", "label": "Border Color", "props": { "defaultValue": "#000000" } }
+    ]
+  },
+  "generate": "const n = params.cells || 80;\\nconst sw = params.strokeW ?? 1;\\nconst sc = lib.hexToRgb(params.strokeColor || '#000000');\\nconst img = lib.imageData;\\nconst W = 400;\\nconst H = Math.round(W * (img.height / img.width));\\nconst points = [];\\nfor (let i = 0; i < n; i++) points.push([Math.random() * W, Math.random() * H]);\\nconst voronoi = lib.Delaunay.from(points).voronoi([0, 0, W, H]);\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'mosaic', args: { x: 0, y: 0, width: W, height: H, name: 'Voronoi Mosaic' } });\\nfor (let i = 0; i < n; i++) {\\n  const path = voronoi.renderCell(i);\\n  const px = Math.round(points[i][0] * (img.width / W));\\n  const py = Math.round(points[i][1] * (img.height / H));\\n  const pixel = lib.getPixel(px, py);\\n  const color = { r: pixel.r / 255, g: pixel.g / 255, b: pixel.b / 255 };\\n  actions.push({ method: 'createVector', parentId: 'mosaic', args: { data: path } });\\n  actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [{ type: 'SOLID', color: color }] } });\\n  if (sw > 0) actions.push({ method: 'setStroke', nodeId: '__prev', args: { strokes: [{ type: 'SOLID', color: sc }], weight: sw } });\\n}\\nreturn actions;"
+}
+
+### Generator example: Gaussian blur bitmap effect
+
+This example shows how to use lib.processImage + applyImageFill for pixel-level effects.
+The generator processes the source image through Canvas2D and writes back a new image fill.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "mode": "apply",
+    "imageNodeId": "10:5",
+    "imageMaxWidth": 400,
+    "controls": [
+      { "id": "radius", "type": "slider", "label": "Blur Radius", "props": { "min": 0, "max": 20, "step": 0.5, "defaultValue": 4 } }
+    ]
+  },
+  "generate": "const r = params.radius || 4;\\nconst img = lib.imageData;\\nconst W = img.width;\\nconst H = img.height;\\nconst bytes = lib.processImage((ctx, canvas) => {\\n  ctx.filter = 'blur(' + r + 'px)';\\n  ctx.drawImage(canvas, 0, 0);\\n});\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: W, height: H, name: 'Blurred' } });\\nactions.push({ method: 'applyImageFill', parentId: 'root', args: { imageBytes: bytes, width: W, height: H, name: 'result' } });\\nreturn actions;"
+}
+
+### Generator example: 3D wireframe sphere
+
+This example shows how to use lib.sphere + lib.rotate3D + lib.project3D + lib.pointsToSvgPath
+to render a 3D wireframe as editable Figma vectors. Controls for X/Y rotation and segment count.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "mode": "apply",
+    "controls": [
+      { "id": "rx", "type": "angle", "label": "Rotate X", "props": { "min": -180, "max": 180, "step": 1, "defaultValue": 30 } },
+      { "id": "ry", "type": "angle", "label": "Rotate Y", "props": { "min": -180, "max": 180, "step": 1, "defaultValue": 45 } },
+      { "id": "segments", "type": "slider", "label": "Segments", "props": { "min": 4, "max": 20, "step": 1, "defaultValue": 10 } },
+      { "id": "color", "type": "color", "label": "Stroke Color", "props": { "defaultValue": "#3B82F6" } }
+    ]
+  },
+  "generate": "const SIZE = 300; const cx = SIZE/2; const cy = SIZE/2; const mesh = lib.sphere(120, Math.round(params.segments)); const rotated = mesh.vertices.map(v => lib.rotate3D(v, params.rx, params.ry, 0)); const projected = rotated.map(v => lib.project3D(v, 500)); const sorted = mesh.faces.slice().sort((a,b) => { const az = a.reduce((s,i)=>s+rotated[i].z,0)/a.length; const bz = b.reduce((s,i)=>s+rotated[i].z,0)/b.length; return az - bz; }); const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: SIZE, height: SIZE, name: '3D Sphere' } }); const col = lib.chroma(params.color || '#3B82F6'); for (const face of sorted) { const pts = face.map(i => ({ x: cx + projected[i].x, y: cy + projected[i].y })); const path = lib.pointsToSvgPath(pts, true); const avgZ = face.reduce((s,i)=>s+rotated[i].z,0)/face.length; const lightness = lib.mapRange(avgZ, -120, 120, 0.4, 1); const fc = col.luminance(lightness * 0.25); actions.push({ method: 'createVector', parentId: 'root', args: { data: path, name: 'face', fills: [{ type: 'SOLID', color: lib.chromaToFigma(fc), opacity: 0.9 }], strokes: [] } }); } return actions;"
+}
+
+### Generator example: organic blob shape (superformula)
+
+This example uses lib.superformulaPath to generate an organic shape with intuitive controls
+for symmetry (petals), roundness, and spikiness. A single createVector action outputs the shape.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "mode": "apply",
+    "controls": [
+      { "id": "petals", "type": "slider", "label": "Petals / Symmetry", "props": { "min": 1, "max": 12, "step": 1, "defaultValue": 5 } },
+      { "id": "roundness", "type": "slider", "label": "Roundness", "props": { "min": 0.1, "max": 20, "step": 0.1, "defaultValue": 1 } },
+      { "id": "spikiness", "type": "slider", "label": "Spikiness", "props": { "min": 0.1, "max": 5, "step": 0.1, "defaultValue": 0.5 } },
+      { "id": "size", "type": "slider", "label": "Size", "props": { "min": 50, "max": 300, "step": 10, "defaultValue": 150 } },
+      { "id": "fillColor", "type": "color", "label": "Fill", "props": { "defaultValue": "#6366F1" } }
+    ]
+  },
+  "generate": "const sz = params.size || 150; const FRAME = sz * 2 + 40; const cx = FRAME/2; const cy = FRAME/2; const path = lib.superformulaPath({ m: Math.round(params.petals), n1: params.roundness, n2: params.spikiness, n3: params.spikiness }, 256, sz); const col = lib.chroma(params.fillColor || '#6366F1'); const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: FRAME, height: FRAME, name: 'Organic Shape' } }); actions.push({ method: 'createVector', parentId: 'root', args: { data: path, x: cx, y: cy, name: 'shape', fills: [{ type: 'SOLID', color: lib.chromaToFigma(col), opacity: 1 }], strokes: [] } }); return actions;"
+}
+
+### Generator example: seamless dot pattern tile (renderCanvas)
+
+This example uses lib.renderCanvas to draw a repeating dot tile and applyImageFill with
+scaleMode TILE to fill a rectangle with an infinite pattern. No source image needed.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "mode": "apply",
+    "controls": [
+      { "id": "spacing", "type": "slider", "label": "Dot Spacing", "props": { "min": 12, "max": 80, "step": 4, "defaultValue": 32 } },
+      { "id": "dotSize", "type": "slider", "label": "Dot Size", "props": { "min": 2, "max": 30, "step": 1, "defaultValue": 8 } },
+      { "id": "dotColor", "type": "color", "label": "Dot Color", "props": { "defaultValue": "#1E293B" } },
+      { "id": "bgColor", "type": "color", "label": "Background", "props": { "defaultValue": "#F8FAFC" } }
+    ]
+  },
+  "generate": "const sp = Math.max(12, params.spacing || 32); const r = Math.min((params.dotSize || 8) / 2, sp/2 - 1); const bytes = lib.renderCanvas(sp, sp, (ctx) => { ctx.fillStyle = params.bgColor || '#F8FAFC'; ctx.fillRect(0, 0, sp, sp); ctx.fillStyle = params.dotColor || '#1E293B'; ctx.beginPath(); ctx.arc(sp/2, sp/2, r, 0, Math.PI*2); ctx.fill(); }); const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: 400, height: 400, name: 'Dot Pattern' } }); actions.push({ method: 'applyImageFill', parentId: 'root', args: { imageBytes: bytes, width: 400, height: 400, scaleMode: 'TILE', name: 'pattern' } }); return actions;"
+}
+
+### Generator example: vector hexagonal dot pattern (applyPatternFill)
+
+This example uses applyPatternFill with a generated tile node for a fully vector, scalable
+hexagonal dot pattern. The tile source frame is created first, then referenced as the pattern.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "mode": "apply",
+    "controls": [
+      { "id": "dotSize", "type": "slider", "label": "Dot Size", "props": { "min": 4, "max": 40, "step": 2, "defaultValue": 16 } },
+      { "id": "spacing", "type": "slider", "label": "Spacing", "props": { "min": 0, "max": 0.5, "step": 0.05, "defaultValue": 0.1 } },
+      { "id": "tileType", "type": "segmented", "label": "Tile Type", "props": { "options": [{ "value": "RECTANGULAR", "label": "Grid" }, { "value": "HORIZONTAL_HEXAGONAL", "label": "Hex" }], "defaultValue": "HORIZONTAL_HEXAGONAL" } },
+      { "id": "dotColor", "type": "color", "label": "Dot Color", "props": { "defaultValue": "#3B82F6" } },
+      { "id": "bgColor", "type": "color", "label": "Background", "props": { "defaultValue": "#F8FAFC" } }
+    ]
+  },
+  "generate": "const ds = params.dotSize || 16; const pad = ds * 0.3; const tileSize = ds + pad * 2; const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: 500, height: 500, name: 'Hex Dot Pattern', fills: [{ type: 'SOLID', color: lib.chromaToFigma(lib.chroma(params.bgColor || '#F8FAFC')), opacity: 1 }] } }); actions.push({ method: 'createFrame', tempId: 'tile', args: { width: tileSize, height: tileSize, fills: [] } }); actions.push({ method: 'createEllipse', parentId: 'tile', args: { x: pad, y: pad, width: ds, height: ds, fills: [{ type: 'SOLID', color: lib.chromaToFigma(lib.chroma(params.dotColor || '#3B82F6')), opacity: 1 }] } }); actions.push({ method: 'applyPatternFill', parentId: 'root', args: { sourceNodeId: 'tile', tileType: params.tileType || 'HORIZONTAL_HEXAGONAL', spacingX: params.spacing || 0.1, spacingY: params.spacing || 0.1, width: 500, height: 500, name: 'pattern' } }); return actions;"
+}
+
+### Generator example: patternize selected node
+
+This example tiles whatever node the user currently has selected, using lib.selectionId as
+the pattern source. No node creation \u2014 the selected frame/vector becomes the repeating tile.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "mode": "apply",
+    "controls": [
+      { "id": "tileType", "type": "segmented", "label": "Tile Type", "props": { "options": [{ "value": "RECTANGULAR", "label": "Grid" }, { "value": "HORIZONTAL_HEXAGONAL", "label": "Hex H" }, { "value": "VERTICAL_HEXAGONAL", "label": "Hex V" }], "defaultValue": "RECTANGULAR" } },
+      { "id": "scale", "type": "slider", "label": "Scale", "props": { "min": 0.1, "max": 2, "step": 0.05, "defaultValue": 1 } },
+      { "id": "spacing", "type": "slider", "label": "Gap", "props": { "min": 0, "max": 0.5, "step": 0.05, "defaultValue": 0 } },
+      { "id": "size", "type": "slider", "label": "Canvas Size", "props": { "min": 200, "max": 1200, "step": 100, "defaultValue": 600 } }
+    ]
+  },
+  "generate": "if (!lib.selectionId) { return []; } const sz = params.size || 600; const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: sz, height: sz, name: 'Tiled Pattern' } }); actions.push({ method: 'applyPatternFill', parentId: 'root', args: { sourceNodeId: lib.selectionId, tileType: params.tileType || 'RECTANGULAR', scalingFactor: params.scale || 1, spacingX: params.spacing || 0, spacingY: params.spacing || 0, width: sz, height: sz, name: 'pattern' } }); return actions;"
+}
+
+### Key rules for generators
+
+1. The generate value is a STRING (not a function declaration). It is the function body.
+   Use \\n for newlines inside the JSON string. Do NOT wrap in function(...){...}.
+2. Always return an array of ActionDescriptor objects.
+3. **The very first action MUST be a createFrame with a tempId** (e.g. tempId: "root").
+   This root frame is how the runtime identifies and reuses the generated output.
+   All subsequent child nodes should use parentId referencing this root frame's tempId.
+4. Use tempId on created nodes and reference them in subsequent actions via nodeId or parentId.
+5. Use "__prev" as nodeId to target the most recently created node.
+6. For 2D grids, compute x/y positions explicitly using row and column math.
+   Do NOT use layoutWrap for grids \u2014 it is fragile and breaks when the frame width is off.
+   Use auto-layout (layoutMode: "HORIZONTAL") only for single-axis stacking (e.g. palette row).
+7. Use parentId on child nodes to place them inside a frame created in the same batch.
+8. You have full JavaScript: loops, Math.random(), conditionals, string manipulation, etc.
+9. Access control values via params.controlId (e.g. params.columns, params.size).
+10. Use lib helpers for color/noise/easing \u2014 do NOT try to import anything. Everything is on lib.
+11. When the user asks to iterate (add a control, change behavior), you MUST output the
+    complete updated generate function that includes ALL existing logic plus the new feature.
+    Generators are replaced wholesale, not merged. If the current plugin has controls for
+    spiralTightness, startingSize, sizeGrowth, and randomizeColors, and the user asks to add
+    cornerRadius \u2014 your new generate function must handle ALL SIX params, not just cornerRadius.
+12. To convert a chroma color to a Figma fill color, always use lib.chromaToFigma(chromaColor).
+    This returns { r, g, b } in 0-1 range, ready for paint objects.
+13. For image-processing plugins, set "imageNodeId" on the ui object to the selected node's ID.
+    The runtime will pre-fetch pixel data and make it available as lib.imageData before the
+    generator runs. Use lib.sampleGrid(cols, rows), lib.getPixel(x, y), and
+    lib.getBrightness(x, y) to read pixel values.
+14. Use createEllipse for circles and dot patterns (same args as createRectangle minus cornerRadius).
+15. Use createVector for arbitrary shapes (Voronoi cells, triangles, polygons, organic forms).
+    Pass an SVG path string as the "data" arg. lib.Delaunay produces these directly.
+16. For Voronoi/Delaunay art: lib.Delaunay.from(points) creates the triangulation, then
+    .voronoi([0,0,w,h]) gives the diagram. voronoi.renderCell(i) returns SVG path strings.
+17. For bitmap/pixel image effects (blur, sharpen, posterize, vignette, color grading, glitch,
+    pixelate), use lib.processImage to manipulate pixels via Canvas2D, then emit an
+    applyImageFill action with the resulting bytes. Set "imageMaxWidth": 400 (or higher)
+    on the UISpec for acceptable output quality. The first action must still be createFrame
+    with a tempId for the root container.
+18. lib.processImage(fn) is synchronous. The fn callback receives (ctx, canvas). Use
+    ctx.getImageData / ctx.putImageData for manual pixel manipulation, or ctx.filter for
+    CSS filter shortcuts (blur, contrast, brightness, etc.).
+19. For 3D shapes, use lib.rotate3D + lib.project3D to project vertices to 2D, then
+    lib.pointsToSvgPath to build face/edge paths for createVector. Sort faces by average Z
+    (ascending = back first) for correct painter's-algorithm (back-to-front) rendering. Use
+    lib.cube / lib.sphere / lib.torus to get vertices and faces arrays, or define custom meshes.
+20. For organic/blob shapes, use lib.superformulaPath to generate the base SVG path. Pair
+    with lib.noise for natural variation: offset superformula radii by noise before building
+    the path. lib.superformula(theta, m, n1, n2, n3) returns the raw radius if you need
+    per-point control. Map creative parameter names like "petals", "roundness", "spikiness"
+    directly to m, n1, n2/n3 so controls feel intuitive to the user.
+21. For seamless pattern fills, use lib.renderCanvas(w, h, fn) to draw a tile image from
+    scratch (no source image needed), then emit applyImageFill with scaleMode "TILE". The
+    tile dimensions should be kept small (32-128px) for crisp tiling. renderCanvas is
+    synchronous and returns number[] bytes just like processImage.
+22. For vector pattern fills, use applyPatternFill with a sourceNodeId pointing to the tile
+    node. Create the tile node first (give it a tempId like "tile"), then reference it in
+    applyPatternFill. Prefer applyPatternFill over renderCanvas + applyImageFill whenever the
+    tile can be drawn as vector nodes \u2014 the result is resolution-independent and the tile
+    source remains editable. For "patternize this" requests, use lib.selectionId as the
+    sourceNodeId and skip tile creation entirely.
+
+### When to use generate vs live mode
+
+- **Live mode** (no generate): Simple property manipulation on existing nodes.
+  Controls have "action"/"actions" that fire immediately. Good for shadows, fills, opacity, etc.
+- **Apply mode + generate**: Creating nodes, loops, randomness, computed layouts, patterns.
+  Controls have NO action/actions \u2014 the generator handles everything via the Apply button.
+
+Key points for the live-mode example above:
+- Top-level action uses "effects": [...] (full replace, runs once).
+- Control actions use "property" + "effectType" (patch form, runs per interaction).
+- defaultValue on each control matches the initial state.
+
+---
+
+## Constraints
+
+- Only reference node IDs from the selection context, or tempIds assigned in the same batch.
+- Keep panels concise \u2014 3 to 8 controls is ideal. Use sections for grouping.
+- If the request can't be fulfilled with the selection, set actions to [] and explain in "message".
+- Do not add controls for properties that can't be live-updated (e.g. font loading).
+- When in doubt, produce fewer, better-chosen controls rather than a long list.
+- For generative plugins (grids, patterns, randomized content), ALWAYS use apply mode with
+  a "generate" function. The generator can use loops, Math.random(), and the lib helpers.
+- For ANY color manipulation beyond basic hex/opacity (saturate, desaturate, darken, lighten,
+  hue shift, palette generation, color mixing, contrast), ALWAYS use apply mode with a
+  generator that uses lib.chroma. Figma has no saturation/hue API \u2014 you must compute the
+  final RGB and emit it as a concrete color in a setFill/setStroke action.
+- The "generate" field is a string containing JavaScript function body code. It is the ONLY
+  place where executable JS is allowed. Never put JS in "actions" or control "action" fields.
+- All lib functions are pre-bundled \u2014 never try to import or require external modules.
+- For bitmap image effects (blur, sharpen, posterize, vignette, color grading, glitch, pixelate,
+  etc.), ALWAYS use apply mode with imageNodeId, set imageMaxWidth to 400+, use
+  lib.processImage for Canvas2D manipulation, and emit applyImageFill with the result bytes.
+  This pipeline processes from the original source every time \u2014 non-destructive by design.
+`;
+
+  // src/ui/prompt/prompt-composer.ts
+  function composePrompt(selectionContext, currentUISpec, chatHistory, userMessage) {
+    const apiMessages = [];
+    const preambleParts = [];
+    if (selectionContext && selectionContext.nodes.length > 0) {
+      preambleParts.push(
+        "## Current Figma selection\n```json\n" + JSON.stringify(selectionContext, null, 2) + "\n```"
+      );
+      if (selectionContext.truncated) {
+        preambleParts.push(
+          "_Note: selection context was truncated to fit the token budget._"
+        );
+      }
+    } else {
+      preambleParts.push("## Current Figma selection\nNo nodes selected.");
+    }
+    if (currentUISpec) {
+      preambleParts.push(
+        "## Current control panel spec (may be refined by this turn)\n```json\n" + JSON.stringify(currentUISpec, null, 2) + "\n```"
+      );
+    }
+    if (preambleParts.length > 0) {
+      apiMessages.push({ role: "user", content: preambleParts.join("\n\n") });
+      apiMessages.push({
+        role: "assistant",
+        content: "Understood. I have the selection context and will respond with the required JSON format."
+      });
+    }
+    const conversationHistory = chatHistory.filter((m3) => m3.role !== "error");
+    for (const msg of conversationHistory) {
+      apiMessages.push({
+        role: msg.role === "user" ? "user" : "assistant",
+        content: msg.content
+      });
+    }
+    const last = apiMessages[apiMessages.length - 1];
+    if (last && last.role === "user") {
+      apiMessages[apiMessages.length - 1] = {
+        role: "user",
+        content: last.content + "\n\n" + userMessage
+      };
+    } else {
+      apiMessages.push({ role: "user", content: userMessage });
+    }
+    return { system: SYSTEM_PROMPT, messages: apiMessages };
+  }
+  function parseLLMResponse(text) {
+    let raw = text.trim();
+    const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fenceMatch) {
+      raw = fenceMatch[1].trim();
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      const objMatch = raw.match(/\{[\s\S]*\}/);
+      if (objMatch) {
+        try {
+          parsed = JSON.parse(objMatch[0]);
+        } catch {
+          return { ok: false, error: `LLM response is not valid JSON. Raw response:
+${text.slice(0, 300)}` };
+        }
+      } else {
+        return { ok: false, error: `LLM response contained no JSON object. Raw response:
+${text.slice(0, 300)}` };
+      }
+    }
+    if (typeof parsed !== "object" || parsed === null) {
+      return { ok: false, error: "LLM response parsed to a non-object." };
+    }
+    const obj = parsed;
+    if (!Array.isArray(obj.actions)) {
+      return { ok: false, error: 'LLM response missing required "actions" array.' };
+    }
+    if (typeof obj.ui !== "object" || obj.ui === null) {
+      return { ok: false, error: 'LLM response missing required "ui" object.' };
+    }
+    const ui = obj.ui;
+    if (!Array.isArray(ui.controls)) {
+      return { ok: false, error: 'LLM response "ui" object is missing "controls" array.' };
+    }
+    return {
+      ok: true,
+      data: {
+        actions: obj.actions,
+        ui: obj.ui,
+        message: typeof obj.message === "string" ? obj.message : void 0,
+        generate: typeof obj.generate === "string" ? obj.generate : void 0
+      }
+    };
+  }
+
+  // src/ui/renderer/UIRenderer.tsx
+  var import_react41 = __toESM(require_react());
+
   // src/ui/components/Slider.tsx
+  var import_react27 = __toESM(require_react());
   var import_jsx_runtime8 = __toESM(require_jsx_runtime());
   var CLICK_THRESHOLD = 3;
   var DEAD_ZONE = 32;
@@ -35934,24 +35931,24 @@ ${text.slice(0, 300)}` };
     max: max6 = 1,
     step = 0.01
   }) {
-    const wrapperRef = (0, import_react26.useRef)(null);
-    const trackRef = (0, import_react26.useRef)(null);
-    const inputRef = (0, import_react26.useRef)(null);
-    const labelRef = (0, import_react26.useRef)(null);
-    const valueSpanRef = (0, import_react26.useRef)(null);
-    const [isInteracting, setIsInteracting] = (0, import_react26.useState)(false);
-    const [isDragging2, setIsDragging] = (0, import_react26.useState)(false);
-    const [isHovered, setIsHovered] = (0, import_react26.useState)(false);
-    const [isValueHovered, setIsValueHovered] = (0, import_react26.useState)(false);
-    const [isValueEditable, setIsValueEditable] = (0, import_react26.useState)(false);
-    const [showInput, setShowInput] = (0, import_react26.useState)(false);
-    const [inputValue, setInputValue] = (0, import_react26.useState)("");
-    const hoverTimeoutRef = (0, import_react26.useRef)(null);
-    const pointerDownPos = (0, import_react26.useRef)(null);
-    const isClickRef = (0, import_react26.useRef)(true);
-    const animRef = (0, import_react26.useRef)(null);
-    const wrapperRectRef = (0, import_react26.useRef)(null);
-    const scaleRef = (0, import_react26.useRef)(1);
+    const wrapperRef = (0, import_react27.useRef)(null);
+    const trackRef = (0, import_react27.useRef)(null);
+    const inputRef = (0, import_react27.useRef)(null);
+    const labelRef = (0, import_react27.useRef)(null);
+    const valueSpanRef = (0, import_react27.useRef)(null);
+    const [isInteracting, setIsInteracting] = (0, import_react27.useState)(false);
+    const [isDragging2, setIsDragging] = (0, import_react27.useState)(false);
+    const [isHovered, setIsHovered] = (0, import_react27.useState)(false);
+    const [isValueHovered, setIsValueHovered] = (0, import_react27.useState)(false);
+    const [isValueEditable, setIsValueEditable] = (0, import_react27.useState)(false);
+    const [showInput, setShowInput] = (0, import_react27.useState)(false);
+    const [inputValue, setInputValue] = (0, import_react27.useState)("");
+    const hoverTimeoutRef = (0, import_react27.useRef)(null);
+    const pointerDownPos = (0, import_react27.useRef)(null);
+    const isClickRef = (0, import_react27.useRef)(true);
+    const animRef = (0, import_react27.useRef)(null);
+    const wrapperRectRef = (0, import_react27.useRef)(null);
+    const scaleRef = (0, import_react27.useRef)(1);
     const percentage = (value - min6) / (max6 - min6) * 100;
     const isActive = isInteracting || isHovered;
     const fillPercent = useMotionValue(percentage);
@@ -35969,12 +35966,12 @@ ${text.slice(0, 300)}` };
       rubberStretchPx,
       (stretch) => stretch < 0 ? stretch : 0
     );
-    (0, import_react26.useEffect)(() => {
+    (0, import_react27.useEffect)(() => {
       if (!isInteracting && !animRef.current) {
         fillPercent.jump(percentage);
       }
     }, [percentage, isInteracting, fillPercent]);
-    const positionToValue = (0, import_react26.useCallback)(
+    const positionToValue = (0, import_react27.useCallback)(
       (clientX) => {
         const rect = wrapperRectRef.current;
         if (!rect) return value;
@@ -35987,11 +35984,11 @@ ${text.slice(0, 300)}` };
       },
       [min6, max6, value]
     );
-    const percentFromValue = (0, import_react26.useCallback)(
+    const percentFromValue = (0, import_react27.useCallback)(
       (v3) => (v3 - min6) / (max6 - min6) * 100,
       [min6, max6]
     );
-    const computeRubberStretch = (0, import_react26.useCallback)(
+    const computeRubberStretch = (0, import_react27.useCallback)(
       (clientX, sign) => {
         const rect = wrapperRectRef.current;
         if (!rect) return 0;
@@ -36001,7 +35998,7 @@ ${text.slice(0, 300)}` };
       },
       []
     );
-    const handlePointerDown = (0, import_react26.useCallback)(
+    const handlePointerDown = (0, import_react27.useCallback)(
       (e2) => {
         if (showInput) return;
         e2.preventDefault();
@@ -36017,7 +36014,7 @@ ${text.slice(0, 300)}` };
       },
       [showInput]
     );
-    const handlePointerMove = (0, import_react26.useCallback)(
+    const handlePointerMove = (0, import_react27.useCallback)(
       (e2) => {
         if (!isInteracting || !pointerDownPos.current) return;
         const dx = e2.clientX - pointerDownPos.current.x;
@@ -36050,7 +36047,7 @@ ${text.slice(0, 300)}` };
       },
       [isInteracting, positionToValue, percentFromValue, onChange, fillPercent, rubberStretchPx, computeRubberStretch, step]
     );
-    const handlePointerUp = (0, import_react26.useCallback)(
+    const handlePointerUp = (0, import_react27.useCallback)(
       (e2) => {
         if (!isInteracting) return;
         if (isClickRef.current) {
@@ -36083,7 +36080,7 @@ ${text.slice(0, 300)}` };
       },
       [isInteracting, positionToValue, percentFromValue, onChange, min6, max6, step, fillPercent, rubberStretchPx]
     );
-    (0, import_react26.useEffect)(() => {
+    (0, import_react27.useEffect)(() => {
       if (isValueHovered && !showInput && !isValueEditable) {
         hoverTimeoutRef.current = setTimeout(() => {
           setIsValueEditable(true);
@@ -36099,7 +36096,7 @@ ${text.slice(0, 300)}` };
         if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
       };
     }, [isValueHovered, showInput, isValueEditable]);
-    (0, import_react26.useEffect)(() => {
+    (0, import_react27.useEffect)(() => {
       if (showInput && inputRef.current) {
         inputRef.current.focus();
         inputRef.current.select();
@@ -36229,18 +36226,18 @@ ${text.slice(0, 300)}` };
   }
 
   // src/ui/components/SegmentedControl.tsx
-  var import_react28 = __toESM(require_react());
+  var import_react29 = __toESM(require_react());
   var import_jsx_runtime9 = __toESM(require_jsx_runtime());
   function SegmentedControl({
     options,
     value,
     onChange
   }) {
-    const containerRef = (0, import_react28.useRef)(null);
-    const buttonRefs = (0, import_react28.useRef)(/* @__PURE__ */ new Map());
-    const [pillStyle, setPillStyle] = (0, import_react28.useState)(null);
-    const hasAnimated = (0, import_react28.useRef)(false);
-    (0, import_react28.useLayoutEffect)(() => {
+    const containerRef = (0, import_react29.useRef)(null);
+    const buttonRefs = (0, import_react29.useRef)(/* @__PURE__ */ new Map());
+    const [pillStyle, setPillStyle] = (0, import_react29.useState)(null);
+    const hasAnimated = (0, import_react29.useRef)(false);
+    (0, import_react29.useLayoutEffect)(() => {
       const button = buttonRefs.current.get(value);
       const container = containerRef.current;
       if (button && container) {
@@ -36304,7 +36301,7 @@ ${text.slice(0, 300)}` };
   }
 
   // src/ui/components/SelectControl.tsx
-  var import_react30 = __toESM(require_react());
+  var import_react31 = __toESM(require_react());
   var import_react_dom = __toESM(require_react_dom());
   var import_jsx_runtime11 = __toESM(require_jsx_runtime());
   function toTitleCase(s2) {
@@ -36316,14 +36313,14 @@ ${text.slice(0, 300)}` };
     );
   }
   function SelectControl({ label, value, options, onChange }) {
-    const [isOpen, setIsOpen] = (0, import_react30.useState)(false);
-    const triggerRef = (0, import_react30.useRef)(null);
-    const dropdownRef = (0, import_react30.useRef)(null);
-    const [pos, setPos] = (0, import_react30.useState)(null);
+    const [isOpen, setIsOpen] = (0, import_react31.useState)(false);
+    const triggerRef = (0, import_react31.useRef)(null);
+    const dropdownRef = (0, import_react31.useRef)(null);
+    const [pos, setPos] = (0, import_react31.useState)(null);
     const normalized = normalizeOptions(options);
     const selectedOption = normalized.find((o2) => o2.value === value);
     const portalTarget = document.getElementById("root") ?? document.body;
-    const updatePos = (0, import_react30.useCallback)(() => {
+    const updatePos = (0, import_react31.useCallback)(() => {
       const el = triggerRef.current;
       if (!el) return;
       const rect = el.getBoundingClientRect();
@@ -36337,11 +36334,11 @@ ${text.slice(0, 300)}` };
         above
       });
     }, [normalized.length]);
-    (0, import_react30.useEffect)(() => {
+    (0, import_react31.useEffect)(() => {
       if (!isOpen) return;
       updatePos();
     }, [isOpen, updatePos]);
-    (0, import_react30.useEffect)(() => {
+    (0, import_react31.useEffect)(() => {
       if (!isOpen) return;
       const handleClick = (e2) => {
         const target = e2.target;
@@ -36420,10 +36417,10 @@ ${text.slice(0, 300)}` };
   }
 
   // src/ui/components/Folder.tsx
-  var import_react32 = __toESM(require_react());
+  var import_react33 = __toESM(require_react());
   var import_jsx_runtime12 = __toESM(require_jsx_runtime());
   function Folder({ title, children, defaultOpen = true, onOpenChange }) {
-    const [isOpen, setIsOpen] = (0, import_react32.useState)(defaultOpen);
+    const [isOpen, setIsOpen] = (0, import_react33.useState)(defaultOpen);
     const handleToggle = () => {
       const next = !isOpen;
       setIsOpen(next);
@@ -36452,10 +36449,10 @@ ${text.slice(0, 300)}` };
   }
 
   // src/ui/components/ColorControl.tsx
-  var import_react34 = __toESM(require_react());
+  var import_react35 = __toESM(require_react());
 
   // node_modules/react-colorful/dist/index.mjs
-  var import_react33 = __toESM(require_react(), 1);
+  var import_react34 = __toESM(require_react(), 1);
   function u() {
     return (u = Object.assign || function(e2) {
       for (var r2 = 1; r2 < arguments.length; r2++) {
@@ -36472,7 +36469,7 @@ ${text.slice(0, 300)}` };
     return o2;
   }
   function i(e2) {
-    var t2 = (0, import_react33.useRef)(e2), n2 = (0, import_react33.useRef)(function(e3) {
+    var t2 = (0, import_react34.useRef)(e2), n2 = (0, import_react34.useRef)(function(e3) {
       t2.current && t2.current(e3);
     });
     return t2.current = e2, n2.current;
@@ -36496,8 +36493,8 @@ ${text.slice(0, 300)}` };
   var h = function(e2) {
     !f(e2) && e2.preventDefault();
   };
-  var m2 = import_react33.default.memo(function(o2) {
-    var a2 = o2.onMove, l2 = o2.onKey, s2 = c(o2, ["onMove", "onKey"]), m3 = (0, import_react33.useRef)(null), g2 = i(a2), p2 = i(l2), b2 = (0, import_react33.useRef)(null), _2 = (0, import_react33.useRef)(false), x2 = (0, import_react33.useMemo)(function() {
+  var m2 = import_react34.default.memo(function(o2) {
+    var a2 = o2.onMove, l2 = o2.onKey, s2 = c(o2, ["onMove", "onKey"]), m3 = (0, import_react34.useRef)(null), g2 = i(a2), p2 = i(l2), b2 = (0, import_react34.useRef)(null), _2 = (0, import_react34.useRef)(false), x2 = (0, import_react34.useMemo)(function() {
       var e2 = function(e3) {
         h(e3), (f(e3) ? e3.touches.length > 0 : e3.buttons > 0) && m3.current ? g2(d(m3.current, e3, b2.current)) : t2(false);
       }, r2 = function() {
@@ -36524,16 +36521,16 @@ ${text.slice(0, 300)}` };
         r3 < 37 || r3 > 40 || (e3.preventDefault(), p2({ left: 39 === r3 ? 0.05 : 37 === r3 ? -0.05 : 0, top: 40 === r3 ? 0.05 : 38 === r3 ? -0.05 : 0 }));
       }, t2];
     }, [p2, g2]), C3 = x2[0], E = x2[1], H = x2[2];
-    return (0, import_react33.useEffect)(function() {
+    return (0, import_react34.useEffect)(function() {
       return H;
-    }, [H]), import_react33.default.createElement("div", u({}, s2, { onTouchStart: C3, onMouseDown: C3, className: "react-colorful__interactive", ref: m3, onKeyDown: E, tabIndex: 0, role: "slider" }));
+    }, [H]), import_react34.default.createElement("div", u({}, s2, { onTouchStart: C3, onMouseDown: C3, className: "react-colorful__interactive", ref: m3, onKeyDown: E, tabIndex: 0, role: "slider" }));
   });
   var g = function(e2) {
     return e2.filter(Boolean).join(" ");
   };
   var p = function(r2) {
     var t2 = r2.color, n2 = r2.left, o2 = r2.top, a2 = void 0 === o2 ? 0.5 : o2, l2 = g(["react-colorful__pointer", r2.className]);
-    return import_react33.default.createElement("div", { className: l2, style: { top: 100 * a2 + "%", left: 100 * n2 + "%" } }, import_react33.default.createElement("div", { className: "react-colorful__pointer-fill", style: { backgroundColor: t2 } }));
+    return import_react34.default.createElement("div", { className: l2, style: { top: 100 * a2 + "%", left: 100 * n2 + "%" } }, import_react34.default.createElement("div", { className: "react-colorful__pointer-fill", style: { backgroundColor: t2 } }));
   };
   var b = function(e2, r2, t2) {
     return void 0 === r2 && (r2 = 0), void 0 === t2 && (t2 = Math.pow(10, r2)), Math.round(t2 * e2) / t2;
@@ -36574,21 +36571,21 @@ ${text.slice(0, 300)}` };
     var r2 = e2.r, t2 = e2.g, n2 = e2.b, o2 = e2.a, a2 = Math.max(r2, t2, n2), l2 = a2 - Math.min(r2, t2, n2), u5 = l2 ? a2 === r2 ? (t2 - n2) / l2 : a2 === t2 ? 2 + (n2 - r2) / l2 : 4 + (r2 - t2) / l2 : 0;
     return { h: b(60 * (u5 < 0 ? u5 + 6 : u5)), s: b(a2 ? l2 / a2 * 100 : 0), v: b(a2 / 255 * 100), a: o2 };
   };
-  var S = import_react33.default.memo(function(r2) {
+  var S = import_react34.default.memo(function(r2) {
     var t2 = r2.hue, n2 = r2.onChange, o2 = g(["react-colorful__hue", r2.className]);
-    return import_react33.default.createElement("div", { className: o2 }, import_react33.default.createElement(m2, { onMove: function(e2) {
+    return import_react34.default.createElement("div", { className: o2 }, import_react34.default.createElement(m2, { onMove: function(e2) {
       n2({ h: 360 * e2.left });
     }, onKey: function(e2) {
       n2({ h: s(t2 + 360 * e2.left, 0, 360) });
-    }, "aria-label": "Hue", "aria-valuenow": b(t2), "aria-valuemax": "360", "aria-valuemin": "0" }, import_react33.default.createElement(p, { className: "react-colorful__hue-pointer", left: t2 / 360, color: q({ h: t2, s: 100, v: 100, a: 1 }) })));
+    }, "aria-label": "Hue", "aria-valuenow": b(t2), "aria-valuemax": "360", "aria-valuemin": "0" }, import_react34.default.createElement(p, { className: "react-colorful__hue-pointer", left: t2 / 360, color: q({ h: t2, s: 100, v: 100, a: 1 }) })));
   });
-  var T = import_react33.default.memo(function(r2) {
+  var T = import_react34.default.memo(function(r2) {
     var t2 = r2.hsva, n2 = r2.onChange, o2 = { backgroundColor: q({ h: t2.h, s: 100, v: 100, a: 1 }) };
-    return import_react33.default.createElement("div", { className: "react-colorful__saturation", style: o2 }, import_react33.default.createElement(m2, { onMove: function(e2) {
+    return import_react34.default.createElement("div", { className: "react-colorful__saturation", style: o2 }, import_react34.default.createElement(m2, { onMove: function(e2) {
       n2({ s: 100 * e2.left, v: 100 - 100 * e2.top });
     }, onKey: function(e2) {
       n2({ s: s(t2.s + 100 * e2.left, 0, 100), v: s(t2.v - 100 * e2.top, 0, 100) });
-    }, "aria-label": "Color", "aria-valuetext": "Saturation " + b(t2.s) + "%, Brightness " + b(t2.v) + "%" }, import_react33.default.createElement(p, { className: "react-colorful__saturation-pointer", top: 1 - t2.v / 100, left: t2.s / 100, color: q(t2) })));
+    }, "aria-label": "Color", "aria-valuetext": "Saturation " + b(t2.s) + "%, Brightness " + b(t2.v) + "%" }, import_react34.default.createElement(p, { className: "react-colorful__saturation-pointer", top: 1 - t2.v / 100, left: t2.s / 100, color: q(t2) })));
   });
   var F = function(e2, r2) {
     if (e2 === r2) return true;
@@ -36599,19 +36596,19 @@ ${text.slice(0, 300)}` };
     return e2.toLowerCase() === r2.toLowerCase() || F(C(e2), C(r2));
   };
   function Y(e2, t2, l2) {
-    var u5 = i(l2), c2 = (0, import_react33.useState)(function() {
+    var u5 = i(l2), c2 = (0, import_react34.useState)(function() {
       return e2.toHsva(t2);
-    }), s2 = c2[0], f2 = c2[1], v3 = (0, import_react33.useRef)({ color: t2, hsva: s2 });
-    (0, import_react33.useEffect)(function() {
+    }), s2 = c2[0], f2 = c2[1], v3 = (0, import_react34.useRef)({ color: t2, hsva: s2 });
+    (0, import_react34.useEffect)(function() {
       if (!e2.equal(t2, v3.current.color)) {
         var r2 = e2.toHsva(t2);
         v3.current = { hsva: r2, color: t2 }, f2(r2);
       }
-    }, [t2, e2]), (0, import_react33.useEffect)(function() {
+    }, [t2, e2]), (0, import_react34.useEffect)(function() {
       var r2;
       F(s2, v3.current.hsva) || e2.equal(r2 = e2.fromHsva(s2), v3.current.color) || (v3.current = { hsva: s2, color: r2 }, u5(r2));
     }, [s2, e2, u5]);
-    var d2 = (0, import_react33.useCallback)(function(e3) {
+    var d2 = (0, import_react34.useCallback)(function(e3) {
       f2(function(r2) {
         return Object.assign({}, r2, e3);
       });
@@ -36619,7 +36616,7 @@ ${text.slice(0, 300)}` };
     return [s2, d2];
   }
   var R;
-  var V = "undefined" != typeof window ? import_react33.useLayoutEffect : import_react33.useEffect;
+  var V = "undefined" != typeof window ? import_react34.useLayoutEffect : import_react34.useEffect;
   var $ = function() {
     return R || ("undefined" != typeof __webpack_nonce__ ? __webpack_nonce__ : void 0);
   };
@@ -36636,16 +36633,16 @@ ${text.slice(0, 300)}` };
     }, []);
   };
   var U = function(t2) {
-    var n2 = t2.className, o2 = t2.colorModel, a2 = t2.color, l2 = void 0 === a2 ? o2.defaultColor : a2, i2 = t2.onChange, s2 = c(t2, ["className", "colorModel", "color", "onChange"]), f2 = (0, import_react33.useRef)(null);
+    var n2 = t2.className, o2 = t2.colorModel, a2 = t2.color, l2 = void 0 === a2 ? o2.defaultColor : a2, i2 = t2.onChange, s2 = c(t2, ["className", "colorModel", "color", "onChange"]), f2 = (0, import_react34.useRef)(null);
     Q(f2);
     var v3 = Y(o2, l2, i2), d2 = v3[0], h2 = v3[1], m3 = g(["react-colorful", n2]);
-    return import_react33.default.createElement("div", u({}, s2, { ref: f2, className: m3 }), import_react33.default.createElement(T, { hsva: d2, onChange: h2 }), import_react33.default.createElement(S, { hue: d2.h, onChange: h2, className: "react-colorful__last-control" }));
+    return import_react34.default.createElement("div", u({}, s2, { ref: f2, className: m3 }), import_react34.default.createElement(T, { hsva: d2, onChange: h2 }), import_react34.default.createElement(S, { hue: d2.h, onChange: h2, className: "react-colorful__last-control" }));
   };
   var W = { defaultColor: "000", toHsva: x, fromHsva: function(e2) {
     return w({ h: e2.h, s: e2.s, v: e2.v, a: 1 });
   }, equal: X };
   var Z = function(r2) {
-    return import_react33.default.createElement(U, u({}, r2, { colorModel: W }));
+    return import_react34.default.createElement(U, u({}, r2, { colorModel: W }));
   };
 
   // src/ui/components/ColorControl.tsx
@@ -36656,14 +36653,14 @@ ${text.slice(0, 300)}` };
     return `#${hex3[1]}${hex3[1]}${hex3[2]}${hex3[2]}${hex3[3]}${hex3[3]}`;
   }
   function ColorControl({ label, value, onChange }) {
-    const [isEditing, setIsEditing] = (0, import_react34.useState)(false);
-    const [editValue, setEditValue] = (0, import_react34.useState)(value);
-    const [pickerOpen, setPickerOpen] = (0, import_react34.useState)(false);
-    const wrapperRef = (0, import_react34.useRef)(null);
-    (0, import_react34.useEffect)(() => {
+    const [isEditing, setIsEditing] = (0, import_react35.useState)(false);
+    const [editValue, setEditValue] = (0, import_react35.useState)(value);
+    const [pickerOpen, setPickerOpen] = (0, import_react35.useState)(false);
+    const wrapperRef = (0, import_react35.useRef)(null);
+    (0, import_react35.useEffect)(() => {
       if (!isEditing) setEditValue(value);
     }, [value, isEditing]);
-    (0, import_react34.useEffect)(() => {
+    (0, import_react35.useEffect)(() => {
       if (!pickerOpen) return;
       function handleClickOutside(e2) {
         if (wrapperRef.current && !wrapperRef.current.contains(e2.target)) {
@@ -36688,7 +36685,7 @@ ${text.slice(0, 300)}` };
         setEditValue(value);
       }
     }
-    const handlePickerChange = (0, import_react34.useCallback)((color2) => {
+    const handlePickerChange = (0, import_react35.useCallback)((color2) => {
       onChange(color2);
     }, [onChange]);
     const normalizedValue = value.length === 4 ? expandShorthandHex(value) : value.slice(0, 7);
@@ -36724,7 +36721,7 @@ ${text.slice(0, 300)}` };
   }
 
   // src/ui/components/SpringControl.tsx
-  var import_react35 = __toESM(require_react());
+  var import_react36 = __toESM(require_react());
 
   // src/ui/components/SpringVisualization.tsx
   var import_jsx_runtime14 = __toESM(require_jsx_runtime());
@@ -36817,7 +36814,7 @@ ${text.slice(0, 300)}` };
   var import_jsx_runtime15 = __toESM(require_jsx_runtime());
   function SpringControl({ label, value, onChange }) {
     const hasPhysicsProps = value.stiffness !== void 0 || value.damping !== void 0;
-    const [mode, setMode] = (0, import_react35.useState)(hasPhysicsProps ? "advanced" : "simple");
+    const [mode, setMode] = (0, import_react36.useState)(hasPhysicsProps ? "advanced" : "simple");
     const isSimpleMode = mode === "simple";
     const handleModeChange = (newMode) => {
       setMode(newMode);
@@ -36948,7 +36945,7 @@ ${text.slice(0, 300)}` };
   var import_jsx_runtime17 = __toESM(require_jsx_runtime());
 
   // src/ui/components/NumberInput.tsx
-  var import_react36 = __toESM(require_react());
+  var import_react37 = __toESM(require_react());
   var import_jsx_runtime18 = __toESM(require_jsx_runtime());
   function decimalsForStep2(step) {
     const s2 = step.toString();
@@ -36971,10 +36968,10 @@ ${text.slice(0, 300)}` };
     placeholder
   }) {
     const decimals = decimalsForStep2(step);
-    const [raw, setRaw] = (0, import_react36.useState)(value.toFixed(decimals));
-    const [isFocused, setIsFocused] = (0, import_react36.useState)(false);
-    const inputRef = (0, import_react36.useRef)(null);
-    const prevValueRef = (0, import_react36.useRef)(value);
+    const [raw, setRaw] = (0, import_react37.useState)(value.toFixed(decimals));
+    const [isFocused, setIsFocused] = (0, import_react37.useState)(false);
+    const inputRef = (0, import_react37.useRef)(null);
+    const prevValueRef = (0, import_react37.useRef)(value);
     if (!isFocused && prevValueRef.current !== value) {
       prevValueRef.current = value;
       setRaw(value.toFixed(decimals));
@@ -37032,7 +37029,7 @@ ${text.slice(0, 300)}` };
   }
 
   // src/ui/components/AngleWheel.tsx
-  var import_react37 = __toESM(require_react());
+  var import_react38 = __toESM(require_react());
   var import_jsx_runtime19 = __toESM(require_jsx_runtime());
   var DIAL_SIZE = 48;
   var DIAL_RADIUS = DIAL_SIZE / 2;
@@ -37054,19 +37051,19 @@ ${text.slice(0, 300)}` };
     max: max6 = 180,
     step = 1
   }) {
-    const dialRef = (0, import_react37.useRef)(null);
-    const inputRef = (0, import_react37.useRef)(null);
-    const [isDragging2, setIsDragging] = (0, import_react37.useState)(false);
-    const [showInput, setShowInput] = (0, import_react37.useState)(false);
-    const [inputValue, setInputValue] = (0, import_react37.useState)("");
-    const [isHovered, setIsHovered] = (0, import_react37.useState)(false);
-    const [isValueHovered, setIsValueHovered] = (0, import_react37.useState)(false);
-    const [isValueEditable, setIsValueEditable] = (0, import_react37.useState)(false);
-    const hoverTimeoutRef = (0, import_react37.useRef)(null);
+    const dialRef = (0, import_react38.useRef)(null);
+    const inputRef = (0, import_react38.useRef)(null);
+    const [isDragging2, setIsDragging] = (0, import_react38.useState)(false);
+    const [showInput, setShowInput] = (0, import_react38.useState)(false);
+    const [inputValue, setInputValue] = (0, import_react38.useState)("");
+    const [isHovered, setIsHovered] = (0, import_react38.useState)(false);
+    const [isValueHovered, setIsValueHovered] = (0, import_react38.useState)(false);
+    const [isValueEditable, setIsValueEditable] = (0, import_react38.useState)(false);
+    const hoverTimeoutRef = (0, import_react38.useRef)(null);
     const angleRad = (value - 90) * Math.PI / 180;
     const dotX = DIAL_RADIUS + Math.cos(angleRad) * TRACK_RADIUS;
     const dotY = DIAL_RADIUS + Math.sin(angleRad) * TRACK_RADIUS;
-    const angleFromPointer = (0, import_react37.useCallback)(
+    const angleFromPointer = (0, import_react38.useCallback)(
       (clientX, clientY) => {
         const el = dialRef.current;
         if (!el) return value;
@@ -37082,7 +37079,7 @@ ${text.slice(0, 300)}` };
       },
       [value, min6, max6, step]
     );
-    const handlePointerDown = (0, import_react37.useCallback)(
+    const handlePointerDown = (0, import_react38.useCallback)(
       (e2) => {
         e2.preventDefault();
         e2.target.setPointerCapture(e2.pointerId);
@@ -37091,17 +37088,17 @@ ${text.slice(0, 300)}` };
       },
       [onChange, angleFromPointer]
     );
-    const handlePointerMove = (0, import_react37.useCallback)(
+    const handlePointerMove = (0, import_react38.useCallback)(
       (e2) => {
         if (!isDragging2) return;
         onChange(angleFromPointer(e2.clientX, e2.clientY));
       },
       [isDragging2, onChange, angleFromPointer]
     );
-    const handlePointerUp = (0, import_react37.useCallback)(() => {
+    const handlePointerUp = (0, import_react38.useCallback)(() => {
       setIsDragging(false);
     }, []);
-    (0, import_react37.useEffect)(() => {
+    (0, import_react38.useEffect)(() => {
       if (isValueHovered && !showInput && !isValueEditable) {
         hoverTimeoutRef.current = setTimeout(() => {
           setIsValueEditable(true);
@@ -37117,7 +37114,7 @@ ${text.slice(0, 300)}` };
         if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
       };
     }, [isValueHovered, showInput, isValueEditable]);
-    (0, import_react37.useEffect)(() => {
+    (0, import_react38.useEffect)(() => {
       if (showInput && inputRef.current) {
         inputRef.current.focus();
         inputRef.current.select();
@@ -37271,7 +37268,7 @@ ${text.slice(0, 300)}` };
   }
 
   // src/ui/components/CubePreview.tsx
-  var import_react38 = __toESM(require_react());
+  var import_react39 = __toESM(require_react());
 
   // node_modules/ogl/src/math/functions/Vec3Func.js
   function length(a2) {
@@ -40771,13 +40768,13 @@ void main() {
     camera.position.z = ORBIT_RADIUS * sinPhi * Math.cos(theta);
   }
   function CubePreview({ rx, ry, rz = 0, onRotate }) {
-    const containerRef = (0, import_react38.useRef)(null);
-    const stateRef = (0, import_react38.useRef)(null);
-    const onRotateRef = (0, import_react38.useRef)(onRotate);
+    const containerRef = (0, import_react39.useRef)(null);
+    const stateRef = (0, import_react39.useRef)(null);
+    const onRotateRef = (0, import_react39.useRef)(onRotate);
     onRotateRef.current = onRotate;
-    const propsRef = (0, import_react38.useRef)({ rx, ry });
+    const propsRef = (0, import_react39.useRef)({ rx, ry });
     propsRef.current = { rx, ry };
-    (0, import_react38.useEffect)(() => {
+    (0, import_react39.useEffect)(() => {
       const container = containerRef.current;
       if (!container) return;
       const renderer = new Renderer({
@@ -40906,7 +40903,7 @@ void main() {
         stateRef.current = null;
       };
     }, []);
-    (0, import_react38.useEffect)(() => {
+    (0, import_react39.useEffect)(() => {
       const state = stateRef.current;
       if (!state) return;
       const { rx: emRx, ry: emRy } = { rx: state.lastEmittedRx, ry: state.lastEmittedRy };
@@ -40948,7 +40945,7 @@ void main() {
   }
 
   // src/ui/components/PreviewCanvas.tsx
-  var import_react39 = __toESM(require_react());
+  var import_react40 = __toESM(require_react());
   var import_jsx_runtime21 = __toESM(require_jsx_runtime());
   function rgbToCSS(c2, opacity = 1) {
     return `rgba(${Math.round(c2.r * 255)}, ${Math.round(c2.g * 255)}, ${Math.round(c2.b * 255)}, ${opacity})`;
@@ -40970,8 +40967,8 @@ void main() {
     };
   }
   function PreviewCanvas({ actions }) {
-    const canvasRef = (0, import_react39.useRef)(null);
-    (0, import_react39.useEffect)(() => {
+    const canvasRef = (0, import_react40.useRef)(null);
+    (0, import_react40.useEffect)(() => {
       const canvas = canvasRef.current;
       if (!canvas || !actions.length) return;
       const ctx = canvas.getContext("2d");
@@ -46471,7 +46468,7 @@ void main() {
   var import_jsx_runtime22 = __toESM(require_jsx_runtime());
   function ControlRenderer({ control, mode, onControlChange, onControlValueChange }) {
     const { id: id3, type, label = "", props = {}, action } = control;
-    const onChange = (0, import_react40.useCallback)(
+    const onChange = (0, import_react41.useCallback)(
       (value) => {
         onControlValueChange(id3, value);
         if (mode === "live") {
@@ -46482,7 +46479,7 @@ void main() {
     );
     switch (type) {
       case "slider": {
-        const [val, setVal] = (0, import_react40.useState)(
+        const [val, setVal] = (0, import_react41.useState)(
           typeof props.defaultValue === "number" ? props.defaultValue : typeof props.min === "number" ? props.min : 0
         );
         return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
@@ -46501,7 +46498,7 @@ void main() {
         );
       }
       case "toggle": {
-        const [val, setVal] = (0, import_react40.useState)(props.defaultValue === true);
+        const [val, setVal] = (0, import_react41.useState)(props.defaultValue === true);
         return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
           Toggle,
           {
@@ -46515,7 +46512,7 @@ void main() {
         );
       }
       case "number": {
-        const [val, setVal] = (0, import_react40.useState)(
+        const [val, setVal] = (0, import_react41.useState)(
           typeof props.defaultValue === "number" ? props.defaultValue : typeof props.min === "number" ? props.min : 0
         );
         return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
@@ -46535,7 +46532,7 @@ void main() {
       }
       case "select": {
         const options = Array.isArray(props.options) ? props.options : ["Option A", "Option B"];
-        const [val, setVal] = (0, import_react40.useState)(
+        const [val, setVal] = (0, import_react41.useState)(
           typeof props.defaultValue === "string" ? props.defaultValue : options[0] ?? ""
         );
         return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
@@ -46553,7 +46550,7 @@ void main() {
       }
       case "segmented": {
         const options = Array.isArray(props.options) ? props.options : [{ value: "a", label: "A" }, { value: "b", label: "B" }];
-        const [val, setVal] = (0, import_react40.useState)(
+        const [val, setVal] = (0, import_react41.useState)(
           typeof props.defaultValue === "string" ? props.defaultValue : options[0]?.value ?? ""
         );
         return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "dialkit-labeled-control", children: [
@@ -46572,7 +46569,7 @@ void main() {
         ] });
       }
       case "color": {
-        const [val, setVal] = (0, import_react40.useState)(
+        const [val, setVal] = (0, import_react41.useState)(
           typeof props.defaultValue === "string" ? props.defaultValue : "#000000"
         );
         return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
@@ -46588,7 +46585,7 @@ void main() {
         );
       }
       case "spring": {
-        const [val, setVal] = (0, import_react40.useState)({
+        const [val, setVal] = (0, import_react41.useState)({
           type: "spring",
           visualDuration: 0.3,
           bounce: 0.2,
@@ -46607,7 +46604,7 @@ void main() {
         );
       }
       case "text": {
-        const [val, setVal] = (0, import_react40.useState)(
+        const [val, setVal] = (0, import_react41.useState)(
           typeof props.defaultValue === "string" ? props.defaultValue : ""
         );
         return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
@@ -46624,7 +46621,7 @@ void main() {
         );
       }
       case "angle": {
-        const [val, setVal] = (0, import_react40.useState)(
+        const [val, setVal] = (0, import_react41.useState)(
           typeof props.defaultValue === "number" ? props.defaultValue : 0
         );
         return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
@@ -46696,18 +46693,18 @@ void main() {
   }
   function UIRenderer({ spec, onApply, onValueChange }) {
     const mode = spec.mode === "apply" ? "apply" : "live";
-    const [controlValues, setControlValues] = (0, import_react40.useState)(() => collectControlDefaults(spec.controls));
-    const [previewActions, setPreviewActions] = (0, import_react40.useState)(null);
-    const previewTimerRef = (0, import_react40.useRef)(null);
-    const controlValuesRef = (0, import_react40.useRef)(controlValues);
+    const [controlValues, setControlValues] = (0, import_react41.useState)(() => collectControlDefaults(spec.controls));
+    const [previewActions, setPreviewActions] = (0, import_react41.useState)(null);
+    const previewTimerRef = (0, import_react41.useRef)(null);
+    const controlValuesRef = (0, import_react41.useRef)(controlValues);
     controlValuesRef.current = controlValues;
     const angleIds = findAngleControls(spec.controls);
     const hasCubePreview = mode === "apply" && !!spec.generate && !spec.imageNodeId && !!angleIds;
     const hasPreview = hasCubePreview;
-    (0, import_react40.useEffect)(() => {
+    (0, import_react41.useEffect)(() => {
       setControlValues(collectControlDefaults(spec.controls));
     }, [spec]);
-    (0, import_react40.useEffect)(() => {
+    (0, import_react41.useEffect)(() => {
       if (!hasPreview || hasCubePreview || !spec.generate) return;
       try {
         const fn = compileGenerator(spec.generate);
@@ -46717,7 +46714,7 @@ void main() {
         setPreviewActions(null);
       }
     }, [spec.generate, hasPreview, hasCubePreview]);
-    const runPreview = (0, import_react40.useCallback)(() => {
+    const runPreview = (0, import_react41.useCallback)(() => {
       if (!hasPreview || hasCubePreview || !spec.generate) return;
       try {
         const fn = compileGenerator(spec.generate);
@@ -46727,7 +46724,7 @@ void main() {
         setPreviewActions(null);
       }
     }, [hasPreview, hasCubePreview, spec.generate]);
-    const handleControlChange = (0, import_react40.useCallback)(
+    const handleControlChange = (0, import_react41.useCallback)(
       (controlId, value, action, actions) => {
         if (!action && !actions?.length) return;
         postToMain({
@@ -46737,7 +46734,7 @@ void main() {
       },
       []
     );
-    const handleControlValueChange = (0, import_react40.useCallback)((controlId, value) => {
+    const handleControlValueChange = (0, import_react41.useCallback)((controlId, value) => {
       setControlValues((prev) => {
         const next = { ...prev, [controlId]: value };
         controlValuesRef.current = next;
@@ -46749,7 +46746,7 @@ void main() {
         previewTimerRef.current = setTimeout(runPreview, 80);
       }
     }, [onValueChange, hasPreview, hasCubePreview, runPreview]);
-    const handleCubeRotate = (0, import_react40.useCallback)((newRx, newRy) => {
+    const handleCubeRotate = (0, import_react41.useCallback)((newRx, newRy) => {
       if (!angleIds) return;
       setControlValues((prev) => {
         const next = { ...prev, [angleIds.rx]: newRx, [angleIds.ry]: newRy };
@@ -46794,7 +46791,7 @@ void main() {
   }
 
   // src/ui/components/FlaskLoader.tsx
-  var import_react41 = __toESM(require_react());
+  var import_react42 = __toESM(require_react());
   var import_jsx_runtime23 = __toESM(require_jsx_runtime());
   var FLASK_OUTLINE = "M29 12C29.552 12 30 12.448 30 13C30 13.552 29.552 14 29 14H28V20.359C28 20.568 28.065 20.771 28.186 20.94L35.555 31.256C36.973 33.241 35.553 36 33.113 36H14.887C12.447 36 11.027 33.241 12.445 31.256L19.813 20.94C19.934 20.771 20 20.568 20 20.359V14H19C18.448 14 18 13.552 18 13C18 12.448 18.448 12 19 12H29ZM22 20.359C22 20.984 21.805 21.594 21.441 22.103L14.072 32.419C13.6 33.081 14.074 34 14.887 34H33.113C33.926 34 34.4 33.081 33.928 32.419L26.559 22.103C26.195 21.594 26 20.984 26 20.359V14H22V20.359Z";
   var FLASK_MASK = "M22 20.359C22 20.984 21.805 21.594 21.441 22.103L14.072 32.419C13.6 33.081 14.074 34 14.887 34H33.113C33.926 34 34.4 33.081 33.928 32.419L26.559 22.103C26.195 21.594 26 20.984 26 20.359V14H22V20.359Z";
@@ -46822,9 +46819,9 @@ void main() {
   var WAVE_D = buildWavePath();
   var FLAT_D = buildFlatPath();
   function FlaskLoader({ state, size = 48 }) {
-    const [phase, setPhase] = (0, import_react41.useState)("idle");
-    const timersRef = (0, import_react41.useRef)([]);
-    (0, import_react41.useEffect)(() => {
+    const [phase, setPhase] = (0, import_react42.useState)("idle");
+    const timersRef = (0, import_react42.useRef)([]);
+    (0, import_react42.useEffect)(() => {
       timersRef.current.forEach(clearTimeout);
       timersRef.current = [];
       if (state === "loading") {
@@ -46956,7 +46953,7 @@ void main() {
   var PLUGIN_WIDTH = 300;
   var MAX_HEIGHT = 600;
   function useShellResize() {
-    (0, import_react42.useEffect)(() => {
+    (0, import_react43.useEffect)(() => {
       parent.postMessage(
         { pluginMessage: { type: "resize", width: PLUGIN_WIDTH, height: MAX_HEIGHT } },
         "*"
@@ -46978,20 +46975,20 @@ void main() {
   }
   function App() {
     useShellResize();
-    const [messages, setMessages] = (0, import_react42.useState)([]);
-    const [currentUISpec, setCurrentUISpec] = (0, import_react42.useState)(null);
-    const [isLoading, setIsLoading] = (0, import_react42.useState)(false);
-    const [flaskState, setFlaskState] = (0, import_react42.useState)("idle");
-    const [isInputFocused, setIsInputFocused] = (0, import_react42.useState)(false);
-    const [loadingVerb, setLoadingVerb] = (0, import_react42.useState)(null);
-    const [selectionContext, setSelectionContext] = (0, import_react42.useState)(null);
-    const [mockSelectionName, setMockSelectionName] = (0, import_react42.useState)(null);
-    const demoTimersRef = (0, import_react42.useRef)([]);
-    const createdNodeIdsRef = (0, import_react42.useRef)([]);
-    const rootFrameIdRef = (0, import_react42.useRef)(void 0);
-    const messagesRef = (0, import_react42.useRef)(messages);
+    const [messages, setMessages] = (0, import_react43.useState)([]);
+    const [currentUISpec, setCurrentUISpec] = (0, import_react43.useState)(null);
+    const [isLoading, setIsLoading] = (0, import_react43.useState)(false);
+    const [flaskState, setFlaskState] = (0, import_react43.useState)("idle");
+    const [isInputFocused, setIsInputFocused] = (0, import_react43.useState)(false);
+    const [loadingVerb, setLoadingVerb] = (0, import_react43.useState)(null);
+    const [selectionContext, setSelectionContext] = (0, import_react43.useState)(null);
+    const [mockSelectionName, setMockSelectionName] = (0, import_react43.useState)(null);
+    const demoTimersRef = (0, import_react43.useRef)([]);
+    const createdNodeIdsRef = (0, import_react43.useRef)([]);
+    const rootFrameIdRef = (0, import_react43.useRef)(void 0);
+    const messagesRef = (0, import_react43.useRef)(messages);
     messagesRef.current = messages;
-    (0, import_react42.useEffect)(() => {
+    (0, import_react43.useEffect)(() => {
       postToMain({ type: "PLUGIN_READY" });
       return onMainMessage((msg) => {
         if (msg.type === "SELECTION_CONTEXT") {
@@ -47032,13 +47029,13 @@ ${errors.join("\n")}`);
         }
       });
     }, []);
-    const addMessage = (0, import_react42.useCallback)((role, content) => {
+    const addMessage = (0, import_react43.useCallback)((role, content) => {
       setMessages((prev) => [
         ...prev,
         { id: `${Date.now()}-${Math.random()}`, role, content }
       ]);
     }, []);
-    const fetchImageData = (0, import_react42.useCallback)((nodeId, maxWidth = 100) => {
+    const fetchImageData = (0, import_react43.useCallback)((nodeId, maxWidth = 100) => {
       return new Promise((resolve, reject) => {
         const requestId = `img-${Date.now()}-${Math.random()}`;
         const cleanup = onMainMessage((msg) => {
@@ -47053,7 +47050,7 @@ ${errors.join("\n")}`);
         postToMain({ type: "REQUEST_IMAGE_DATA", payload: { requestId, nodeId, maxWidth } });
       });
     }, []);
-    const handleApply = (0, import_react42.useCallback)(async (values) => {
+    const handleApply = (0, import_react43.useCallback)(async (values) => {
       if (!currentUISpec || currentUISpec.mode !== "apply") return;
       const stampedSpec = specWithCurrentValues(currentUISpec, values);
       setCurrentUISpec(stampedSpec);
@@ -47127,7 +47124,7 @@ ${errors.join("\n")}`);
         }
       });
     }, [addMessage, currentUISpec, fetchImageData]);
-    const handleDetach = (0, import_react42.useCallback)(() => {
+    const handleDetach = (0, import_react43.useCallback)(() => {
       const nodeId = rootFrameIdRef.current;
       if (nodeId) {
         postToMain({ type: "CLEAR_PLUGIN_DATA", payload: { nodeId } });
@@ -47138,16 +47135,16 @@ ${errors.join("\n")}`);
       setMessages([]);
     }, []);
     const hasSelection = mockSelectionName !== null || selectionContext !== null && selectionContext.nodes.length > 0;
-    (0, import_react42.useEffect)(() => {
+    (0, import_react43.useEffect)(() => {
       setFlaskState((prev) => {
         if (prev === "loading" || prev === "success") return prev;
         return hasSelection || isInputFocused ? "ready" : "idle";
       });
     }, [hasSelection, isInputFocused]);
-    const handleFocusChange = (0, import_react42.useCallback)((focused) => {
+    const handleFocusChange = (0, import_react43.useCallback)((focused) => {
       setIsInputFocused(focused);
     }, []);
-    const finishLoading = (0, import_react42.useCallback)((success) => {
+    const finishLoading = (0, import_react43.useCallback)((success) => {
       setIsLoading(false);
       setLoadingVerb(null);
       if (success) {
@@ -47159,7 +47156,7 @@ ${errors.join("\n")}`);
         setFlaskState("idle");
       }
     }, []);
-    const handleSubmit = (0, import_react42.useCallback)(async (text) => {
+    const handleSubmit = (0, import_react43.useCallback)(async (text) => {
       const cmd = text.trim().toLowerCase();
       if (cmd === "/clear") {
         handleDetach();
@@ -47225,6 +47222,10 @@ ${errors.join("\n")}`);
         demoTimersRef.current.push(setTimeout(() => {
           setFlaskState("ready");
         }, 5600));
+        return;
+      }
+      if (cmd === "/history clear") {
+        setMessages([]);
         return;
       }
       if (cmd === "/history") {
@@ -47363,8 +47364,8 @@ ${errors.join("\n")}`);
       setCurrentUISpec(mergedUi);
       finishLoading(true);
     }, [addMessage, selectionContext, currentUISpec, fetchImageData, handleDetach, finishLoading]);
-    const persistTimerRef = (0, import_react42.useRef)(null);
-    const handleValueChange = (0, import_react42.useCallback)((controlId, value) => {
+    const persistTimerRef = (0, import_react43.useRef)(null);
+    const handleValueChange = (0, import_react43.useCallback)((controlId, value) => {
       setCurrentUISpec((prev) => {
         if (!prev) return prev;
         const updated = specWithCurrentValues(prev, { [controlId]: value });

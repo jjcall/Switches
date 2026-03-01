@@ -415,6 +415,11 @@ function App() {
       return;
     }
 
+    if (cmd === '/history clear') {
+      setMessages([]);
+      return;
+    }
+
     if (cmd === '/history') {
       setMessages([]);
       const samples: { role: ChatMessage['role']; content: string }[] = [

@@ -876,8 +876,6 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  transition: opacity 0.3s ease, transform 0.3s ease;
-  transform-origin: center bottom;
 }
 
 /* Overlap: pull each prompt up into the one above */

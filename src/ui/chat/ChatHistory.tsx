@@ -1,3 +1,5 @@
+import { motion, AnimatePresence } from 'motion/react';
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'error';
@@ -20,18 +22,21 @@ export function ChatHistory({ messages }: ChatHistoryProps) {
 
   return (
     <div className="chat-history">
-      {recent.map((msg, i) => (
-        <div
-          key={msg.id}
-          className={`chat-prompt chat-prompt--${msg.role}`}
-          style={{
-            opacity: opacities[i],
-            transform: `scale(${scales[i]})`,
-          }}
-        >
-          <span className="chat-prompt-text">{msg.content}</span>
-        </div>
-      ))}
+      <AnimatePresence mode="popLayout">
+        {recent.map((msg, i) => (
+          <motion.div
+            key={msg.id}
+            className={`chat-prompt chat-prompt--${msg.role}`}
+            layout
+            initial={{ opacity: 0, scale: 0.95, y: 8 }}
+            animate={{ opacity: opacities[i], scale: scales[i], y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: -8 }}
+            transition={{ type: 'spring', visualDuration: 0.3, bounce: 0.1 }}
+          >
+            <span className="chat-prompt-text">{msg.content}</span>
+          </motion.div>
+        ))}
+      </AnimatePresence>
     </div>
   );
 }
