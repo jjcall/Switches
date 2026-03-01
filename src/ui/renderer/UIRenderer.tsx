@@ -278,9 +278,9 @@ export function UIRenderer({ spec, onApply, onValueChange }: UIRendererProps) {
   const controlValuesRef = useRef<ControlValues>(controlValues);
   controlValuesRef.current = controlValues;
 
-  const hasPreview = mode === 'apply' && !!spec.generate && !spec.imageNodeId;
   const angleIds = findAngleControls(spec.controls);
-  const hasCubePreview = hasPreview && !!angleIds;
+  const hasCubePreview = mode === 'apply' && !!spec.generate && !spec.imageNodeId && !!angleIds;
+  const hasPreview = hasCubePreview;
 
   useEffect(() => {
     setControlValues(collectControlDefaults(spec.controls));

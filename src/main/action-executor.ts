@@ -156,6 +156,18 @@ function toEffects(rawEffects: unknown): Effect[] {
 
 // ─── Method implementations ───────────────────────────────────────────────────
 
+function applyInlineFillsAndStrokes(node: SceneNode, args: Args): void {
+  if (Array.isArray(args.fills) && 'fills' in node) {
+    (node as GeometryMixin).fills = toPaints(args.fills);
+  }
+  if (Array.isArray(args.strokes) && 'strokes' in node) {
+    (node as GeometryMixin).strokes = toPaints(args.strokes);
+    if (typeof args.strokeWeight === 'number') {
+      (node as GeometryMixin).strokeWeight = args.strokeWeight;
+    }
+  }
+}
+
 async function execCreateRectangle(args: Args, tempMap: TempNodeMap, tempId?: string, parentId?: string): Promise<SceneNode> {
   const node = figma.createRectangle();
   if (typeof args.x === 'number') node.x = args.x;
@@ -167,6 +179,7 @@ async function execCreateRectangle(args: Args, tempMap: TempNodeMap, tempId?: st
     node.cornerRadius = args.cornerRadius;
   }
   if (typeof args.name === 'string') node.name = args.name;
+  applyInlineFillsAndStrokes(node, args);
   const parent = await resolveParent(parentId, tempMap);
   parent.appendChild(node);
   if (tempId) tempMap.set(tempId, node);
@@ -181,6 +194,7 @@ async function execCreateFrame(args: Args, tempMap: TempNodeMap, tempId?: string
     node.resize(args.width as number, args.height as number);
   }
   if (typeof args.name === 'string') node.name = args.name;
+  applyInlineFillsAndStrokes(node, args);
   const parent = await resolveParent(parentId, tempMap);
   parent.appendChild(node);
   if (tempId) tempMap.set(tempId, node);
@@ -195,6 +209,7 @@ async function execCreateEllipse(args: Args, tempMap: TempNodeMap, tempId?: stri
     node.resize(args.width as number, args.height as number);
   }
   if (typeof args.name === 'string') node.name = args.name;
+  applyInlineFillsAndStrokes(node, args);
   const parent = await resolveParent(parentId, tempMap);
   parent.appendChild(node);
   if (tempId) tempMap.set(tempId, node);
@@ -228,6 +243,7 @@ async function execCreateVector(args: Args, tempMap: TempNodeMap, tempId?: strin
   if (typeof args.x === 'number') node.x = args.x;
   if (typeof args.y === 'number') node.y = args.y;
   if (typeof args.name === 'string') node.name = args.name;
+  applyInlineFillsAndStrokes(node, args);
   const parent = await resolveParent(parentId, tempMap);
   parent.appendChild(node);
   if (tempId) tempMap.set(tempId, node);

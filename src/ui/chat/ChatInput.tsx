@@ -5,15 +5,18 @@ interface ChatInputProps {
   disabled?: boolean;
   isLoading?: boolean;
   placeholder?: string;
+  onFocusChange?: (isFocused: boolean) => void;
 }
 
 export function ChatInput({
   onSubmit,
   disabled = false,
   isLoading = false,
-  placeholder = 'Describe your idea…',
+  placeholder = 'Describe your edit',
+  onFocusChange,
 }: ChatInputProps) {
   const [value, setValue] = useState('');
+  const [isMultiline, setIsMultiline] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -24,6 +27,9 @@ export function ChatInput({
     const next = Math.min(el.scrollHeight, 240);
     el.style.height = `${next}px`;
     el.style.overflowY = next >= 240 ? 'auto' : 'hidden';
+    // The textarea width is constant (never shares row with button),
+    // so scrollHeight is a reliable multiline indicator.
+    setIsMultiline(el.scrollHeight > 30);
   }, [value]);
 
   const submit = () => {
@@ -31,6 +37,7 @@ export function ChatInput({
     if (!trimmed || disabled) return;
     onSubmit(trimmed);
     setValue('');
+    setIsMultiline(false);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
@@ -45,45 +52,47 @@ export function ChatInput({
 
   const canSend = !disabled && value.trim().length > 0;
 
-  return (
-    <div className={`chat-input-box${isLoading ? ' chat-input-box--loading' : ''}`}>
-      {isLoading ? (
+  if (isLoading) {
+    return (
+      <div className="chat-input-box chat-input-box--loading">
         <div className="chat-input-loading">
           <div className="chat-input-spinner" />
           <span>Working…</span>
         </div>
-      ) : (
-        <>
-          <textarea
-            ref={textareaRef}
-            className="chat-input-textarea"
-            value={value}
-            onChange={e => setValue(e.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder={placeholder}
-            disabled={disabled}
-            rows={1}
+      </div>
+    );
+  }
+
+  return (
+    <div className={`chat-input-box${isMultiline ? ' chat-input-box--expanded' : ''}`}>
+      <textarea
+        ref={textareaRef}
+        className="chat-input-textarea"
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        onKeyDown={onKeyDown}
+        onFocus={() => onFocusChange?.(true)}
+        onBlur={() => onFocusChange?.(false)}
+        placeholder={placeholder}
+        disabled={disabled}
+        rows={1}
+      />
+      <button
+        className={`chat-input-send${canSend ? ' chat-input-send--active' : ''}`}
+        onClick={submit}
+        disabled={!canSend}
+        aria-label="Send"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path
+            d="M8 13V3M8 3L3.5 7.5M8 3L12.5 7.5"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           />
-          <div className="chat-input-toolbar">
-            <button
-              className={`chat-input-send${canSend ? ' chat-input-send--active' : ''}`}
-              onClick={submit}
-              disabled={!canSend}
-              aria-label="Send"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path
-                  d="M8 13V3M8 3L3.5 7.5M8 3L12.5 7.5"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-          </div>
-        </>
-      )}
+        </svg>
+      </button>
     </div>
   );
 }

@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { HexColorPicker } from 'react-colorful';
 
 interface ColorControlProps {
   label: string;
@@ -16,16 +17,28 @@ function expandShorthandHex(hex: string): string {
 export function ColorControl({ label, value, onChange }: ColorControlProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(value);
-  const colorInputRef = useRef<HTMLInputElement>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isEditing) setEditValue(value);
   }, [value, isEditing]);
 
+  useEffect(() => {
+    if (!pickerOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setPickerOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [pickerOpen]);
+
   function handleTextSubmit() {
     setIsEditing(false);
     if (HEX_COLOR_REGEX.test(editValue)) {
-      onChange(editValue);
+      onChange(expandShorthandHex(editValue));
     } else {
       setEditValue(value);
     }
@@ -39,39 +52,45 @@ export function ColorControl({ label, value, onChange }: ColorControlProps) {
     }
   }
 
+  const handlePickerChange = useCallback((color: string) => {
+    onChange(color);
+  }, [onChange]);
+
+  const normalizedValue = value.length === 4 ? expandShorthandHex(value) : value.slice(0, 7);
+
   return (
-    <div className="dialkit-color-control">
-      <span className="dialkit-color-label">{label}</span>
-      <div className="dialkit-color-inputs">
-        {isEditing ? (
-          <input
-            type="text"
-            className="dialkit-color-hex-input"
-            value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
-            onBlur={handleTextSubmit}
-            onKeyDown={handleKeyDown}
-            autoFocus
+    <div className="dialkit-color-control-wrapper" ref={wrapperRef}>
+      <div className="dialkit-color-control">
+        <span className="dialkit-color-label">{label}</span>
+        <div className="dialkit-color-inputs">
+          {isEditing ? (
+            <input
+              type="text"
+              className="dialkit-color-hex-input"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onBlur={handleTextSubmit}
+              onKeyDown={handleKeyDown}
+              autoFocus
+            />
+          ) : (
+            <span className="dialkit-color-hex" onClick={() => setIsEditing(true)}>
+              {(value ?? '').toUpperCase()}
+            </span>
+          )}
+          <button
+            className="dialkit-color-swatch"
+            style={{ backgroundColor: value }}
+            onClick={() => setPickerOpen(!pickerOpen)}
+            title="Pick color"
           />
-        ) : (
-          <span className="dialkit-color-hex" onClick={() => setIsEditing(true)}>
-            {(value ?? '').toUpperCase()}
-          </span>
-        )}
-        <button
-          className="dialkit-color-swatch"
-          style={{ backgroundColor: value }}
-          onClick={() => colorInputRef.current?.click()}
-          title="Pick color"
-        />
-        <input
-          ref={colorInputRef}
-          type="color"
-          className="dialkit-color-picker-native"
-          value={value.length === 4 ? expandShorthandHex(value) : value.slice(0, 7)}
-          onChange={(e) => onChange(e.target.value)}
-        />
+        </div>
       </div>
+      {pickerOpen && (
+        <div className="dialkit-color-picker-popover">
+          <HexColorPicker color={normalizedValue} onChange={handlePickerChange} />
+        </div>
+      )}
     </div>
   );
 }

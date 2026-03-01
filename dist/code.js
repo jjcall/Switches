@@ -5584,6 +5584,17 @@
       return { type: "LAYER_BLUR", radius: 0, visible: false };
     });
   }
+  function applyInlineFillsAndStrokes(node, args) {
+    if (Array.isArray(args.fills) && "fills" in node) {
+      node.fills = toPaints(args.fills);
+    }
+    if (Array.isArray(args.strokes) && "strokes" in node) {
+      node.strokes = toPaints(args.strokes);
+      if (typeof args.strokeWeight === "number") {
+        node.strokeWeight = args.strokeWeight;
+      }
+    }
+  }
   async function execCreateRectangle(args, tempMap, tempId, parentId) {
     const node = figma.createRectangle();
     if (typeof args.x === "number") node.x = args.x;
@@ -5595,6 +5606,7 @@
       node.cornerRadius = args.cornerRadius;
     }
     if (typeof args.name === "string") node.name = args.name;
+    applyInlineFillsAndStrokes(node, args);
     const parent = await resolveParent(parentId, tempMap);
     parent.appendChild(node);
     if (tempId) tempMap.set(tempId, node);
@@ -5608,6 +5620,7 @@
       node.resize(args.width, args.height);
     }
     if (typeof args.name === "string") node.name = args.name;
+    applyInlineFillsAndStrokes(node, args);
     const parent = await resolveParent(parentId, tempMap);
     parent.appendChild(node);
     if (tempId) tempMap.set(tempId, node);
@@ -5621,6 +5634,7 @@
       node.resize(args.width, args.height);
     }
     if (typeof args.name === "string") node.name = args.name;
+    applyInlineFillsAndStrokes(node, args);
     const parent = await resolveParent(parentId, tempMap);
     parent.appendChild(node);
     if (tempId) tempMap.set(tempId, node);
@@ -5640,6 +5654,7 @@
     if (typeof args.x === "number") node.x = args.x;
     if (typeof args.y === "number") node.y = args.y;
     if (typeof args.name === "string") node.name = args.name;
+    applyInlineFillsAndStrokes(node, args);
     const parent = await resolveParent(parentId, tempMap);
     parent.appendChild(node);
     if (tempId) tempMap.set(tempId, node);
@@ -6388,6 +6403,9 @@
           break;
         case "CLEAR_PLUGIN_DATA":
           void handleClearPluginData(msg);
+          break;
+        case "CLOSE_PLUGIN":
+          figma.closePlugin();
           break;
         default: {
           const _exhaustive = msg;

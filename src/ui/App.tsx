@@ -12,6 +12,7 @@ import { UIRenderer } from './renderer/UIRenderer';
 import { resolveTemplate, collectControlDefaults } from './template';
 import { compileGenerator, executeGenerator, setImageData, setSelectionId } from './codegen';
 import type { ImagePixelData } from './codegen';
+import { FlaskLoader } from './components/FlaskLoader';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -74,20 +75,20 @@ function useShellResize() {
 
 // ─── Empty state ──────────────────────────────────────────────────────────────
 
-function EmptyState({ hasSelection }: { hasSelection: boolean }) {
+function EmptyState({ selectionName, flaskState }: { selectionName: string | null; flaskState: 'idle' | 'ready' | 'loading' | 'success' }) {
   return (
     <div className="render-zone-empty">
-      <svg className="render-zone-empty-icon" width="24" height="24" viewBox="0 0 24 24" fill="none">
-        <rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-        <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-        <rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-        <rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-      </svg>
-      <p className="render-zone-empty-text">
-        {hasSelection
-          ? 'Describe what you want to build'
-          : 'Select something on the canvas, then describe what you want'}
-      </p>
+      <FlaskLoader state={flaskState} size={48} />
+      <div className="render-zone-empty-info">
+        {selectionName && (
+          <span className="render-zone-layer-badge">{selectionName}</span>
+        )}
+        <p className="render-zone-empty-text">
+          {selectionName
+            ? 'What do you want to do with this layer?'
+            : 'Select something on the canvas, then describe what you want'}
+        </p>
+      </div>
     </div>
   );
 }
@@ -100,6 +101,8 @@ function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [currentUISpec, setCurrentUISpec] = useState<UISpec | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [flaskState, setFlaskState] = useState<'idle' | 'ready' | 'loading' | 'success'>('idle');
+  const [isInputFocused, setIsInputFocused] = useState(false);
   const [selectionContext, setSelectionContext] = useState<SelectionContext | null>(null);
   const createdNodeIdsRef = useRef<string[]>([]);
   const rootFrameIdRef = useRef<string | undefined>(undefined);
@@ -282,6 +285,32 @@ function App() {
     setMessages([]);
   }, []);
 
+  // Derive flask ready state from selection + typing (when not loading/success)
+  const hasSelection = selectionContext !== null && selectionContext.nodes.length > 0;
+  useEffect(() => {
+    setFlaskState(prev => {
+      if (prev === 'loading' || prev === 'success') return prev;
+      return (hasSelection || isInputFocused) ? 'ready' : 'idle';
+    });
+  }, [hasSelection, isInputFocused]);
+
+  const handleFocusChange = useCallback((focused: boolean) => {
+    setIsInputFocused(focused);
+  }, []);
+
+  const finishLoading = useCallback((success: boolean) => {
+    setIsLoading(false);
+    if (success) {
+      setFlaskState('success');
+      setTimeout(() => {
+        // Return to ready if there's context, otherwise idle
+        setFlaskState(prev => prev === 'success' ? 'idle' : prev);
+      }, 1600);
+    } else {
+      setFlaskState('idle');
+    }
+  }, []);
+
   // ── Submit ─────────────────────────────────────────────────────────────────
 
   const handleSubmit = useCallback(async (text: string) => {
@@ -292,6 +321,7 @@ function App() {
 
     addMessage('user', text);
     setIsLoading(true);
+    setFlaskState('loading');
 
     // Snapshot current state at submission time.
     const selCtx = selectionContext;
@@ -304,7 +334,7 @@ function App() {
 
     if (!result.ok) {
       addMessage('error', result.error);
-      setIsLoading(false);
+      finishLoading(false);
       return;
     }
 
@@ -315,7 +345,7 @@ function App() {
 
     if (!parsed.ok) {
       addMessage('error', parsed.error);
-      setIsLoading(false);
+      finishLoading(false);
       return;
     }
 
@@ -435,8 +465,8 @@ function App() {
     // Update the rendered UI spec with the merged result.
     setCurrentUISpec(mergedUi);
 
-    setIsLoading(false);
-  }, [addMessage, selectionContext, currentUISpec, fetchImageData, handleDetach]);
+    finishLoading(true);
+  }, [addMessage, selectionContext, currentUISpec, fetchImageData, handleDetach, finishLoading]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -462,20 +492,19 @@ function App() {
   }, []);
 
   const hasSpec = currentUISpec !== null && currentUISpec.controls.length > 0;
-  const hasSelection = selectionContext !== null && selectionContext.nodes.length > 0;
 
   return (
     <div className="shell">
       {/* Controls zone */}
       <div className="render-zone">
-        {!hasSpec && !isLoading && <EmptyState hasSelection={hasSelection} />}
+        {!hasSpec && <EmptyState selectionName={hasSelection ? selectionContext!.nodes[0].name : null} flaskState={flaskState} />}
         {hasSpec && <UIRenderer spec={currentUISpec!} onApply={handleApply} onValueChange={handleValueChange} />}
       </div>
 
       {/* Chat area */}
       <div className="chat-area">
         <ChatHistory messages={messages} />
-        <ChatInput onSubmit={handleSubmit} disabled={isLoading} isLoading={isLoading} />
+        <ChatInput onSubmit={handleSubmit} disabled={isLoading} isLoading={isLoading} onFocusChange={handleFocusChange} />
       </div>
     </div>
   );

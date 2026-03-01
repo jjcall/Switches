@@ -232,6 +232,10 @@ export interface ClearPluginDataMessage {
   };
 }
 
+export interface ClosePluginMessage {
+  type: 'CLOSE_PLUGIN';
+}
+
 export type IframeToMainMessage =
   | PluginReadyMessage
   | ControlChangeMessage
@@ -239,7 +243,8 @@ export type IframeToMainMessage =
   | ErrorMessage
   | ClaudeRequestMessage
   | RequestImageDataMessage
-  | ClearPluginDataMessage;
+  | ClearPluginDataMessage
+  | ClosePluginMessage;
 
 // ─── UI spec (LLM → renderer) ─────────────────────────────────────────────────
 

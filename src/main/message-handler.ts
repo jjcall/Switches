@@ -237,6 +237,9 @@ export function registerMessageHandler(): void {
       case 'CLEAR_PLUGIN_DATA':
         void handleClearPluginData(msg);
         break;
+      case 'CLOSE_PLUGIN':
+        figma.closePlugin();
+        break;
       default: {
         // Narrow to never to catch unhandled message types at compile time.
         const _exhaustive: never = msg;

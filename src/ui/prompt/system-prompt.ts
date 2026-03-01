@@ -627,7 +627,7 @@ In addition to createRectangle, createFrame, and createText, generators can also
       { "id": "spacing", "type": "slider", "label": "Spacing", "props": { "min": 0, "max": 24, "step": 1, "defaultValue": 8 } }
     ]
   },
-  "generate": "const cols = params.columns || 6;\\nconst size = params.size || 16;\\nconst spacing = params.spacing || 8;\\nconst totalCells = cols * cols;\\nconst frameW = cols * (size + spacing) - spacing;\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'grid', args: { x: 100, y: 100, width: frameW, height: frameW, name: 'Circle Grid' } });\\nactions.push({ method: 'setLayoutProperties', nodeId: 'grid', args: { layoutMode: 'HORIZONTAL', layoutWrap: 'WRAP', itemSpacing: spacing, counterAxisSpacing: spacing } });\\nfor (let i = 0; i < totalCells; i++) {\\n  actions.push({ method: 'createRectangle', parentId: 'grid', args: { width: size, height: size, cornerRadius: size / 2 } });\\n  const color = lib.randomColor();\\n  actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [{ type: 'SOLID', color: color }] } });\\n}\\nreturn actions;"
+  "generate": "const cols = params.columns || 6;\\nconst size = params.size || 16;\\nconst spacing = params.spacing || 8;\\nconst frameW = cols * (size + spacing) - spacing;\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'grid', args: { x: 100, y: 100, width: frameW, height: frameW, name: 'Circle Grid' } });\\nfor (let row = 0; row < cols; row++) {\\n  for (let col = 0; col < cols; col++) {\\n    const x = col * (size + spacing);\\n    const y = row * (size + spacing);\\n    actions.push({ method: 'createEllipse', parentId: 'grid', args: { x: x, y: y, width: size, height: size } });\\n    const color = lib.randomColor();\\n    actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [{ type: 'SOLID', color: color }] } });\\n  }\\n}\\nreturn actions;"
 }
 
 ### Generator example: color palette with saturation control
@@ -817,8 +817,9 @@ the pattern source. No node creation — the selected frame/vector becomes the r
    All subsequent child nodes should use parentId referencing this root frame's tempId.
 4. Use tempId on created nodes and reference them in subsequent actions via nodeId or parentId.
 5. Use "__prev" as nodeId to target the most recently created node.
-6. For grids, use auto-layout: set layoutMode: "HORIZONTAL", layoutWrap: "WRAP" on the frame.
-   Set both itemSpacing and counterAxisSpacing. The frame width determines column count.
+6. For 2D grids, compute x/y positions explicitly using row and column math.
+   Do NOT use layoutWrap for grids — it is fragile and breaks when the frame width is off.
+   Use auto-layout (layoutMode: "HORIZONTAL") only for single-axis stacking (e.g. palette row).
 7. Use parentId on child nodes to place them inside a frame created in the same batch.
 8. You have full JavaScript: loops, Math.random(), conditionals, string manipulation, etc.
 9. Access control values via params.controlId (e.g. params.columns, params.size).
