@@ -725,6 +725,29 @@ body {
   color: var(--text-quaternary);
   max-width: 228px;
 }
+.render-zone-loading-text {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-sm);
+  color: var(--text-quaternary);
+  -webkit-mask-image:
+    linear-gradient(
+      -75deg,
+      rgba(0, 0, 0, 0.6) 30%,
+      #000 50%,
+      rgba(0, 0, 0, 0.6) 70%);
+  -webkit-mask-size: 200%;
+  animation: shimmer 2s infinite;
+}
+@keyframes shimmer {
+  from {
+    -webkit-mask-position: 150%;
+  }
+  to {
+    -webkit-mask-position: -50%;
+  }
+}
 .dialkit-cube-preview-wrapper {
   position: relative;
   width: 100%;
@@ -779,69 +802,48 @@ body {
   gap: 0;
 }
 .chat-history {
-  position: relative;
-  max-height: 200px;
-  overflow-y: auto;
-  padding: 8px 12px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  -webkit-mask-image:
-    linear-gradient(
-      to bottom,
-      transparent 0%,
-      black 24px);
-  mask-image:
-    linear-gradient(
-      to bottom,
-      transparent 0%,
-      black 24px);
+  padding: 0 8px 8px;
+  overflow: hidden;
 }
-.chat-history::-webkit-scrollbar {
-  width: 4px;
-}
-.chat-history::-webkit-scrollbar-track {
-  background: transparent;
-}
-.chat-history::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
-}
-.chat-bubble {
-  display: flex;
-  max-width: 92%;
-}
-.chat-bubble--user {
-  align-self: flex-end;
-}
-.chat-bubble--assistant,
-.chat-bubble--error {
-  align-self: flex-start;
-}
-.chat-bubble-text {
-  display: inline-block;
-  font-size: 12px;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  word-break: break-word;
+.chat-prompt {
+  width: 100%;
   padding: 8px 12px;
-  border-radius: 14px;
+  border-radius: 10px;
+  background: #343434;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  transform-origin: center bottom;
 }
-.chat-bubble--user .chat-bubble-text {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.9);
-  border-bottom-right-radius: 4px;
+.chat-prompt + .chat-prompt {
+  margin-top: -6px;
 }
-.chat-bubble--assistant .chat-bubble-text {
-  background: transparent;
-  color: rgba(255, 255, 255, 0.7);
-  padding-left: 0;
-  padding-right: 0;
+.chat-prompt::before {
+  content: "";
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #345791;
 }
-.chat-bubble--error .chat-bubble-text {
-  background: rgba(255, 80, 80, 0.1);
-  color: rgba(255, 130, 130, 0.9);
-  border-bottom-left-radius: 4px;
+.chat-prompt--user::before {
+  background: #8C9D6D;
+}
+.chat-prompt--error::before {
+  background: #C96B6C;
+}
+.chat-prompt-text {
+  display: block;
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 .chat-input-box {
   position: relative;
@@ -2102,11 +2104,11 @@ body {
             var dispatcher = resolveDispatcher();
             return dispatcher.useReducer(reducer, initialArg, init);
           }
-          function useRef19(initialValue) {
+          function useRef18(initialValue) {
             var dispatcher = resolveDispatcher();
             return dispatcher.useRef(initialValue);
           }
-          function useEffect17(create, deps) {
+          function useEffect16(create, deps) {
             var dispatcher = resolveDispatcher();
             return dispatcher.useEffect(create, deps);
           }
@@ -2889,14 +2891,14 @@ body {
           exports.useContext = useContext10;
           exports.useDebugValue = useDebugValue;
           exports.useDeferredValue = useDeferredValue;
-          exports.useEffect = useEffect17;
+          exports.useEffect = useEffect16;
           exports.useId = useId4;
           exports.useImperativeHandle = useImperativeHandle;
           exports.useInsertionEffect = useInsertionEffect4;
           exports.useLayoutEffect = useLayoutEffect3;
           exports.useMemo = useMemo7;
           exports.useReducer = useReducer;
-          exports.useRef = useRef19;
+          exports.useRef = useRef18;
           exports.useState = useState15;
           exports.useSyncExternalStore = useSyncExternalStore;
           exports.useTransition = useTransition;
@@ -3444,7 +3446,7 @@ body {
           var HostPortal = 4;
           var HostComponent = 5;
           var HostText = 6;
-          var Fragment5 = 7;
+          var Fragment6 = 7;
           var Mode = 8;
           var ContextConsumer = 9;
           var ContextProvider = 10;
@@ -4601,7 +4603,7 @@ body {
                 return "DehydratedFragment";
               case ForwardRef:
                 return getWrappedName$1(type, type.render, "ForwardRef");
-              case Fragment5:
+              case Fragment6:
                 return "Fragment";
               case HostComponent:
                 return type;
@@ -13030,7 +13032,7 @@ body {
               }
             }
             function updateFragment2(returnFiber, current2, fragment, lanes, key) {
-              if (current2 === null || current2.tag !== Fragment5) {
+              if (current2 === null || current2.tag !== Fragment6) {
                 var created = createFiberFromFragment(fragment, returnFiber.mode, lanes, key);
                 created.return = returnFiber;
                 return created;
@@ -13433,7 +13435,7 @@ body {
                 if (child.key === key) {
                   var elementType = element.type;
                   if (elementType === REACT_FRAGMENT_TYPE) {
-                    if (child.tag === Fragment5) {
+                    if (child.tag === Fragment6) {
                       deleteRemainingChildren(returnFiber, child.sibling);
                       var existing = useFiber(child, element.props.children);
                       existing.return = returnFiber;
@@ -18909,7 +18911,7 @@ body {
                 var _resolvedProps2 = workInProgress2.elementType === type ? _unresolvedProps2 : resolveDefaultProps(type, _unresolvedProps2);
                 return updateForwardRef(current2, workInProgress2, type, _resolvedProps2, renderLanes2);
               }
-              case Fragment5:
+              case Fragment6:
                 return updateFragment(current2, workInProgress2, renderLanes2);
               case Mode:
                 return updateMode(current2, workInProgress2, renderLanes2);
@@ -19181,7 +19183,7 @@ body {
               case SimpleMemoComponent:
               case FunctionComponent:
               case ForwardRef:
-              case Fragment5:
+              case Fragment6:
               case Mode:
               case Profiler:
               case ContextConsumer:
@@ -23442,7 +23444,7 @@ body {
             return fiber;
           }
           function createFiberFromFragment(elements, mode, lanes, key) {
-            var fiber = createFiber(Fragment5, elements, key, mode);
+            var fiber = createFiber(Fragment6, elements, key, mode);
             fiber.lanes = lanes;
             return fiber;
           }
@@ -25475,10 +25477,10 @@ body {
             }
           }
           var jsx25 = jsxWithValidationDynamic;
-          var jsxs19 = jsxWithValidationStatic;
+          var jsxs18 = jsxWithValidationStatic;
           exports.Fragment = REACT_FRAGMENT_TYPE;
           exports.jsx = jsx25;
-          exports.jsxs = jsxs19;
+          exports.jsxs = jsxs18;
         })();
       }
     }
@@ -25593,7 +25595,7 @@ body {
 
   // src/ui/App.tsx
   var import_client = __toESM(require_client());
-  var import_react43 = __toESM(require_react());
+  var import_react42 = __toESM(require_react());
 
   // src/ui/messaging.ts
   function postToMain(message) {
@@ -25649,12 +25651,7 @@ body {
       }
     };
     const canSend = !disabled && value.trim().length > 0;
-    if (isLoading) {
-      return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "chat-input-box chat-input-box--loading", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "chat-input-loading", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "chat-input-spinner" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Working\u2026" })
-      ] }) });
-    }
+    if (isLoading) return null;
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: `chat-input-box${isMultiline ? " chat-input-box--expanded" : ""}`, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         "textarea",
@@ -25694,18 +25691,26 @@ body {
   }
 
   // src/ui/chat/ChatHistory.tsx
-  var import_react2 = __toESM(require_react());
   var import_jsx_runtime2 = __toESM(require_jsx_runtime());
+  var OPACITIES = [0.25, 0.55, 0.9];
+  var SCALES = [0.9, 0.95, 1];
   function ChatHistory({ messages }) {
-    const bottomRef = (0, import_react2.useRef)(null);
-    (0, import_react2.useEffect)(() => {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages]);
     if (messages.length === 0) return null;
-    return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "chat-history", children: [
-      messages.map((msg) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: `chat-bubble chat-bubble--${msg.role}`, children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "chat-bubble-text", children: msg.content }) }, msg.id)),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { ref: bottomRef })
-    ] });
+    const recent = messages.slice(-3);
+    const opacities = OPACITIES.slice(-recent.length);
+    const scales = SCALES.slice(-recent.length);
+    return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "chat-history", children: recent.map((msg, i2) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+      "div",
+      {
+        className: `chat-prompt chat-prompt--${msg.role}`,
+        style: {
+          opacity: opacities[i2],
+          transform: `scale(${scales[i2]})`
+        },
+        children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "chat-prompt-text", children: msg.content })
+      },
+      msg.id
+    )) });
   }
 
   // src/ui/api/claude.ts
@@ -26764,23 +26769,23 @@ ${text.slice(0, 300)}` };
   }
 
   // src/ui/renderer/UIRenderer.tsx
-  var import_react41 = __toESM(require_react());
+  var import_react40 = __toESM(require_react());
 
   // src/ui/components/Slider.tsx
-  var import_react27 = __toESM(require_react());
+  var import_react26 = __toESM(require_react());
 
   // node_modules/framer-motion/dist/es/components/AnimatePresence/index.mjs
   var import_jsx_runtime5 = __toESM(require_jsx_runtime(), 1);
-  var import_react12 = __toESM(require_react(), 1);
+  var import_react11 = __toESM(require_react(), 1);
 
   // node_modules/framer-motion/dist/es/context/LayoutGroupContext.mjs
-  var import_react3 = __toESM(require_react(), 1);
-  var LayoutGroupContext = (0, import_react3.createContext)({});
+  var import_react2 = __toESM(require_react(), 1);
+  var LayoutGroupContext = (0, import_react2.createContext)({});
 
   // node_modules/framer-motion/dist/es/utils/use-constant.mjs
-  var import_react4 = __toESM(require_react(), 1);
+  var import_react3 = __toESM(require_react(), 1);
   function useConstant(init) {
-    const ref = (0, import_react4.useRef)(null);
+    const ref = (0, import_react3.useRef)(null);
     if (ref.current === null) {
       ref.current = init();
     }
@@ -26788,22 +26793,22 @@ ${text.slice(0, 300)}` };
   }
 
   // node_modules/framer-motion/dist/es/utils/use-isomorphic-effect.mjs
-  var import_react5 = __toESM(require_react(), 1);
+  var import_react4 = __toESM(require_react(), 1);
 
   // node_modules/framer-motion/dist/es/utils/is-browser.mjs
   var isBrowser = typeof window !== "undefined";
 
   // node_modules/framer-motion/dist/es/utils/use-isomorphic-effect.mjs
-  var useIsomorphicLayoutEffect = isBrowser ? import_react5.useLayoutEffect : import_react5.useEffect;
+  var useIsomorphicLayoutEffect = isBrowser ? import_react4.useLayoutEffect : import_react4.useEffect;
 
   // node_modules/framer-motion/dist/es/components/AnimatePresence/PresenceChild.mjs
   var import_jsx_runtime4 = __toESM(require_jsx_runtime(), 1);
   var React3 = __toESM(require_react(), 1);
-  var import_react9 = __toESM(require_react(), 1);
+  var import_react8 = __toESM(require_react(), 1);
 
   // node_modules/framer-motion/dist/es/context/PresenceContext.mjs
-  var import_react6 = __toESM(require_react(), 1);
-  var PresenceContext = /* @__PURE__ */ (0, import_react6.createContext)(null);
+  var import_react5 = __toESM(require_react(), 1);
+  var PresenceContext = /* @__PURE__ */ (0, import_react5.createContext)(null);
 
   // node_modules/framer-motion/dist/es/components/AnimatePresence/PopChild.mjs
   var import_jsx_runtime3 = __toESM(require_jsx_runtime(), 1);
@@ -33373,11 +33378,11 @@ ${text.slice(0, 300)}` };
 
   // node_modules/framer-motion/dist/es/components/AnimatePresence/PopChild.mjs
   var React2 = __toESM(require_react(), 1);
-  var import_react8 = __toESM(require_react(), 1);
+  var import_react7 = __toESM(require_react(), 1);
 
   // node_modules/framer-motion/dist/es/context/MotionConfigContext.mjs
-  var import_react7 = __toESM(require_react(), 1);
-  var MotionConfigContext = (0, import_react7.createContext)({
+  var import_react6 = __toESM(require_react(), 1);
+  var MotionConfigContext = (0, import_react6.createContext)({
     transformPagePoint: (p2) => p2,
     isStatic: false,
     reducedMotion: "never"
@@ -33448,9 +33453,9 @@ ${text.slice(0, 300)}` };
     }
   };
   function PopChild({ children, isPresent, anchorX, anchorY, root: root2, pop }) {
-    const id3 = (0, import_react8.useId)();
-    const ref = (0, import_react8.useRef)(null);
-    const size = (0, import_react8.useRef)({
+    const id3 = (0, import_react7.useId)();
+    const ref = (0, import_react7.useRef)(null);
+    const size = (0, import_react7.useRef)({
       width: 0,
       height: 0,
       top: 0,
@@ -33458,10 +33463,10 @@ ${text.slice(0, 300)}` };
       right: 0,
       bottom: 0
     });
-    const { nonce } = (0, import_react8.useContext)(MotionConfigContext);
+    const { nonce } = (0, import_react7.useContext)(MotionConfigContext);
     const childRef = children.props?.ref ?? children?.ref;
     const composedRef = useComposedRefs(ref, childRef);
-    (0, import_react8.useInsertionEffect)(() => {
+    (0, import_react7.useInsertionEffect)(() => {
       const { width, height, top, left, right, bottom } = size.current;
       if (isPresent || pop === false || !ref.current || !width || !height)
         return;
@@ -33496,9 +33501,9 @@ ${text.slice(0, 300)}` };
   // node_modules/framer-motion/dist/es/components/AnimatePresence/PresenceChild.mjs
   var PresenceChild = ({ children, initial, isPresent, onExitComplete, custom, presenceAffectsLayout, mode, anchorX, anchorY, root: root2 }) => {
     const presenceChildren = useConstant(newChildrenMap);
-    const id3 = (0, import_react9.useId)();
+    const id3 = (0, import_react8.useId)();
     let isReusedContext = true;
-    let context = (0, import_react9.useMemo)(() => {
+    let context = (0, import_react8.useMemo)(() => {
       isReusedContext = false;
       return {
         id: id3,
@@ -33522,7 +33527,7 @@ ${text.slice(0, 300)}` };
     if (presenceAffectsLayout && isReusedContext) {
       context = { ...context };
     }
-    (0, import_react9.useMemo)(() => {
+    (0, import_react8.useMemo)(() => {
       presenceChildren.forEach((_2, key) => presenceChildren.set(key, false));
     }, [isPresent]);
     React3.useEffect(() => {
@@ -33536,29 +33541,29 @@ ${text.slice(0, 300)}` };
   }
 
   // node_modules/framer-motion/dist/es/components/AnimatePresence/use-presence.mjs
-  var import_react10 = __toESM(require_react(), 1);
+  var import_react9 = __toESM(require_react(), 1);
   function usePresence(subscribe = true) {
-    const context = (0, import_react10.useContext)(PresenceContext);
+    const context = (0, import_react9.useContext)(PresenceContext);
     if (context === null)
       return [true, null];
     const { isPresent, onExitComplete, register } = context;
-    const id3 = (0, import_react10.useId)();
-    (0, import_react10.useEffect)(() => {
+    const id3 = (0, import_react9.useId)();
+    (0, import_react9.useEffect)(() => {
       if (subscribe) {
         return register(id3);
       }
     }, [subscribe]);
-    const safeToRemove = (0, import_react10.useCallback)(() => subscribe && onExitComplete && onExitComplete(id3), [id3, onExitComplete, subscribe]);
+    const safeToRemove = (0, import_react9.useCallback)(() => subscribe && onExitComplete && onExitComplete(id3), [id3, onExitComplete, subscribe]);
     return !isPresent && onExitComplete ? [false, safeToRemove] : [true];
   }
 
   // node_modules/framer-motion/dist/es/components/AnimatePresence/utils.mjs
-  var import_react11 = __toESM(require_react(), 1);
+  var import_react10 = __toESM(require_react(), 1);
   var getChildKey = (child) => child.key || "";
   function onlyElements(children) {
     const filtered = [];
-    import_react11.Children.forEach(children, (child) => {
-      if ((0, import_react11.isValidElement)(child))
+    import_react10.Children.forEach(children, (child) => {
+      if ((0, import_react10.isValidElement)(child))
         filtered.push(child);
     });
     return filtered;
@@ -33567,14 +33572,14 @@ ${text.slice(0, 300)}` };
   // node_modules/framer-motion/dist/es/components/AnimatePresence/index.mjs
   var AnimatePresence = ({ children, custom, initial = true, onExitComplete, presenceAffectsLayout = true, mode = "sync", propagate = false, anchorX = "left", anchorY = "top", root: root2 }) => {
     const [isParentPresent, safeToRemove] = usePresence(propagate);
-    const presentChildren = (0, import_react12.useMemo)(() => onlyElements(children), [children]);
+    const presentChildren = (0, import_react11.useMemo)(() => onlyElements(children), [children]);
     const presentKeys = propagate && !isParentPresent ? [] : presentChildren.map(getChildKey);
-    const isInitialRender = (0, import_react12.useRef)(true);
-    const pendingPresentChildren = (0, import_react12.useRef)(presentChildren);
+    const isInitialRender = (0, import_react11.useRef)(true);
+    const pendingPresentChildren = (0, import_react11.useRef)(presentChildren);
     const exitComplete = useConstant(() => /* @__PURE__ */ new Map());
-    const exitingComponents = (0, import_react12.useRef)(/* @__PURE__ */ new Set());
-    const [diffedChildren, setDiffedChildren] = (0, import_react12.useState)(presentChildren);
-    const [renderedChildren, setRenderedChildren] = (0, import_react12.useState)(presentChildren);
+    const exitingComponents = (0, import_react11.useRef)(/* @__PURE__ */ new Set());
+    const [diffedChildren, setDiffedChildren] = (0, import_react11.useState)(presentChildren);
+    const [renderedChildren, setRenderedChildren] = (0, import_react11.useState)(presentChildren);
     useIsomorphicLayoutEffect(() => {
       isInitialRender.current = false;
       pendingPresentChildren.current = presentChildren;
@@ -33611,7 +33616,7 @@ ${text.slice(0, 300)}` };
     if (mode === "wait" && renderedChildren.length > 1) {
       console.warn(`You're attempting to animate multiple children within AnimatePresence, but its mode is set to "wait". This will lead to odd visual behaviour.`);
     }
-    const { forceRender } = (0, import_react12.useContext)(LayoutGroupContext);
+    const { forceRender } = (0, import_react11.useContext)(LayoutGroupContext);
     return (0, import_jsx_runtime5.jsx)(import_jsx_runtime5.Fragment, { children: renderedChildren.map((child) => {
       const key = getChildKey(child);
       const isPresent = propagate && !isParentPresent ? false : presentChildren === renderedChildren || presentKeys.includes(key);
@@ -33642,8 +33647,8 @@ ${text.slice(0, 300)}` };
   };
 
   // node_modules/framer-motion/dist/es/context/LazyContext.mjs
-  var import_react13 = __toESM(require_react(), 1);
-  var LazyContext = (0, import_react13.createContext)({ strict: false });
+  var import_react12 = __toESM(require_react(), 1);
+  var LazyContext = (0, import_react12.createContext)({ strict: false });
 
   // node_modules/framer-motion/dist/es/motion/features/definitions.mjs
   var featureProps = {
@@ -33760,14 +33765,14 @@ ${text.slice(0, 300)}` };
 
   // node_modules/framer-motion/dist/es/motion/index.mjs
   var import_jsx_runtime6 = __toESM(require_jsx_runtime(), 1);
-  var import_react23 = __toESM(require_react(), 1);
+  var import_react22 = __toESM(require_react(), 1);
 
   // node_modules/framer-motion/dist/es/context/MotionContext/index.mjs
-  var import_react14 = __toESM(require_react(), 1);
-  var MotionContext = /* @__PURE__ */ (0, import_react14.createContext)({});
+  var import_react13 = __toESM(require_react(), 1);
+  var MotionContext = /* @__PURE__ */ (0, import_react13.createContext)({});
 
   // node_modules/framer-motion/dist/es/context/MotionContext/create.mjs
-  var import_react15 = __toESM(require_react(), 1);
+  var import_react14 = __toESM(require_react(), 1);
 
   // node_modules/framer-motion/dist/es/context/MotionContext/utils.mjs
   function getCurrentTreeVariants(props, context) {
@@ -33783,18 +33788,18 @@ ${text.slice(0, 300)}` };
 
   // node_modules/framer-motion/dist/es/context/MotionContext/create.mjs
   function useCreateMotionContext(props) {
-    const { initial, animate: animate2 } = getCurrentTreeVariants(props, (0, import_react15.useContext)(MotionContext));
-    return (0, import_react15.useMemo)(() => ({ initial, animate: animate2 }), [variantLabelsAsDependency(initial), variantLabelsAsDependency(animate2)]);
+    const { initial, animate: animate2 } = getCurrentTreeVariants(props, (0, import_react14.useContext)(MotionContext));
+    return (0, import_react14.useMemo)(() => ({ initial, animate: animate2 }), [variantLabelsAsDependency(initial), variantLabelsAsDependency(animate2)]);
   }
   function variantLabelsAsDependency(prop) {
     return Array.isArray(prop) ? prop.join(" ") : prop;
   }
 
   // node_modules/framer-motion/dist/es/render/dom/use-render.mjs
-  var import_react18 = __toESM(require_react(), 1);
+  var import_react17 = __toESM(require_react(), 1);
 
   // node_modules/framer-motion/dist/es/render/html/use-props.mjs
-  var import_react16 = __toESM(require_react(), 1);
+  var import_react15 = __toESM(require_react(), 1);
 
   // node_modules/framer-motion/dist/es/render/html/utils/create-render-state.mjs
   var createHtmlRenderState = () => ({
@@ -33813,7 +33818,7 @@ ${text.slice(0, 300)}` };
     }
   }
   function useInitialMotionValues({ transformTemplate }, visualState) {
-    return (0, import_react16.useMemo)(() => {
+    return (0, import_react15.useMemo)(() => {
       const state = createHtmlRenderState();
       buildHTMLStyles(state, visualState, transformTemplate);
       return Object.assign({}, state.vars, state.style);
@@ -33842,7 +33847,7 @@ ${text.slice(0, 300)}` };
   }
 
   // node_modules/framer-motion/dist/es/render/svg/use-props.mjs
-  var import_react17 = __toESM(require_react(), 1);
+  var import_react16 = __toESM(require_react(), 1);
 
   // node_modules/framer-motion/dist/es/render/svg/utils/create-render-state.mjs
   var createSvgRenderState = () => ({
@@ -33852,7 +33857,7 @@ ${text.slice(0, 300)}` };
 
   // node_modules/framer-motion/dist/es/render/svg/use-props.mjs
   function useSVGProps(props, visualState, _isStatic, Component3) {
-    const visualProps = (0, import_react17.useMemo)(() => {
+    const visualProps = (0, import_react16.useMemo)(() => {
       const state = createSvgRenderState();
       buildSVGAttrs(state, visualState, isSVGTag(Component3), props.transformTemplate, props.style);
       return {
@@ -33929,17 +33934,17 @@ ${text.slice(0, 300)}` };
     const useVisualProps = isSVG ?? isSVGComponent(Component3) ? useSVGProps : useHTMLProps;
     const visualProps = useVisualProps(props, latestValues, isStatic, Component3);
     const filteredProps = filterProps(props, typeof Component3 === "string", forwardMotionProps);
-    const elementProps = Component3 !== import_react18.Fragment ? { ...filteredProps, ...visualProps, ref } : {};
+    const elementProps = Component3 !== import_react17.Fragment ? { ...filteredProps, ...visualProps, ref } : {};
     const { children } = props;
-    const renderedChildren = (0, import_react18.useMemo)(() => isMotionValue(children) ? children.get() : children, [children]);
-    return (0, import_react18.createElement)(Component3, {
+    const renderedChildren = (0, import_react17.useMemo)(() => isMotionValue(children) ? children.get() : children, [children]);
+    return (0, import_react17.createElement)(Component3, {
       ...elementProps,
       children: renderedChildren
     });
   }
 
   // node_modules/framer-motion/dist/es/motion/utils/use-visual-state.mjs
-  var import_react19 = __toESM(require_react(), 1);
+  var import_react18 = __toESM(require_react(), 1);
   function makeState({ scrapeMotionValuesFromProps: scrapeMotionValuesFromProps3, createRenderState }, props, context, presenceContext) {
     const state = {
       latestValues: makeLatestValues(props, context, presenceContext, scrapeMotionValuesFromProps3),
@@ -33990,8 +33995,8 @@ ${text.slice(0, 300)}` };
     return values;
   }
   var makeUseVisualState = (config) => (props, isStatic) => {
-    const context = (0, import_react19.useContext)(MotionContext);
-    const presenceContext = (0, import_react19.useContext)(PresenceContext);
+    const context = (0, import_react18.useContext)(MotionContext);
+    const presenceContext = (0, import_react18.useContext)(PresenceContext);
     const make = () => makeState(config, props, context, presenceContext);
     return isStatic ? make() : useConstant(make);
   };
@@ -34012,14 +34017,14 @@ ${text.slice(0, 300)}` };
   var motionComponentSymbol = /* @__PURE__ */ Symbol.for("motionComponentSymbol");
 
   // node_modules/framer-motion/dist/es/motion/utils/use-motion-ref.mjs
-  var import_react20 = __toESM(require_react(), 1);
+  var import_react19 = __toESM(require_react(), 1);
   function useMotionRef(visualState, visualElement, externalRef) {
-    const externalRefContainer = (0, import_react20.useRef)(externalRef);
-    (0, import_react20.useInsertionEffect)(() => {
+    const externalRefContainer = (0, import_react19.useRef)(externalRef);
+    (0, import_react19.useInsertionEffect)(() => {
       externalRefContainer.current = externalRef;
     });
-    const refCleanup = (0, import_react20.useRef)(null);
-    return (0, import_react20.useCallback)((instance) => {
+    const refCleanup = (0, import_react19.useRef)(null);
+    return (0, import_react19.useCallback)((instance) => {
       if (instance) {
         visualState.onMount?.(instance);
       }
@@ -34046,11 +34051,11 @@ ${text.slice(0, 300)}` };
   }
 
   // node_modules/framer-motion/dist/es/motion/utils/use-visual-element.mjs
-  var import_react22 = __toESM(require_react(), 1);
+  var import_react21 = __toESM(require_react(), 1);
 
   // node_modules/framer-motion/dist/es/context/SwitchLayoutGroupContext.mjs
-  var import_react21 = __toESM(require_react(), 1);
-  var SwitchLayoutGroupContext = (0, import_react21.createContext)({});
+  var import_react20 = __toESM(require_react(), 1);
+  var SwitchLayoutGroupContext = (0, import_react20.createContext)({});
 
   // node_modules/framer-motion/dist/es/utils/is-ref-object.mjs
   function isRefObject(ref) {
@@ -34059,14 +34064,14 @@ ${text.slice(0, 300)}` };
 
   // node_modules/framer-motion/dist/es/motion/utils/use-visual-element.mjs
   function useVisualElement(Component3, visualState, props, createVisualElement, ProjectionNodeConstructor, isSVG) {
-    const { visualElement: parent2 } = (0, import_react22.useContext)(MotionContext);
-    const lazyContext = (0, import_react22.useContext)(LazyContext);
-    const presenceContext = (0, import_react22.useContext)(PresenceContext);
-    const motionConfig = (0, import_react22.useContext)(MotionConfigContext);
+    const { visualElement: parent2 } = (0, import_react21.useContext)(MotionContext);
+    const lazyContext = (0, import_react21.useContext)(LazyContext);
+    const presenceContext = (0, import_react21.useContext)(PresenceContext);
+    const motionConfig = (0, import_react21.useContext)(MotionConfigContext);
     const reducedMotionConfig = motionConfig.reducedMotion;
     const skipAnimations = motionConfig.skipAnimations;
-    const visualElementRef = (0, import_react22.useRef)(null);
-    const hasMountedOnce = (0, import_react22.useRef)(false);
+    const visualElementRef = (0, import_react21.useRef)(null);
+    const hasMountedOnce = (0, import_react21.useRef)(false);
     createVisualElement = createVisualElement || lazyContext.renderer;
     if (!visualElementRef.current && createVisualElement) {
       visualElementRef.current = createVisualElement(Component3, {
@@ -34084,18 +34089,18 @@ ${text.slice(0, 300)}` };
       }
     }
     const visualElement = visualElementRef.current;
-    const initialLayoutGroupConfig = (0, import_react22.useContext)(SwitchLayoutGroupContext);
+    const initialLayoutGroupConfig = (0, import_react21.useContext)(SwitchLayoutGroupContext);
     if (visualElement && !visualElement.projection && ProjectionNodeConstructor && (visualElement.type === "html" || visualElement.type === "svg")) {
       createProjectionNode2(visualElementRef.current, props, ProjectionNodeConstructor, initialLayoutGroupConfig);
     }
-    const isMounted = (0, import_react22.useRef)(false);
-    (0, import_react22.useInsertionEffect)(() => {
+    const isMounted = (0, import_react21.useRef)(false);
+    (0, import_react21.useInsertionEffect)(() => {
       if (visualElement && isMounted.current) {
         visualElement.update(props, presenceContext);
       }
     });
     const optimisedAppearId = props[optimizedAppearDataAttribute];
-    const wantsHandoff = (0, import_react22.useRef)(Boolean(optimisedAppearId) && !window.MotionHandoffIsComplete?.(optimisedAppearId) && window.MotionHasOptimisedAnimation?.(optimisedAppearId));
+    const wantsHandoff = (0, import_react21.useRef)(Boolean(optimisedAppearId) && !window.MotionHandoffIsComplete?.(optimisedAppearId) && window.MotionHasOptimisedAnimation?.(optimisedAppearId));
     useIsomorphicLayoutEffect(() => {
       hasMountedOnce.current = true;
       if (!visualElement)
@@ -34108,7 +34113,7 @@ ${text.slice(0, 300)}` };
         visualElement.animationState.animateChanges();
       }
     });
-    (0, import_react22.useEffect)(() => {
+    (0, import_react21.useEffect)(() => {
       if (!visualElement)
         return;
       if (!wantsHandoff.current && visualElement.animationState) {
@@ -34160,7 +34165,7 @@ ${text.slice(0, 300)}` };
     function MotionDOMComponent(props, externalRef) {
       let MeasureLayout2;
       const configAndProps = {
-        ...(0, import_react23.useContext)(MotionConfigContext),
+        ...(0, import_react22.useContext)(MotionConfigContext),
         ...props,
         layoutId: useLayoutId(props)
       };
@@ -34176,16 +34181,16 @@ ${text.slice(0, 300)}` };
       return (0, import_jsx_runtime6.jsxs)(MotionContext.Provider, { value: context, children: [MeasureLayout2 && context.visualElement ? (0, import_jsx_runtime6.jsx)(MeasureLayout2, { visualElement: context.visualElement, ...configAndProps }) : null, useRender(Component3, props, useMotionRef(visualState, context.visualElement, externalRef), visualState, isStatic, forwardMotionProps, isSVG)] });
     }
     MotionDOMComponent.displayName = `motion.${typeof Component3 === "string" ? Component3 : `create(${Component3.displayName ?? Component3.name ?? ""})`}`;
-    const ForwardRefMotionComponent = (0, import_react23.forwardRef)(MotionDOMComponent);
+    const ForwardRefMotionComponent = (0, import_react22.forwardRef)(MotionDOMComponent);
     ForwardRefMotionComponent[motionComponentSymbol] = Component3;
     return ForwardRefMotionComponent;
   }
   function useLayoutId({ layoutId }) {
-    const layoutGroupId = (0, import_react23.useContext)(LayoutGroupContext).id;
+    const layoutGroupId = (0, import_react22.useContext)(LayoutGroupContext).id;
     return layoutGroupId && layoutId !== void 0 ? layoutGroupId + "-" + layoutId : layoutId;
   }
   function useStrictMode(configAndProps, preloadedFeatures) {
-    const isStrict = (0, import_react23.useContext)(LazyContext).strict;
+    const isStrict = (0, import_react22.useContext)(LazyContext).strict;
     if (preloadedFeatures && isStrict) {
       const strictMessage = "You have rendered a `motion` component within a `LazyMotion` component. This will break tree shaking. Import and render a `m` component instead.";
       configAndProps.ignoreStrict ? warning(false, strictMessage, "lazy-strict-mode") : invariant(false, strictMessage, "lazy-strict-mode");
@@ -34236,11 +34241,11 @@ ${text.slice(0, 300)}` };
   }
 
   // node_modules/framer-motion/dist/es/render/dom/create-visual-element.mjs
-  var import_react24 = __toESM(require_react(), 1);
+  var import_react23 = __toESM(require_react(), 1);
   var createDomVisualElement = (Component3, options) => {
     const isSVG = options.isSVG ?? isSVGComponent(Component3);
     return isSVG ? new SVGVisualElement(options) : new HTMLVisualElement(options, {
-      allowProjection: Component3 !== import_react24.Fragment
+      allowProjection: Component3 !== import_react23.Fragment
     });
   };
 
@@ -35120,9 +35125,9 @@ ${text.slice(0, 300)}` };
 
   // node_modules/framer-motion/dist/es/motion/features/layout/MeasureLayout.mjs
   var import_jsx_runtime7 = __toESM(require_jsx_runtime(), 1);
-  var import_react25 = __toESM(require_react(), 1);
+  var import_react24 = __toESM(require_react(), 1);
   var hasTakenAnySnapshot = false;
-  var MeasureLayoutWithContext = class extends import_react25.Component {
+  var MeasureLayoutWithContext = class extends import_react24.Component {
     /**
      * This only mounts projection nodes for components that
      * need measuring, we might want to do it for all components
@@ -35216,8 +35221,8 @@ ${text.slice(0, 300)}` };
   };
   function MeasureLayout(props) {
     const [isPresent, safeToRemove] = usePresence();
-    const layoutGroup = (0, import_react25.useContext)(LayoutGroupContext);
-    return (0, import_jsx_runtime7.jsx)(MeasureLayoutWithContext, { ...props, layoutGroup, switchLayoutGroup: (0, import_react25.useContext)(SwitchLayoutGroupContext), isPresent, safeToRemove });
+    const layoutGroup = (0, import_react24.useContext)(LayoutGroupContext);
+    return (0, import_jsx_runtime7.jsx)(MeasureLayoutWithContext, { ...props, layoutGroup, switchLayoutGroup: (0, import_react24.useContext)(SwitchLayoutGroupContext), isPresent, safeToRemove });
   }
 
   // node_modules/framer-motion/dist/es/motion/features/drag.mjs
@@ -35448,13 +35453,13 @@ ${text.slice(0, 300)}` };
   var motion = /* @__PURE__ */ createMotionProxy(featureBundle, createDomVisualElement);
 
   // node_modules/framer-motion/dist/es/value/use-motion-value.mjs
-  var import_react26 = __toESM(require_react(), 1);
+  var import_react25 = __toESM(require_react(), 1);
   function useMotionValue(initial) {
     const value = useConstant(() => motionValue(initial));
-    const { isStatic } = (0, import_react26.useContext)(MotionConfigContext);
+    const { isStatic } = (0, import_react25.useContext)(MotionConfigContext);
     if (isStatic) {
-      const [, setLatest] = (0, import_react26.useState)(initial);
-      (0, import_react26.useEffect)(() => value.on("change", setLatest), []);
+      const [, setLatest] = (0, import_react25.useState)(initial);
+      (0, import_react25.useEffect)(() => value.on("change", setLatest), []);
     }
     return value;
   }
@@ -35929,24 +35934,24 @@ ${text.slice(0, 300)}` };
     max: max6 = 1,
     step = 0.01
   }) {
-    const wrapperRef = (0, import_react27.useRef)(null);
-    const trackRef = (0, import_react27.useRef)(null);
-    const inputRef = (0, import_react27.useRef)(null);
-    const labelRef = (0, import_react27.useRef)(null);
-    const valueSpanRef = (0, import_react27.useRef)(null);
-    const [isInteracting, setIsInteracting] = (0, import_react27.useState)(false);
-    const [isDragging2, setIsDragging] = (0, import_react27.useState)(false);
-    const [isHovered, setIsHovered] = (0, import_react27.useState)(false);
-    const [isValueHovered, setIsValueHovered] = (0, import_react27.useState)(false);
-    const [isValueEditable, setIsValueEditable] = (0, import_react27.useState)(false);
-    const [showInput, setShowInput] = (0, import_react27.useState)(false);
-    const [inputValue, setInputValue] = (0, import_react27.useState)("");
-    const hoverTimeoutRef = (0, import_react27.useRef)(null);
-    const pointerDownPos = (0, import_react27.useRef)(null);
-    const isClickRef = (0, import_react27.useRef)(true);
-    const animRef = (0, import_react27.useRef)(null);
-    const wrapperRectRef = (0, import_react27.useRef)(null);
-    const scaleRef = (0, import_react27.useRef)(1);
+    const wrapperRef = (0, import_react26.useRef)(null);
+    const trackRef = (0, import_react26.useRef)(null);
+    const inputRef = (0, import_react26.useRef)(null);
+    const labelRef = (0, import_react26.useRef)(null);
+    const valueSpanRef = (0, import_react26.useRef)(null);
+    const [isInteracting, setIsInteracting] = (0, import_react26.useState)(false);
+    const [isDragging2, setIsDragging] = (0, import_react26.useState)(false);
+    const [isHovered, setIsHovered] = (0, import_react26.useState)(false);
+    const [isValueHovered, setIsValueHovered] = (0, import_react26.useState)(false);
+    const [isValueEditable, setIsValueEditable] = (0, import_react26.useState)(false);
+    const [showInput, setShowInput] = (0, import_react26.useState)(false);
+    const [inputValue, setInputValue] = (0, import_react26.useState)("");
+    const hoverTimeoutRef = (0, import_react26.useRef)(null);
+    const pointerDownPos = (0, import_react26.useRef)(null);
+    const isClickRef = (0, import_react26.useRef)(true);
+    const animRef = (0, import_react26.useRef)(null);
+    const wrapperRectRef = (0, import_react26.useRef)(null);
+    const scaleRef = (0, import_react26.useRef)(1);
     const percentage = (value - min6) / (max6 - min6) * 100;
     const isActive = isInteracting || isHovered;
     const fillPercent = useMotionValue(percentage);
@@ -35964,12 +35969,12 @@ ${text.slice(0, 300)}` };
       rubberStretchPx,
       (stretch) => stretch < 0 ? stretch : 0
     );
-    (0, import_react27.useEffect)(() => {
+    (0, import_react26.useEffect)(() => {
       if (!isInteracting && !animRef.current) {
         fillPercent.jump(percentage);
       }
     }, [percentage, isInteracting, fillPercent]);
-    const positionToValue = (0, import_react27.useCallback)(
+    const positionToValue = (0, import_react26.useCallback)(
       (clientX) => {
         const rect = wrapperRectRef.current;
         if (!rect) return value;
@@ -35982,11 +35987,11 @@ ${text.slice(0, 300)}` };
       },
       [min6, max6, value]
     );
-    const percentFromValue = (0, import_react27.useCallback)(
+    const percentFromValue = (0, import_react26.useCallback)(
       (v3) => (v3 - min6) / (max6 - min6) * 100,
       [min6, max6]
     );
-    const computeRubberStretch = (0, import_react27.useCallback)(
+    const computeRubberStretch = (0, import_react26.useCallback)(
       (clientX, sign) => {
         const rect = wrapperRectRef.current;
         if (!rect) return 0;
@@ -35996,7 +36001,7 @@ ${text.slice(0, 300)}` };
       },
       []
     );
-    const handlePointerDown = (0, import_react27.useCallback)(
+    const handlePointerDown = (0, import_react26.useCallback)(
       (e2) => {
         if (showInput) return;
         e2.preventDefault();
@@ -36012,7 +36017,7 @@ ${text.slice(0, 300)}` };
       },
       [showInput]
     );
-    const handlePointerMove = (0, import_react27.useCallback)(
+    const handlePointerMove = (0, import_react26.useCallback)(
       (e2) => {
         if (!isInteracting || !pointerDownPos.current) return;
         const dx = e2.clientX - pointerDownPos.current.x;
@@ -36045,7 +36050,7 @@ ${text.slice(0, 300)}` };
       },
       [isInteracting, positionToValue, percentFromValue, onChange, fillPercent, rubberStretchPx, computeRubberStretch, step]
     );
-    const handlePointerUp = (0, import_react27.useCallback)(
+    const handlePointerUp = (0, import_react26.useCallback)(
       (e2) => {
         if (!isInteracting) return;
         if (isClickRef.current) {
@@ -36078,7 +36083,7 @@ ${text.slice(0, 300)}` };
       },
       [isInteracting, positionToValue, percentFromValue, onChange, min6, max6, step, fillPercent, rubberStretchPx]
     );
-    (0, import_react27.useEffect)(() => {
+    (0, import_react26.useEffect)(() => {
       if (isValueHovered && !showInput && !isValueEditable) {
         hoverTimeoutRef.current = setTimeout(() => {
           setIsValueEditable(true);
@@ -36094,7 +36099,7 @@ ${text.slice(0, 300)}` };
         if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
       };
     }, [isValueHovered, showInput, isValueEditable]);
-    (0, import_react27.useEffect)(() => {
+    (0, import_react26.useEffect)(() => {
       if (showInput && inputRef.current) {
         inputRef.current.focus();
         inputRef.current.select();
@@ -36224,18 +36229,18 @@ ${text.slice(0, 300)}` };
   }
 
   // src/ui/components/SegmentedControl.tsx
-  var import_react29 = __toESM(require_react());
+  var import_react28 = __toESM(require_react());
   var import_jsx_runtime9 = __toESM(require_jsx_runtime());
   function SegmentedControl({
     options,
     value,
     onChange
   }) {
-    const containerRef = (0, import_react29.useRef)(null);
-    const buttonRefs = (0, import_react29.useRef)(/* @__PURE__ */ new Map());
-    const [pillStyle, setPillStyle] = (0, import_react29.useState)(null);
-    const hasAnimated = (0, import_react29.useRef)(false);
-    (0, import_react29.useLayoutEffect)(() => {
+    const containerRef = (0, import_react28.useRef)(null);
+    const buttonRefs = (0, import_react28.useRef)(/* @__PURE__ */ new Map());
+    const [pillStyle, setPillStyle] = (0, import_react28.useState)(null);
+    const hasAnimated = (0, import_react28.useRef)(false);
+    (0, import_react28.useLayoutEffect)(() => {
       const button = buttonRefs.current.get(value);
       const container = containerRef.current;
       if (button && container) {
@@ -36299,7 +36304,7 @@ ${text.slice(0, 300)}` };
   }
 
   // src/ui/components/SelectControl.tsx
-  var import_react31 = __toESM(require_react());
+  var import_react30 = __toESM(require_react());
   var import_react_dom = __toESM(require_react_dom());
   var import_jsx_runtime11 = __toESM(require_jsx_runtime());
   function toTitleCase(s2) {
@@ -36311,14 +36316,14 @@ ${text.slice(0, 300)}` };
     );
   }
   function SelectControl({ label, value, options, onChange }) {
-    const [isOpen, setIsOpen] = (0, import_react31.useState)(false);
-    const triggerRef = (0, import_react31.useRef)(null);
-    const dropdownRef = (0, import_react31.useRef)(null);
-    const [pos, setPos] = (0, import_react31.useState)(null);
+    const [isOpen, setIsOpen] = (0, import_react30.useState)(false);
+    const triggerRef = (0, import_react30.useRef)(null);
+    const dropdownRef = (0, import_react30.useRef)(null);
+    const [pos, setPos] = (0, import_react30.useState)(null);
     const normalized = normalizeOptions(options);
     const selectedOption = normalized.find((o2) => o2.value === value);
     const portalTarget = document.getElementById("root") ?? document.body;
-    const updatePos = (0, import_react31.useCallback)(() => {
+    const updatePos = (0, import_react30.useCallback)(() => {
       const el = triggerRef.current;
       if (!el) return;
       const rect = el.getBoundingClientRect();
@@ -36332,11 +36337,11 @@ ${text.slice(0, 300)}` };
         above
       });
     }, [normalized.length]);
-    (0, import_react31.useEffect)(() => {
+    (0, import_react30.useEffect)(() => {
       if (!isOpen) return;
       updatePos();
     }, [isOpen, updatePos]);
-    (0, import_react31.useEffect)(() => {
+    (0, import_react30.useEffect)(() => {
       if (!isOpen) return;
       const handleClick = (e2) => {
         const target = e2.target;
@@ -36415,10 +36420,10 @@ ${text.slice(0, 300)}` };
   }
 
   // src/ui/components/Folder.tsx
-  var import_react33 = __toESM(require_react());
+  var import_react32 = __toESM(require_react());
   var import_jsx_runtime12 = __toESM(require_jsx_runtime());
   function Folder({ title, children, defaultOpen = true, onOpenChange }) {
-    const [isOpen, setIsOpen] = (0, import_react33.useState)(defaultOpen);
+    const [isOpen, setIsOpen] = (0, import_react32.useState)(defaultOpen);
     const handleToggle = () => {
       const next = !isOpen;
       setIsOpen(next);
@@ -36447,10 +36452,10 @@ ${text.slice(0, 300)}` };
   }
 
   // src/ui/components/ColorControl.tsx
-  var import_react35 = __toESM(require_react());
+  var import_react34 = __toESM(require_react());
 
   // node_modules/react-colorful/dist/index.mjs
-  var import_react34 = __toESM(require_react(), 1);
+  var import_react33 = __toESM(require_react(), 1);
   function u() {
     return (u = Object.assign || function(e2) {
       for (var r2 = 1; r2 < arguments.length; r2++) {
@@ -36467,7 +36472,7 @@ ${text.slice(0, 300)}` };
     return o2;
   }
   function i(e2) {
-    var t2 = (0, import_react34.useRef)(e2), n2 = (0, import_react34.useRef)(function(e3) {
+    var t2 = (0, import_react33.useRef)(e2), n2 = (0, import_react33.useRef)(function(e3) {
       t2.current && t2.current(e3);
     });
     return t2.current = e2, n2.current;
@@ -36491,8 +36496,8 @@ ${text.slice(0, 300)}` };
   var h = function(e2) {
     !f(e2) && e2.preventDefault();
   };
-  var m2 = import_react34.default.memo(function(o2) {
-    var a2 = o2.onMove, l2 = o2.onKey, s2 = c(o2, ["onMove", "onKey"]), m3 = (0, import_react34.useRef)(null), g2 = i(a2), p2 = i(l2), b2 = (0, import_react34.useRef)(null), _2 = (0, import_react34.useRef)(false), x2 = (0, import_react34.useMemo)(function() {
+  var m2 = import_react33.default.memo(function(o2) {
+    var a2 = o2.onMove, l2 = o2.onKey, s2 = c(o2, ["onMove", "onKey"]), m3 = (0, import_react33.useRef)(null), g2 = i(a2), p2 = i(l2), b2 = (0, import_react33.useRef)(null), _2 = (0, import_react33.useRef)(false), x2 = (0, import_react33.useMemo)(function() {
       var e2 = function(e3) {
         h(e3), (f(e3) ? e3.touches.length > 0 : e3.buttons > 0) && m3.current ? g2(d(m3.current, e3, b2.current)) : t2(false);
       }, r2 = function() {
@@ -36519,16 +36524,16 @@ ${text.slice(0, 300)}` };
         r3 < 37 || r3 > 40 || (e3.preventDefault(), p2({ left: 39 === r3 ? 0.05 : 37 === r3 ? -0.05 : 0, top: 40 === r3 ? 0.05 : 38 === r3 ? -0.05 : 0 }));
       }, t2];
     }, [p2, g2]), C3 = x2[0], E = x2[1], H = x2[2];
-    return (0, import_react34.useEffect)(function() {
+    return (0, import_react33.useEffect)(function() {
       return H;
-    }, [H]), import_react34.default.createElement("div", u({}, s2, { onTouchStart: C3, onMouseDown: C3, className: "react-colorful__interactive", ref: m3, onKeyDown: E, tabIndex: 0, role: "slider" }));
+    }, [H]), import_react33.default.createElement("div", u({}, s2, { onTouchStart: C3, onMouseDown: C3, className: "react-colorful__interactive", ref: m3, onKeyDown: E, tabIndex: 0, role: "slider" }));
   });
   var g = function(e2) {
     return e2.filter(Boolean).join(" ");
   };
   var p = function(r2) {
     var t2 = r2.color, n2 = r2.left, o2 = r2.top, a2 = void 0 === o2 ? 0.5 : o2, l2 = g(["react-colorful__pointer", r2.className]);
-    return import_react34.default.createElement("div", { className: l2, style: { top: 100 * a2 + "%", left: 100 * n2 + "%" } }, import_react34.default.createElement("div", { className: "react-colorful__pointer-fill", style: { backgroundColor: t2 } }));
+    return import_react33.default.createElement("div", { className: l2, style: { top: 100 * a2 + "%", left: 100 * n2 + "%" } }, import_react33.default.createElement("div", { className: "react-colorful__pointer-fill", style: { backgroundColor: t2 } }));
   };
   var b = function(e2, r2, t2) {
     return void 0 === r2 && (r2 = 0), void 0 === t2 && (t2 = Math.pow(10, r2)), Math.round(t2 * e2) / t2;
@@ -36569,21 +36574,21 @@ ${text.slice(0, 300)}` };
     var r2 = e2.r, t2 = e2.g, n2 = e2.b, o2 = e2.a, a2 = Math.max(r2, t2, n2), l2 = a2 - Math.min(r2, t2, n2), u5 = l2 ? a2 === r2 ? (t2 - n2) / l2 : a2 === t2 ? 2 + (n2 - r2) / l2 : 4 + (r2 - t2) / l2 : 0;
     return { h: b(60 * (u5 < 0 ? u5 + 6 : u5)), s: b(a2 ? l2 / a2 * 100 : 0), v: b(a2 / 255 * 100), a: o2 };
   };
-  var S = import_react34.default.memo(function(r2) {
+  var S = import_react33.default.memo(function(r2) {
     var t2 = r2.hue, n2 = r2.onChange, o2 = g(["react-colorful__hue", r2.className]);
-    return import_react34.default.createElement("div", { className: o2 }, import_react34.default.createElement(m2, { onMove: function(e2) {
+    return import_react33.default.createElement("div", { className: o2 }, import_react33.default.createElement(m2, { onMove: function(e2) {
       n2({ h: 360 * e2.left });
     }, onKey: function(e2) {
       n2({ h: s(t2 + 360 * e2.left, 0, 360) });
-    }, "aria-label": "Hue", "aria-valuenow": b(t2), "aria-valuemax": "360", "aria-valuemin": "0" }, import_react34.default.createElement(p, { className: "react-colorful__hue-pointer", left: t2 / 360, color: q({ h: t2, s: 100, v: 100, a: 1 }) })));
+    }, "aria-label": "Hue", "aria-valuenow": b(t2), "aria-valuemax": "360", "aria-valuemin": "0" }, import_react33.default.createElement(p, { className: "react-colorful__hue-pointer", left: t2 / 360, color: q({ h: t2, s: 100, v: 100, a: 1 }) })));
   });
-  var T = import_react34.default.memo(function(r2) {
+  var T = import_react33.default.memo(function(r2) {
     var t2 = r2.hsva, n2 = r2.onChange, o2 = { backgroundColor: q({ h: t2.h, s: 100, v: 100, a: 1 }) };
-    return import_react34.default.createElement("div", { className: "react-colorful__saturation", style: o2 }, import_react34.default.createElement(m2, { onMove: function(e2) {
+    return import_react33.default.createElement("div", { className: "react-colorful__saturation", style: o2 }, import_react33.default.createElement(m2, { onMove: function(e2) {
       n2({ s: 100 * e2.left, v: 100 - 100 * e2.top });
     }, onKey: function(e2) {
       n2({ s: s(t2.s + 100 * e2.left, 0, 100), v: s(t2.v - 100 * e2.top, 0, 100) });
-    }, "aria-label": "Color", "aria-valuetext": "Saturation " + b(t2.s) + "%, Brightness " + b(t2.v) + "%" }, import_react34.default.createElement(p, { className: "react-colorful__saturation-pointer", top: 1 - t2.v / 100, left: t2.s / 100, color: q(t2) })));
+    }, "aria-label": "Color", "aria-valuetext": "Saturation " + b(t2.s) + "%, Brightness " + b(t2.v) + "%" }, import_react33.default.createElement(p, { className: "react-colorful__saturation-pointer", top: 1 - t2.v / 100, left: t2.s / 100, color: q(t2) })));
   });
   var F = function(e2, r2) {
     if (e2 === r2) return true;
@@ -36594,19 +36599,19 @@ ${text.slice(0, 300)}` };
     return e2.toLowerCase() === r2.toLowerCase() || F(C(e2), C(r2));
   };
   function Y(e2, t2, l2) {
-    var u5 = i(l2), c2 = (0, import_react34.useState)(function() {
+    var u5 = i(l2), c2 = (0, import_react33.useState)(function() {
       return e2.toHsva(t2);
-    }), s2 = c2[0], f2 = c2[1], v3 = (0, import_react34.useRef)({ color: t2, hsva: s2 });
-    (0, import_react34.useEffect)(function() {
+    }), s2 = c2[0], f2 = c2[1], v3 = (0, import_react33.useRef)({ color: t2, hsva: s2 });
+    (0, import_react33.useEffect)(function() {
       if (!e2.equal(t2, v3.current.color)) {
         var r2 = e2.toHsva(t2);
         v3.current = { hsva: r2, color: t2 }, f2(r2);
       }
-    }, [t2, e2]), (0, import_react34.useEffect)(function() {
+    }, [t2, e2]), (0, import_react33.useEffect)(function() {
       var r2;
       F(s2, v3.current.hsva) || e2.equal(r2 = e2.fromHsva(s2), v3.current.color) || (v3.current = { hsva: s2, color: r2 }, u5(r2));
     }, [s2, e2, u5]);
-    var d2 = (0, import_react34.useCallback)(function(e3) {
+    var d2 = (0, import_react33.useCallback)(function(e3) {
       f2(function(r2) {
         return Object.assign({}, r2, e3);
       });
@@ -36614,7 +36619,7 @@ ${text.slice(0, 300)}` };
     return [s2, d2];
   }
   var R;
-  var V = "undefined" != typeof window ? import_react34.useLayoutEffect : import_react34.useEffect;
+  var V = "undefined" != typeof window ? import_react33.useLayoutEffect : import_react33.useEffect;
   var $ = function() {
     return R || ("undefined" != typeof __webpack_nonce__ ? __webpack_nonce__ : void 0);
   };
@@ -36631,16 +36636,16 @@ ${text.slice(0, 300)}` };
     }, []);
   };
   var U = function(t2) {
-    var n2 = t2.className, o2 = t2.colorModel, a2 = t2.color, l2 = void 0 === a2 ? o2.defaultColor : a2, i2 = t2.onChange, s2 = c(t2, ["className", "colorModel", "color", "onChange"]), f2 = (0, import_react34.useRef)(null);
+    var n2 = t2.className, o2 = t2.colorModel, a2 = t2.color, l2 = void 0 === a2 ? o2.defaultColor : a2, i2 = t2.onChange, s2 = c(t2, ["className", "colorModel", "color", "onChange"]), f2 = (0, import_react33.useRef)(null);
     Q(f2);
     var v3 = Y(o2, l2, i2), d2 = v3[0], h2 = v3[1], m3 = g(["react-colorful", n2]);
-    return import_react34.default.createElement("div", u({}, s2, { ref: f2, className: m3 }), import_react34.default.createElement(T, { hsva: d2, onChange: h2 }), import_react34.default.createElement(S, { hue: d2.h, onChange: h2, className: "react-colorful__last-control" }));
+    return import_react33.default.createElement("div", u({}, s2, { ref: f2, className: m3 }), import_react33.default.createElement(T, { hsva: d2, onChange: h2 }), import_react33.default.createElement(S, { hue: d2.h, onChange: h2, className: "react-colorful__last-control" }));
   };
   var W = { defaultColor: "000", toHsva: x, fromHsva: function(e2) {
     return w({ h: e2.h, s: e2.s, v: e2.v, a: 1 });
   }, equal: X };
   var Z = function(r2) {
-    return import_react34.default.createElement(U, u({}, r2, { colorModel: W }));
+    return import_react33.default.createElement(U, u({}, r2, { colorModel: W }));
   };
 
   // src/ui/components/ColorControl.tsx
@@ -36651,14 +36656,14 @@ ${text.slice(0, 300)}` };
     return `#${hex3[1]}${hex3[1]}${hex3[2]}${hex3[2]}${hex3[3]}${hex3[3]}`;
   }
   function ColorControl({ label, value, onChange }) {
-    const [isEditing, setIsEditing] = (0, import_react35.useState)(false);
-    const [editValue, setEditValue] = (0, import_react35.useState)(value);
-    const [pickerOpen, setPickerOpen] = (0, import_react35.useState)(false);
-    const wrapperRef = (0, import_react35.useRef)(null);
-    (0, import_react35.useEffect)(() => {
+    const [isEditing, setIsEditing] = (0, import_react34.useState)(false);
+    const [editValue, setEditValue] = (0, import_react34.useState)(value);
+    const [pickerOpen, setPickerOpen] = (0, import_react34.useState)(false);
+    const wrapperRef = (0, import_react34.useRef)(null);
+    (0, import_react34.useEffect)(() => {
       if (!isEditing) setEditValue(value);
     }, [value, isEditing]);
-    (0, import_react35.useEffect)(() => {
+    (0, import_react34.useEffect)(() => {
       if (!pickerOpen) return;
       function handleClickOutside(e2) {
         if (wrapperRef.current && !wrapperRef.current.contains(e2.target)) {
@@ -36683,7 +36688,7 @@ ${text.slice(0, 300)}` };
         setEditValue(value);
       }
     }
-    const handlePickerChange = (0, import_react35.useCallback)((color2) => {
+    const handlePickerChange = (0, import_react34.useCallback)((color2) => {
       onChange(color2);
     }, [onChange]);
     const normalizedValue = value.length === 4 ? expandShorthandHex(value) : value.slice(0, 7);
@@ -36719,7 +36724,7 @@ ${text.slice(0, 300)}` };
   }
 
   // src/ui/components/SpringControl.tsx
-  var import_react36 = __toESM(require_react());
+  var import_react35 = __toESM(require_react());
 
   // src/ui/components/SpringVisualization.tsx
   var import_jsx_runtime14 = __toESM(require_jsx_runtime());
@@ -36812,7 +36817,7 @@ ${text.slice(0, 300)}` };
   var import_jsx_runtime15 = __toESM(require_jsx_runtime());
   function SpringControl({ label, value, onChange }) {
     const hasPhysicsProps = value.stiffness !== void 0 || value.damping !== void 0;
-    const [mode, setMode] = (0, import_react36.useState)(hasPhysicsProps ? "advanced" : "simple");
+    const [mode, setMode] = (0, import_react35.useState)(hasPhysicsProps ? "advanced" : "simple");
     const isSimpleMode = mode === "simple";
     const handleModeChange = (newMode) => {
       setMode(newMode);
@@ -36943,7 +36948,7 @@ ${text.slice(0, 300)}` };
   var import_jsx_runtime17 = __toESM(require_jsx_runtime());
 
   // src/ui/components/NumberInput.tsx
-  var import_react37 = __toESM(require_react());
+  var import_react36 = __toESM(require_react());
   var import_jsx_runtime18 = __toESM(require_jsx_runtime());
   function decimalsForStep2(step) {
     const s2 = step.toString();
@@ -36966,10 +36971,10 @@ ${text.slice(0, 300)}` };
     placeholder
   }) {
     const decimals = decimalsForStep2(step);
-    const [raw, setRaw] = (0, import_react37.useState)(value.toFixed(decimals));
-    const [isFocused, setIsFocused] = (0, import_react37.useState)(false);
-    const inputRef = (0, import_react37.useRef)(null);
-    const prevValueRef = (0, import_react37.useRef)(value);
+    const [raw, setRaw] = (0, import_react36.useState)(value.toFixed(decimals));
+    const [isFocused, setIsFocused] = (0, import_react36.useState)(false);
+    const inputRef = (0, import_react36.useRef)(null);
+    const prevValueRef = (0, import_react36.useRef)(value);
     if (!isFocused && prevValueRef.current !== value) {
       prevValueRef.current = value;
       setRaw(value.toFixed(decimals));
@@ -37027,7 +37032,7 @@ ${text.slice(0, 300)}` };
   }
 
   // src/ui/components/AngleWheel.tsx
-  var import_react38 = __toESM(require_react());
+  var import_react37 = __toESM(require_react());
   var import_jsx_runtime19 = __toESM(require_jsx_runtime());
   var DIAL_SIZE = 48;
   var DIAL_RADIUS = DIAL_SIZE / 2;
@@ -37049,19 +37054,19 @@ ${text.slice(0, 300)}` };
     max: max6 = 180,
     step = 1
   }) {
-    const dialRef = (0, import_react38.useRef)(null);
-    const inputRef = (0, import_react38.useRef)(null);
-    const [isDragging2, setIsDragging] = (0, import_react38.useState)(false);
-    const [showInput, setShowInput] = (0, import_react38.useState)(false);
-    const [inputValue, setInputValue] = (0, import_react38.useState)("");
-    const [isHovered, setIsHovered] = (0, import_react38.useState)(false);
-    const [isValueHovered, setIsValueHovered] = (0, import_react38.useState)(false);
-    const [isValueEditable, setIsValueEditable] = (0, import_react38.useState)(false);
-    const hoverTimeoutRef = (0, import_react38.useRef)(null);
+    const dialRef = (0, import_react37.useRef)(null);
+    const inputRef = (0, import_react37.useRef)(null);
+    const [isDragging2, setIsDragging] = (0, import_react37.useState)(false);
+    const [showInput, setShowInput] = (0, import_react37.useState)(false);
+    const [inputValue, setInputValue] = (0, import_react37.useState)("");
+    const [isHovered, setIsHovered] = (0, import_react37.useState)(false);
+    const [isValueHovered, setIsValueHovered] = (0, import_react37.useState)(false);
+    const [isValueEditable, setIsValueEditable] = (0, import_react37.useState)(false);
+    const hoverTimeoutRef = (0, import_react37.useRef)(null);
     const angleRad = (value - 90) * Math.PI / 180;
     const dotX = DIAL_RADIUS + Math.cos(angleRad) * TRACK_RADIUS;
     const dotY = DIAL_RADIUS + Math.sin(angleRad) * TRACK_RADIUS;
-    const angleFromPointer = (0, import_react38.useCallback)(
+    const angleFromPointer = (0, import_react37.useCallback)(
       (clientX, clientY) => {
         const el = dialRef.current;
         if (!el) return value;
@@ -37077,7 +37082,7 @@ ${text.slice(0, 300)}` };
       },
       [value, min6, max6, step]
     );
-    const handlePointerDown = (0, import_react38.useCallback)(
+    const handlePointerDown = (0, import_react37.useCallback)(
       (e2) => {
         e2.preventDefault();
         e2.target.setPointerCapture(e2.pointerId);
@@ -37086,17 +37091,17 @@ ${text.slice(0, 300)}` };
       },
       [onChange, angleFromPointer]
     );
-    const handlePointerMove = (0, import_react38.useCallback)(
+    const handlePointerMove = (0, import_react37.useCallback)(
       (e2) => {
         if (!isDragging2) return;
         onChange(angleFromPointer(e2.clientX, e2.clientY));
       },
       [isDragging2, onChange, angleFromPointer]
     );
-    const handlePointerUp = (0, import_react38.useCallback)(() => {
+    const handlePointerUp = (0, import_react37.useCallback)(() => {
       setIsDragging(false);
     }, []);
-    (0, import_react38.useEffect)(() => {
+    (0, import_react37.useEffect)(() => {
       if (isValueHovered && !showInput && !isValueEditable) {
         hoverTimeoutRef.current = setTimeout(() => {
           setIsValueEditable(true);
@@ -37112,7 +37117,7 @@ ${text.slice(0, 300)}` };
         if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
       };
     }, [isValueHovered, showInput, isValueEditable]);
-    (0, import_react38.useEffect)(() => {
+    (0, import_react37.useEffect)(() => {
       if (showInput && inputRef.current) {
         inputRef.current.focus();
         inputRef.current.select();
@@ -37266,7 +37271,7 @@ ${text.slice(0, 300)}` };
   }
 
   // src/ui/components/CubePreview.tsx
-  var import_react39 = __toESM(require_react());
+  var import_react38 = __toESM(require_react());
 
   // node_modules/ogl/src/math/functions/Vec3Func.js
   function length(a2) {
@@ -40766,13 +40771,13 @@ void main() {
     camera.position.z = ORBIT_RADIUS * sinPhi * Math.cos(theta);
   }
   function CubePreview({ rx, ry, rz = 0, onRotate }) {
-    const containerRef = (0, import_react39.useRef)(null);
-    const stateRef = (0, import_react39.useRef)(null);
-    const onRotateRef = (0, import_react39.useRef)(onRotate);
+    const containerRef = (0, import_react38.useRef)(null);
+    const stateRef = (0, import_react38.useRef)(null);
+    const onRotateRef = (0, import_react38.useRef)(onRotate);
     onRotateRef.current = onRotate;
-    const propsRef = (0, import_react39.useRef)({ rx, ry });
+    const propsRef = (0, import_react38.useRef)({ rx, ry });
     propsRef.current = { rx, ry };
-    (0, import_react39.useEffect)(() => {
+    (0, import_react38.useEffect)(() => {
       const container = containerRef.current;
       if (!container) return;
       const renderer = new Renderer({
@@ -40901,7 +40906,7 @@ void main() {
         stateRef.current = null;
       };
     }, []);
-    (0, import_react39.useEffect)(() => {
+    (0, import_react38.useEffect)(() => {
       const state = stateRef.current;
       if (!state) return;
       const { rx: emRx, ry: emRy } = { rx: state.lastEmittedRx, ry: state.lastEmittedRy };
@@ -40943,7 +40948,7 @@ void main() {
   }
 
   // src/ui/components/PreviewCanvas.tsx
-  var import_react40 = __toESM(require_react());
+  var import_react39 = __toESM(require_react());
   var import_jsx_runtime21 = __toESM(require_jsx_runtime());
   function rgbToCSS(c2, opacity = 1) {
     return `rgba(${Math.round(c2.r * 255)}, ${Math.round(c2.g * 255)}, ${Math.round(c2.b * 255)}, ${opacity})`;
@@ -40965,8 +40970,8 @@ void main() {
     };
   }
   function PreviewCanvas({ actions }) {
-    const canvasRef = (0, import_react40.useRef)(null);
-    (0, import_react40.useEffect)(() => {
+    const canvasRef = (0, import_react39.useRef)(null);
+    (0, import_react39.useEffect)(() => {
       const canvas = canvasRef.current;
       if (!canvas || !actions.length) return;
       const ctx = canvas.getContext("2d");
@@ -46466,7 +46471,7 @@ void main() {
   var import_jsx_runtime22 = __toESM(require_jsx_runtime());
   function ControlRenderer({ control, mode, onControlChange, onControlValueChange }) {
     const { id: id3, type, label = "", props = {}, action } = control;
-    const onChange = (0, import_react41.useCallback)(
+    const onChange = (0, import_react40.useCallback)(
       (value) => {
         onControlValueChange(id3, value);
         if (mode === "live") {
@@ -46477,7 +46482,7 @@ void main() {
     );
     switch (type) {
       case "slider": {
-        const [val, setVal] = (0, import_react41.useState)(
+        const [val, setVal] = (0, import_react40.useState)(
           typeof props.defaultValue === "number" ? props.defaultValue : typeof props.min === "number" ? props.min : 0
         );
         return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
@@ -46496,7 +46501,7 @@ void main() {
         );
       }
       case "toggle": {
-        const [val, setVal] = (0, import_react41.useState)(props.defaultValue === true);
+        const [val, setVal] = (0, import_react40.useState)(props.defaultValue === true);
         return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
           Toggle,
           {
@@ -46510,7 +46515,7 @@ void main() {
         );
       }
       case "number": {
-        const [val, setVal] = (0, import_react41.useState)(
+        const [val, setVal] = (0, import_react40.useState)(
           typeof props.defaultValue === "number" ? props.defaultValue : typeof props.min === "number" ? props.min : 0
         );
         return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
@@ -46530,7 +46535,7 @@ void main() {
       }
       case "select": {
         const options = Array.isArray(props.options) ? props.options : ["Option A", "Option B"];
-        const [val, setVal] = (0, import_react41.useState)(
+        const [val, setVal] = (0, import_react40.useState)(
           typeof props.defaultValue === "string" ? props.defaultValue : options[0] ?? ""
         );
         return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
@@ -46548,7 +46553,7 @@ void main() {
       }
       case "segmented": {
         const options = Array.isArray(props.options) ? props.options : [{ value: "a", label: "A" }, { value: "b", label: "B" }];
-        const [val, setVal] = (0, import_react41.useState)(
+        const [val, setVal] = (0, import_react40.useState)(
           typeof props.defaultValue === "string" ? props.defaultValue : options[0]?.value ?? ""
         );
         return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "dialkit-labeled-control", children: [
@@ -46567,7 +46572,7 @@ void main() {
         ] });
       }
       case "color": {
-        const [val, setVal] = (0, import_react41.useState)(
+        const [val, setVal] = (0, import_react40.useState)(
           typeof props.defaultValue === "string" ? props.defaultValue : "#000000"
         );
         return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
@@ -46583,7 +46588,7 @@ void main() {
         );
       }
       case "spring": {
-        const [val, setVal] = (0, import_react41.useState)({
+        const [val, setVal] = (0, import_react40.useState)({
           type: "spring",
           visualDuration: 0.3,
           bounce: 0.2,
@@ -46602,7 +46607,7 @@ void main() {
         );
       }
       case "text": {
-        const [val, setVal] = (0, import_react41.useState)(
+        const [val, setVal] = (0, import_react40.useState)(
           typeof props.defaultValue === "string" ? props.defaultValue : ""
         );
         return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
@@ -46619,7 +46624,7 @@ void main() {
         );
       }
       case "angle": {
-        const [val, setVal] = (0, import_react41.useState)(
+        const [val, setVal] = (0, import_react40.useState)(
           typeof props.defaultValue === "number" ? props.defaultValue : 0
         );
         return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
@@ -46691,18 +46696,18 @@ void main() {
   }
   function UIRenderer({ spec, onApply, onValueChange }) {
     const mode = spec.mode === "apply" ? "apply" : "live";
-    const [controlValues, setControlValues] = (0, import_react41.useState)(() => collectControlDefaults(spec.controls));
-    const [previewActions, setPreviewActions] = (0, import_react41.useState)(null);
-    const previewTimerRef = (0, import_react41.useRef)(null);
-    const controlValuesRef = (0, import_react41.useRef)(controlValues);
+    const [controlValues, setControlValues] = (0, import_react40.useState)(() => collectControlDefaults(spec.controls));
+    const [previewActions, setPreviewActions] = (0, import_react40.useState)(null);
+    const previewTimerRef = (0, import_react40.useRef)(null);
+    const controlValuesRef = (0, import_react40.useRef)(controlValues);
     controlValuesRef.current = controlValues;
     const angleIds = findAngleControls(spec.controls);
     const hasCubePreview = mode === "apply" && !!spec.generate && !spec.imageNodeId && !!angleIds;
     const hasPreview = hasCubePreview;
-    (0, import_react41.useEffect)(() => {
+    (0, import_react40.useEffect)(() => {
       setControlValues(collectControlDefaults(spec.controls));
     }, [spec]);
-    (0, import_react41.useEffect)(() => {
+    (0, import_react40.useEffect)(() => {
       if (!hasPreview || hasCubePreview || !spec.generate) return;
       try {
         const fn = compileGenerator(spec.generate);
@@ -46712,7 +46717,7 @@ void main() {
         setPreviewActions(null);
       }
     }, [spec.generate, hasPreview, hasCubePreview]);
-    const runPreview = (0, import_react41.useCallback)(() => {
+    const runPreview = (0, import_react40.useCallback)(() => {
       if (!hasPreview || hasCubePreview || !spec.generate) return;
       try {
         const fn = compileGenerator(spec.generate);
@@ -46722,7 +46727,7 @@ void main() {
         setPreviewActions(null);
       }
     }, [hasPreview, hasCubePreview, spec.generate]);
-    const handleControlChange = (0, import_react41.useCallback)(
+    const handleControlChange = (0, import_react40.useCallback)(
       (controlId, value, action, actions) => {
         if (!action && !actions?.length) return;
         postToMain({
@@ -46732,7 +46737,7 @@ void main() {
       },
       []
     );
-    const handleControlValueChange = (0, import_react41.useCallback)((controlId, value) => {
+    const handleControlValueChange = (0, import_react40.useCallback)((controlId, value) => {
       setControlValues((prev) => {
         const next = { ...prev, [controlId]: value };
         controlValuesRef.current = next;
@@ -46744,7 +46749,7 @@ void main() {
         previewTimerRef.current = setTimeout(runPreview, 80);
       }
     }, [onValueChange, hasPreview, hasCubePreview, runPreview]);
-    const handleCubeRotate = (0, import_react41.useCallback)((newRx, newRy) => {
+    const handleCubeRotate = (0, import_react40.useCallback)((newRx, newRy) => {
       if (!angleIds) return;
       setControlValues((prev) => {
         const next = { ...prev, [angleIds.rx]: newRx, [angleIds.ry]: newRy };
@@ -46789,7 +46794,7 @@ void main() {
   }
 
   // src/ui/components/FlaskLoader.tsx
-  var import_react42 = __toESM(require_react());
+  var import_react41 = __toESM(require_react());
   var import_jsx_runtime23 = __toESM(require_jsx_runtime());
   var FLASK_OUTLINE = "M29 12C29.552 12 30 12.448 30 13C30 13.552 29.552 14 29 14H28V20.359C28 20.568 28.065 20.771 28.186 20.94L35.555 31.256C36.973 33.241 35.553 36 33.113 36H14.887C12.447 36 11.027 33.241 12.445 31.256L19.813 20.94C19.934 20.771 20 20.568 20 20.359V14H19C18.448 14 18 13.552 18 13C18 12.448 18.448 12 19 12H29ZM22 20.359C22 20.984 21.805 21.594 21.441 22.103L14.072 32.419C13.6 33.081 14.074 34 14.887 34H33.113C33.926 34 34.4 33.081 33.928 32.419L26.559 22.103C26.195 21.594 26 20.984 26 20.359V14H22V20.359Z";
   var FLASK_MASK = "M22 20.359C22 20.984 21.805 21.594 21.441 22.103L14.072 32.419C13.6 33.081 14.074 34 14.887 34H33.113C33.926 34 34.4 33.081 33.928 32.419L26.559 22.103C26.195 21.594 26 20.984 26 20.359V14H22V20.359Z";
@@ -46817,9 +46822,9 @@ void main() {
   var WAVE_D = buildWavePath();
   var FLAT_D = buildFlatPath();
   function FlaskLoader({ state, size = 48 }) {
-    const [phase, setPhase] = (0, import_react42.useState)("idle");
-    const timersRef = (0, import_react42.useRef)([]);
-    (0, import_react42.useEffect)(() => {
+    const [phase, setPhase] = (0, import_react41.useState)("idle");
+    const timersRef = (0, import_react41.useRef)([]);
+    (0, import_react41.useEffect)(() => {
       timersRef.current.forEach(clearTimeout);
       timersRef.current = [];
       if (state === "loading") {
@@ -46878,6 +46883,49 @@ void main() {
     );
   }
 
+  // src/ui/components/LoadingVerbs.ts
+  var LOADING_VERBS = [
+    "Pixelating",
+    "Bezifying",
+    "Kerninating",
+    "Layerifying",
+    "Vectorizing",
+    "Gradientifying",
+    "Strokeulating",
+    "Opacitating",
+    "Gridifying",
+    "Alignifying",
+    "Rasterificating",
+    "Typographizing",
+    "Compositifying",
+    "Framulating",
+    "Maskifying",
+    "Blendinating",
+    "Swatchulating",
+    "Canvasifying",
+    "Skeuomorphing",
+    "Antialiasifying",
+    "Pantoneifying",
+    "Whitespacing",
+    "Gutterizing",
+    "Prototypulating",
+    "Componentizing",
+    "Autolayouting",
+    "Constraintifying",
+    "Shadolating",
+    "Radiusing",
+    "Dropshading"
+  ];
+  var lastIndex = -1;
+  function getRandomVerb() {
+    let index;
+    do {
+      index = Math.floor(Math.random() * LOADING_VERBS.length);
+    } while (index === lastIndex && LOADING_VERBS.length > 1);
+    lastIndex = index;
+    return LOADING_VERBS[index];
+  }
+
   // src/ui/App.tsx
   var import_jsx_runtime24 = __toESM(require_jsx_runtime());
   function rewriteTempIds(spec, map) {
@@ -46908,35 +46956,42 @@ void main() {
   var PLUGIN_WIDTH = 300;
   var MAX_HEIGHT = 600;
   function useShellResize() {
-    (0, import_react43.useEffect)(() => {
+    (0, import_react42.useEffect)(() => {
       parent.postMessage(
         { pluginMessage: { type: "resize", width: PLUGIN_WIDTH, height: MAX_HEIGHT } },
         "*"
       );
     }, []);
   }
-  function EmptyState({ selectionName, flaskState }) {
+  function EmptyState({ selectionName, flaskState, loadingVerb }) {
+    const isLoading = flaskState === "loading";
     return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { className: "render-zone-empty", children: [
       /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(FlaskLoader, { state: flaskState, size: 48 }),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { className: "render-zone-empty-info", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { className: "render-zone-empty-info", children: isLoading ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("p", { className: "render-zone-loading-text", children: [
+        loadingVerb,
+        "..."
+      ] }) : /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(import_jsx_runtime24.Fragment, { children: [
         selectionName && /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { className: "render-zone-layer-badge", children: selectionName }),
         /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "render-zone-empty-text", children: selectionName ? "What do you want to do with this layer?" : "Select something on the canvas, then describe what you want" })
-      ] })
+      ] }) })
     ] });
   }
   function App() {
     useShellResize();
-    const [messages, setMessages] = (0, import_react43.useState)([]);
-    const [currentUISpec, setCurrentUISpec] = (0, import_react43.useState)(null);
-    const [isLoading, setIsLoading] = (0, import_react43.useState)(false);
-    const [flaskState, setFlaskState] = (0, import_react43.useState)("idle");
-    const [isInputFocused, setIsInputFocused] = (0, import_react43.useState)(false);
-    const [selectionContext, setSelectionContext] = (0, import_react43.useState)(null);
-    const createdNodeIdsRef = (0, import_react43.useRef)([]);
-    const rootFrameIdRef = (0, import_react43.useRef)(void 0);
-    const messagesRef = (0, import_react43.useRef)(messages);
+    const [messages, setMessages] = (0, import_react42.useState)([]);
+    const [currentUISpec, setCurrentUISpec] = (0, import_react42.useState)(null);
+    const [isLoading, setIsLoading] = (0, import_react42.useState)(false);
+    const [flaskState, setFlaskState] = (0, import_react42.useState)("idle");
+    const [isInputFocused, setIsInputFocused] = (0, import_react42.useState)(false);
+    const [loadingVerb, setLoadingVerb] = (0, import_react42.useState)(null);
+    const [selectionContext, setSelectionContext] = (0, import_react42.useState)(null);
+    const [mockSelectionName, setMockSelectionName] = (0, import_react42.useState)(null);
+    const demoTimersRef = (0, import_react42.useRef)([]);
+    const createdNodeIdsRef = (0, import_react42.useRef)([]);
+    const rootFrameIdRef = (0, import_react42.useRef)(void 0);
+    const messagesRef = (0, import_react42.useRef)(messages);
     messagesRef.current = messages;
-    (0, import_react43.useEffect)(() => {
+    (0, import_react42.useEffect)(() => {
       postToMain({ type: "PLUGIN_READY" });
       return onMainMessage((msg) => {
         if (msg.type === "SELECTION_CONTEXT") {
@@ -46977,13 +47032,13 @@ ${errors.join("\n")}`);
         }
       });
     }, []);
-    const addMessage = (0, import_react43.useCallback)((role, content) => {
+    const addMessage = (0, import_react42.useCallback)((role, content) => {
       setMessages((prev) => [
         ...prev,
         { id: `${Date.now()}-${Math.random()}`, role, content }
       ]);
     }, []);
-    const fetchImageData = (0, import_react43.useCallback)((nodeId, maxWidth = 100) => {
+    const fetchImageData = (0, import_react42.useCallback)((nodeId, maxWidth = 100) => {
       return new Promise((resolve, reject) => {
         const requestId = `img-${Date.now()}-${Math.random()}`;
         const cleanup = onMainMessage((msg) => {
@@ -46998,7 +47053,7 @@ ${errors.join("\n")}`);
         postToMain({ type: "REQUEST_IMAGE_DATA", payload: { requestId, nodeId, maxWidth } });
       });
     }, []);
-    const handleApply = (0, import_react43.useCallback)(async (values) => {
+    const handleApply = (0, import_react42.useCallback)(async (values) => {
       if (!currentUISpec || currentUISpec.mode !== "apply") return;
       const stampedSpec = specWithCurrentValues(currentUISpec, values);
       setCurrentUISpec(stampedSpec);
@@ -47072,7 +47127,7 @@ ${errors.join("\n")}`);
         }
       });
     }, [addMessage, currentUISpec, fetchImageData]);
-    const handleDetach = (0, import_react43.useCallback)(() => {
+    const handleDetach = (0, import_react42.useCallback)(() => {
       const nodeId = rootFrameIdRef.current;
       if (nodeId) {
         postToMain({ type: "CLEAR_PLUGIN_DATA", payload: { nodeId } });
@@ -47082,18 +47137,19 @@ ${errors.join("\n")}`);
       createdNodeIdsRef.current = [];
       setMessages([]);
     }, []);
-    const hasSelection = selectionContext !== null && selectionContext.nodes.length > 0;
-    (0, import_react43.useEffect)(() => {
+    const hasSelection = mockSelectionName !== null || selectionContext !== null && selectionContext.nodes.length > 0;
+    (0, import_react42.useEffect)(() => {
       setFlaskState((prev) => {
         if (prev === "loading" || prev === "success") return prev;
         return hasSelection || isInputFocused ? "ready" : "idle";
       });
     }, [hasSelection, isInputFocused]);
-    const handleFocusChange = (0, import_react43.useCallback)((focused) => {
+    const handleFocusChange = (0, import_react42.useCallback)((focused) => {
       setIsInputFocused(focused);
     }, []);
-    const finishLoading = (0, import_react43.useCallback)((success) => {
+    const finishLoading = (0, import_react42.useCallback)((success) => {
       setIsLoading(false);
+      setLoadingVerb(null);
       if (success) {
         setFlaskState("success");
         setTimeout(() => {
@@ -47103,14 +47159,93 @@ ${errors.join("\n")}`);
         setFlaskState("idle");
       }
     }, []);
-    const handleSubmit = (0, import_react43.useCallback)(async (text) => {
-      if (text.trim().toLowerCase() === "/clear") {
+    const handleSubmit = (0, import_react42.useCallback)(async (text) => {
+      const cmd = text.trim().toLowerCase();
+      if (cmd === "/clear") {
         handleDetach();
+        setMockSelectionName(null);
+        return;
+      }
+      if (cmd.startsWith("/state ")) {
+        const state = cmd.slice(7).trim();
+        demoTimersRef.current.forEach(clearTimeout);
+        demoTimersRef.current = [];
+        switch (state) {
+          case "idle":
+            setMockSelectionName(null);
+            setIsLoading(false);
+            setLoadingVerb(null);
+            setFlaskState("idle");
+            addMessage("assistant", "State \u2192 idle");
+            break;
+          case "ready":
+            setMockSelectionName("Button Primary");
+            setIsLoading(false);
+            setLoadingVerb(null);
+            setFlaskState("ready");
+            addMessage("assistant", 'State \u2192 ready (mock layer: "Button Primary")');
+            break;
+          case "loading":
+            setMockSelectionName("Button Primary");
+            setFlaskState("loading");
+            setLoadingVerb(getRandomVerb());
+            addMessage("assistant", "State \u2192 loading");
+            break;
+          case "success":
+            setIsLoading(false);
+            setLoadingVerb(null);
+            finishLoading(true);
+            addMessage("assistant", "State \u2192 success");
+            break;
+          default:
+            addMessage("error", `Unknown state "${state}". Use: idle, ready, loading, success`);
+        }
+        return;
+      }
+      if (cmd === "/loader") {
+        demoTimersRef.current.forEach(clearTimeout);
+        demoTimersRef.current = [];
+        addMessage("assistant", "Demo: idle \u2192 ready \u2192 loading \u2192 success");
+        setMockSelectionName(null);
+        setIsLoading(false);
+        setLoadingVerb(null);
+        setFlaskState("idle");
+        demoTimersRef.current.push(setTimeout(() => {
+          setMockSelectionName("Button Primary");
+          setFlaskState("ready");
+        }, 1e3));
+        demoTimersRef.current.push(setTimeout(() => {
+          setFlaskState("loading");
+          setLoadingVerb(getRandomVerb());
+        }, 2e3));
+        demoTimersRef.current.push(setTimeout(() => {
+          setLoadingVerb(null);
+          setFlaskState("success");
+        }, 4e3));
+        demoTimersRef.current.push(setTimeout(() => {
+          setFlaskState("ready");
+        }, 5600));
+        return;
+      }
+      if (cmd === "/history") {
+        setMessages([]);
+        const samples = [
+          { role: "user", content: 'Make the button corners more rounded and change the label to "Get Started"' },
+          { role: "assistant", content: 'Updated corner radius to 12px and changed label to "Get Started"' },
+          { role: "user", content: "Now change the background to a gradient from blue to purple" },
+          { role: "assistant", content: "Applied linear gradient from #3B82F6 to #8B5CF6 on the button fill" },
+          { role: "error", content: "Could not apply effect: selected layer is locked or hidden" },
+          { role: "user", content: "Swap the icon to a chevron-right and reduce padding to 8px on all sides" }
+        ];
+        samples.forEach((s2, i2) => {
+          setTimeout(() => addMessage(s2.role, s2.content), i2 * 400);
+        });
         return;
       }
       addMessage("user", text);
       setIsLoading(true);
       setFlaskState("loading");
+      setLoadingVerb(getRandomVerb());
       const selCtx = selectionContext;
       const uiSpec = currentUISpec;
       const history = messagesRef.current;
@@ -47228,8 +47363,8 @@ ${errors.join("\n")}`);
       setCurrentUISpec(mergedUi);
       finishLoading(true);
     }, [addMessage, selectionContext, currentUISpec, fetchImageData, handleDetach, finishLoading]);
-    const persistTimerRef = (0, import_react43.useRef)(null);
-    const handleValueChange = (0, import_react43.useCallback)((controlId, value) => {
+    const persistTimerRef = (0, import_react42.useRef)(null);
+    const handleValueChange = (0, import_react42.useCallback)((controlId, value) => {
       setCurrentUISpec((prev) => {
         if (!prev) return prev;
         const updated = specWithCurrentValues(prev, { [controlId]: value });
@@ -47249,7 +47384,7 @@ ${errors.join("\n")}`);
     const hasSpec = currentUISpec !== null && currentUISpec.controls.length > 0;
     return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { className: "shell", children: [
       /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { className: "render-zone", children: [
-        !hasSpec && /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(EmptyState, { selectionName: hasSelection ? selectionContext.nodes[0].name : null, flaskState }),
+        !hasSpec && /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(EmptyState, { selectionName: mockSelectionName ?? (selectionContext?.nodes[0]?.name ?? null), flaskState, loadingVerb }),
         hasSpec && /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(UIRenderer, { spec: currentUISpec, onApply: handleApply, onValueChange: handleValueChange })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { className: "chat-area", children: [

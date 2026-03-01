@@ -52,16 +52,7 @@ export function ChatInput({
 
   const canSend = !disabled && value.trim().length > 0;
 
-  if (isLoading) {
-    return (
-      <div className="chat-input-box chat-input-box--loading">
-        <div className="chat-input-loading">
-          <div className="chat-input-spinner" />
-          <span>Working…</span>
-        </div>
-      </div>
-    );
-  }
+  if (isLoading) return null;
 
   return (
     <div className={`chat-input-box${isMultiline ? ' chat-input-box--expanded' : ''}`}>

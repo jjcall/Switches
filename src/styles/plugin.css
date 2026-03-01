@@ -772,6 +772,27 @@ body {
   max-width: 228px;
 }
 
+.render-zone-loading-text {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-sm);
+  color: var(--text-quaternary);
+  -webkit-mask-image: linear-gradient(
+    -75deg,
+    rgba(0, 0, 0, 0.6) 30%,
+    #000 50%,
+    rgba(0, 0, 0, 0.6) 70%
+  );
+  -webkit-mask-size: 200%;
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  from { -webkit-mask-position: 150%; }
+  to { -webkit-mask-position: -50%; }
+}
+
 /* ============================================================
    Cube Preview (interactive 3D drag-to-rotate)
    ============================================================ */
@@ -839,68 +860,60 @@ body {
   gap: 0;
 }
 
-/* ── Chat history (Figma Make style bubbles) ─────── */
+/* ── Chat history (last-3 overlapping stack) ─────── */
 .chat-history {
-  position: relative;
-  max-height: 200px;
-  overflow-y: auto;
-  padding: 8px 12px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 24px);
-  mask-image: linear-gradient(to bottom, transparent 0%, black 24px);
+  padding: 0 8px 8px;
+  overflow: hidden;
 }
 
-.chat-history::-webkit-scrollbar { width: 4px; }
-.chat-history::-webkit-scrollbar-track { background: transparent; }
-.chat-history::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
-}
-
-.chat-bubble {
-  display: flex;
-  max-width: 92%;
-}
-
-.chat-bubble--user {
-  align-self: flex-end;
-}
-
-.chat-bubble--assistant,
-.chat-bubble--error {
-  align-self: flex-start;
-}
-
-.chat-bubble-text {
-  display: inline-block;
-  font-size: 12px;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  word-break: break-word;
+.chat-prompt {
+  width: 100%;
   padding: 8px 12px;
-  border-radius: 14px;
+  border-radius: 10px;
+  background: #343434;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  transform-origin: center bottom;
 }
 
-.chat-bubble--user .chat-bubble-text {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.9);
-  border-bottom-right-radius: 4px;
+/* Overlap: pull each prompt up into the one above */
+.chat-prompt + .chat-prompt {
+  margin-top: -6px;
 }
 
-.chat-bubble--assistant .chat-bubble-text {
-  background: transparent;
-  color: rgba(255, 255, 255, 0.7);
-  padding-left: 0;
-  padding-right: 0;
+/* Colored dot indicator */
+.chat-prompt::before {
+  content: '';
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #345791; /* default: system/assistant blue */
 }
 
-.chat-bubble--error .chat-bubble-text {
-  background: rgba(255, 80, 80, 0.1);
-  color: rgba(255, 130, 130, 0.9);
-  border-bottom-left-radius: 4px;
+.chat-prompt--user::before {
+  background: #8C9D6D;
 }
+
+.chat-prompt--error::before {
+  background: #C96B6C;
+}
+
+.chat-prompt-text {
+  display: block;
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
 
 /* ── Chat input box ──────────────────────────────── */
 .chat-input-box {

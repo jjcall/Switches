@@ -13,6 +13,7 @@ import { resolveTemplate, collectControlDefaults } from './template';
 import { compileGenerator, executeGenerator, setImageData, setSelectionId } from './codegen';
 import type { ImagePixelData } from './codegen';
 import { FlaskLoader } from './components/FlaskLoader';
+import { getRandomVerb } from './components/LoadingVerbs';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -75,19 +76,30 @@ function useShellResize() {
 
 // ─── Empty state ──────────────────────────────────────────────────────────────
 
-function EmptyState({ selectionName, flaskState }: { selectionName: string | null; flaskState: 'idle' | 'ready' | 'loading' | 'success' }) {
+function EmptyState({ selectionName, flaskState, loadingVerb }: {
+  selectionName: string | null;
+  flaskState: 'idle' | 'ready' | 'loading' | 'success';
+  loadingVerb: string | null;
+}) {
+  const isLoading = flaskState === 'loading';
   return (
     <div className="render-zone-empty">
       <FlaskLoader state={flaskState} size={48} />
       <div className="render-zone-empty-info">
-        {selectionName && (
-          <span className="render-zone-layer-badge">{selectionName}</span>
+        {isLoading ? (
+          <p className="render-zone-loading-text">{loadingVerb}...</p>
+        ) : (
+          <>
+            {selectionName && (
+              <span className="render-zone-layer-badge">{selectionName}</span>
+            )}
+            <p className="render-zone-empty-text">
+              {selectionName
+                ? 'What do you want to do with this layer?'
+                : 'Select something on the canvas, then describe what you want'}
+            </p>
+          </>
         )}
-        <p className="render-zone-empty-text">
-          {selectionName
-            ? 'What do you want to do with this layer?'
-            : 'Select something on the canvas, then describe what you want'}
-        </p>
       </div>
     </div>
   );
@@ -103,7 +115,10 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [flaskState, setFlaskState] = useState<'idle' | 'ready' | 'loading' | 'success'>('idle');
   const [isInputFocused, setIsInputFocused] = useState(false);
+  const [loadingVerb, setLoadingVerb] = useState<string | null>(null);
   const [selectionContext, setSelectionContext] = useState<SelectionContext | null>(null);
+  const [mockSelectionName, setMockSelectionName] = useState<string | null>(null);
+  const demoTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const createdNodeIdsRef = useRef<string[]>([]);
   const rootFrameIdRef = useRef<string | undefined>(undefined);
 
@@ -286,7 +301,7 @@ function App() {
   }, []);
 
   // Derive flask ready state from selection + typing (when not loading/success)
-  const hasSelection = selectionContext !== null && selectionContext.nodes.length > 0;
+  const hasSelection = mockSelectionName !== null || (selectionContext !== null && selectionContext.nodes.length > 0);
   useEffect(() => {
     setFlaskState(prev => {
       if (prev === 'loading' || prev === 'success') return prev;
@@ -300,6 +315,7 @@ function App() {
 
   const finishLoading = useCallback((success: boolean) => {
     setIsLoading(false);
+    setLoadingVerb(null);
     if (success) {
       setFlaskState('success');
       setTimeout(() => {
@@ -314,14 +330,112 @@ function App() {
   // ── Submit ─────────────────────────────────────────────────────────────────
 
   const handleSubmit = useCallback(async (text: string) => {
-    if (text.trim().toLowerCase() === '/clear') {
+    const cmd = text.trim().toLowerCase();
+
+    if (cmd === '/clear') {
       handleDetach();
+      setMockSelectionName(null);
       return;
     }
+
+    // ── Debug commands ──────────────────────────────────────────────────────
+    if (cmd.startsWith('/state ')) {
+      const state = cmd.slice(7).trim();
+      // Clear any running demo timers
+      demoTimersRef.current.forEach(clearTimeout);
+      demoTimersRef.current = [];
+
+      switch (state) {
+        case 'idle':
+          setMockSelectionName(null);
+          setIsLoading(false);
+          setLoadingVerb(null);
+          setFlaskState('idle');
+          addMessage('assistant', 'State → idle');
+          break;
+        case 'ready':
+          setMockSelectionName('Button Primary');
+          setIsLoading(false);
+          setLoadingVerb(null);
+          setFlaskState('ready');
+          addMessage('assistant', 'State → ready (mock layer: "Button Primary")');
+          break;
+        case 'loading':
+          setMockSelectionName('Button Primary');
+          setFlaskState('loading');
+          setLoadingVerb(getRandomVerb());
+          addMessage('assistant', 'State → loading');
+          break;
+        case 'success':
+          setIsLoading(false);
+          setLoadingVerb(null);
+          finishLoading(true);
+          addMessage('assistant', 'State → success');
+          break;
+        default:
+          addMessage('error', `Unknown state "${state}". Use: idle, ready, loading, success`);
+      }
+      return;
+    }
+
+    if (cmd === '/loader') {
+      demoTimersRef.current.forEach(clearTimeout);
+      demoTimersRef.current = [];
+      addMessage('assistant', 'Demo: idle → ready → loading → success');
+
+      // idle
+      setMockSelectionName(null);
+      setIsLoading(false);
+      setLoadingVerb(null);
+      setFlaskState('idle');
+
+      // → ready after 1s
+      demoTimersRef.current.push(setTimeout(() => {
+        setMockSelectionName('Button Primary');
+        setFlaskState('ready');
+      }, 1000));
+
+      // → loading after 2s
+      demoTimersRef.current.push(setTimeout(() => {
+        setFlaskState('loading');
+        setLoadingVerb(getRandomVerb());
+      }, 2000));
+
+      // → success after 4s
+      demoTimersRef.current.push(setTimeout(() => {
+        setLoadingVerb(null);
+        setFlaskState('success');
+      }, 4000));
+
+      // → back to ready after 5.6s (1.6s success animation)
+      demoTimersRef.current.push(setTimeout(() => {
+        setFlaskState('ready');
+      }, 5600));
+
+      return;
+    }
+
+    if (cmd === '/history') {
+      setMessages([]);
+      const samples: { role: ChatMessage['role']; content: string }[] = [
+        { role: 'user', content: 'Make the button corners more rounded and change the label to "Get Started"' },
+        { role: 'assistant', content: 'Updated corner radius to 12px and changed label to "Get Started"' },
+        { role: 'user', content: 'Now change the background to a gradient from blue to purple' },
+        { role: 'assistant', content: 'Applied linear gradient from #3B82F6 to #8B5CF6 on the button fill' },
+        { role: 'error', content: 'Could not apply effect: selected layer is locked or hidden' },
+        { role: 'user', content: 'Swap the icon to a chevron-right and reduce padding to 8px on all sides' },
+      ];
+      samples.forEach((s, i) => {
+        setTimeout(() => addMessage(s.role, s.content), i * 400);
+      });
+      return;
+    }
+    // ── End debug commands ───────────────────────────────────────────────────
 
     addMessage('user', text);
     setIsLoading(true);
     setFlaskState('loading');
+    setLoadingVerb(getRandomVerb());
 
     // Snapshot current state at submission time.
     const selCtx = selectionContext;
@@ -497,7 +611,7 @@ function App() {
     <div className="shell">
       {/* Controls zone */}
       <div className="render-zone">
-        {!hasSpec && <EmptyState selectionName={hasSelection ? selectionContext!.nodes[0].name : null} flaskState={flaskState} />}
+        {!hasSpec && <EmptyState selectionName={mockSelectionName ?? (selectionContext?.nodes[0]?.name ?? null)} flaskState={flaskState} loadingVerb={loadingVerb} />}
         {hasSpec && <UIRenderer spec={currentUISpec!} onApply={handleApply} onValueChange={handleValueChange} />}
       </div>
 
