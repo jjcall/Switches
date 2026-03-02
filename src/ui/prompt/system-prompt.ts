@@ -314,11 +314,22 @@ vector/math helpers.
 
 #### Basic utilities
   - lib.hslToRgb(h, s, l) — h in degrees (0-360), s and l in 0-1. Returns { r, g, b } in 0-1.
-  - lib.randomColor() — returns a random vibrant { r, g, b } in 0-1.
-  - lib.randomInt(min, max) — random integer in [min, max].
+  - lib.random() — seeded random number in [0, 1). ALWAYS use this instead of Math.random().
+    The RNG resets to the same seed before every generator run, so layouts (Voronoi cells,
+    scatter positions, etc.) stay stable when the user tweaks a control. Only the changed
+    property differs — the rest of the design is preserved.
+  - lib.randomColor() — returns a random vibrant { r, g, b } in 0-1. Uses the seeded RNG.
+  - lib.randomInt(min, max) — random integer in [min, max]. Uses the seeded RNG.
+  - lib.shuffle(array) — Fisher-Yates shuffle. Uses the seeded RNG.
+  - lib.reseed(newSeed?) — reset to a new random seed. Use for explicit "Randomize" buttons.
   - lib.lerp(a, b, t) — linear interpolation.
   - lib.clamp(val, min, max) — clamp to range.
   - lib.hexToRgb(hex) — "#FF0000" to { r, g, b } in 0-1.
+
+  CRITICAL: Never use Math.random() in generators. Always use lib.random(), lib.randomColor(),
+  lib.randomInt(), or lib.shuffle(). These use a deterministic seed so layouts stay stable
+  across control changes. If the user wants a "Randomize" button, add a control that calls
+  lib.reseed() before the layout logic.
 
 #### Color science (lib.chroma) — chroma.js
 
@@ -691,7 +702,7 @@ stained-glass mosaic from a selected image. Each cell is a real editable Figma v
       { "id": "strokeColor", "type": "color", "label": "Border Color", "props": { "defaultValue": "#000000" } }
     ]
   },
-  "generate": "const n = params.cells || 80;\\nconst sw = params.strokeW ?? 1;\\nconst sc = lib.hexToRgb(params.strokeColor || '#000000');\\nconst img = lib.imageData;\\nconst W = 400;\\nconst H = Math.round(W * (img.height / img.width));\\nconst points = [];\\nfor (let i = 0; i < n; i++) points.push([Math.random() * W, Math.random() * H]);\\nconst voronoi = lib.Delaunay.from(points).voronoi([0, 0, W, H]);\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'mosaic', args: { x: 0, y: 0, width: W, height: H, name: 'Voronoi Mosaic' } });\\nfor (let i = 0; i < n; i++) {\\n  const path = voronoi.renderCell(i);\\n  const px = Math.round(points[i][0] * (img.width / W));\\n  const py = Math.round(points[i][1] * (img.height / H));\\n  const pixel = lib.getPixel(px, py);\\n  const color = { r: pixel.r / 255, g: pixel.g / 255, b: pixel.b / 255 };\\n  actions.push({ method: 'createVector', parentId: 'mosaic', args: { data: path } });\\n  actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [{ type: 'SOLID', color: color }] } });\\n  if (sw > 0) actions.push({ method: 'setStroke', nodeId: '__prev', args: { strokes: [{ type: 'SOLID', color: sc }], weight: sw } });\\n}\\nreturn actions;"
+  "generate": "const n = params.cells || 80;\\nconst sw = params.strokeW ?? 1;\\nconst sc = lib.hexToRgb(params.strokeColor || '#000000');\\nconst img = lib.imageData;\\nconst W = 400;\\nconst H = Math.round(W * (img.height / img.width));\\nconst points = [];\\nfor (let i = 0; i < n; i++) points.push([lib.random() * W, lib.random() * H]);\\nconst voronoi = lib.Delaunay.from(points).voronoi([0, 0, W, H]);\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'mosaic', args: { x: 0, y: 0, width: W, height: H, name: 'Voronoi Mosaic' } });\\nfor (let i = 0; i < n; i++) {\\n  const path = voronoi.renderCell(i);\\n  const px = Math.round(points[i][0] * (img.width / W));\\n  const py = Math.round(points[i][1] * (img.height / H));\\n  const pixel = lib.getPixel(px, py);\\n  const color = { r: pixel.r / 255, g: pixel.g / 255, b: pixel.b / 255 };\\n  actions.push({ method: 'createVector', parentId: 'mosaic', args: { data: path } });\\n  actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [{ type: 'SOLID', color: color }] } });\\n  if (sw > 0) actions.push({ method: 'setStroke', nodeId: '__prev', args: { strokes: [{ type: 'SOLID', color: sc }], weight: sw } });\\n}\\nreturn actions;"
 }
 
 ### Generator example: Gaussian blur bitmap effect
@@ -823,7 +834,8 @@ the pattern source. No node creation — the selected frame/vector becomes the r
    Do NOT use layoutWrap for grids — it is fragile and breaks when the frame width is off.
    Use auto-layout (layoutMode: "HORIZONTAL") only for single-axis stacking (e.g. palette row).
 7. Use parentId on child nodes to place them inside a frame created in the same batch.
-8. You have full JavaScript: loops, Math.random(), conditionals, string manipulation, etc.
+8. You have full JavaScript: loops, lib.random(), conditionals, string manipulation, etc.
+   NEVER use Math.random() — always use lib.random() for deterministic layouts.
 9. Access control values via params.controlId (e.g. params.columns, params.size).
 10. Use lib helpers for color/noise/easing — do NOT try to import anything. Everything is on lib.
 11. When the user asks to iterate (add a control, change behavior), you MUST output the
@@ -893,7 +905,7 @@ Key points for the direct-actions example above:
 - Do not add controls for properties that can't be live-updated (e.g. font loading).
 - When in doubt, produce fewer, better-chosen controls rather than a long list.
 - For generative plugins (grids, patterns, randomized content), ALWAYS use a "generate"
-  function. The generator can use loops, Math.random(), and the lib helpers.
+  function. The generator can use loops, lib.random(), and the lib helpers.
 - For ANY color manipulation beyond basic hex/opacity (saturate, desaturate, darken, lighten,
   hue shift, palette generation, color mixing, contrast), ALWAYS use a generator with
   lib.chroma. Figma has no saturation/hue API — you must compute the final RGB and emit it

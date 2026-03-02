@@ -6247,22 +6247,23 @@
     }
     figma.commitUndo();
     const isReapply = actions.length > 0 && actions[0].method === "deleteChildren";
-    if (!isReapply && rootFrameId) {
+    const centerNodeId = rootFrameId != null ? rootFrameId : createdNodeIds.length > 0 ? createdNodeIds[0] : void 0;
+    if (!isReapply && centerNodeId) {
       try {
-        const rootNode = (_e = tempMap.get(rootFrameId)) != null ? _e : await figma.getNodeByIdAsync(rootFrameId);
-        if (rootNode && "x" in rootNode) {
+        const centerNode = (_e = tempMap.get(centerNodeId)) != null ? _e : await figma.getNodeByIdAsync(centerNodeId);
+        if (centerNode && "x" in centerNode) {
           const vp = figma.viewport.center;
-          const node = rootNode;
+          const node = centerNode;
           node.x = vp.x - node.width / 2;
           node.y = vp.y - node.height / 2;
         }
       } catch (err) {
-        console.warn("[action-executor] failed to center root frame:", err);
+        console.warn("[action-executor] failed to center created node:", err);
       }
       const savedZoom = figma.viewport.zoom;
       const nodesToFocus = [];
-      const root = (_f = tempMap.get(rootFrameId)) != null ? _f : await figma.getNodeByIdAsync(rootFrameId);
-      if (root) nodesToFocus.push(root);
+      const focusNode = (_f = tempMap.get(centerNodeId)) != null ? _f : await figma.getNodeByIdAsync(centerNodeId);
+      if (focusNode) nodesToFocus.push(focusNode);
       if (nodesToFocus.length > 0) {
         figma.viewport.scrollAndZoomIntoView(nodesToFocus);
         figma.viewport.zoom = savedZoom;

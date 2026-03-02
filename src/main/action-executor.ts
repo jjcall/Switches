@@ -962,26 +962,27 @@ export async function executeActions(
 
   // Only reposition and scroll on first creation, not on re-apply.
   const isReapply = actions.length > 0 && actions[0].method === 'deleteChildren';
+  const centerNodeId = rootFrameId ?? (createdNodeIds.length > 0 ? createdNodeIds[0] : undefined);
 
-  if (!isReapply && rootFrameId) {
+  if (!isReapply && centerNodeId) {
     try {
-      const rootNode = tempMap.get(rootFrameId)
-        ?? await figma.getNodeByIdAsync(rootFrameId);
-      if (rootNode && ('x' in rootNode)) {
+      const centerNode = tempMap.get(centerNodeId)
+        ?? await figma.getNodeByIdAsync(centerNodeId);
+      if (centerNode && ('x' in centerNode)) {
         const vp = figma.viewport.center;
-        const node = rootNode as SceneNode;
+        const node = centerNode as SceneNode;
         node.x = vp.x - node.width / 2;
         node.y = vp.y - node.height / 2;
       }
     } catch (err) {
-      console.warn('[action-executor] failed to center root frame:', err);
+      console.warn('[action-executor] failed to center created node:', err);
     }
 
     const savedZoom = figma.viewport.zoom;
     const nodesToFocus: SceneNode[] = [];
-    const root = tempMap.get(rootFrameId)
-      ?? await figma.getNodeByIdAsync(rootFrameId);
-    if (root) nodesToFocus.push(root as SceneNode);
+    const focusNode = tempMap.get(centerNodeId)
+      ?? await figma.getNodeByIdAsync(centerNodeId);
+    if (focusNode) nodesToFocus.push(focusNode as SceneNode);
     if (nodesToFocus.length > 0) {
       figma.viewport.scrollAndZoomIntoView(nodesToFocus);
       figma.viewport.zoom = savedZoom;

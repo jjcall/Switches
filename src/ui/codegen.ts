@@ -296,18 +296,51 @@ function sampleGrid(data: ImagePixelData, cols: number, rows: number): SampleCel
   return grid;
 }
 
+// ─── Seeded PRNG (mulberry32) ─────────────────────────────────────────────────
+
+let _seed = 42;
+let _rngState = _seed;
+
+function mulberry32(): number {
+  _rngState |= 0;
+  _rngState = (_rngState + 0x6D2B79F5) | 0;
+  let t = Math.imul(_rngState ^ (_rngState >>> 15), 1 | _rngState);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+
+function resetRng(): void {
+  _rngState = _seed;
+}
+
 // ─── Assembled lib ────────────────────────────────────────────────────────────
 
 const generatorLib = {
   // --- Original helpers (preserved for backward compatibility) ---
   hslToRgb,
 
+  /** Current seed value. Stable across re-runs; changes on lib.reseed(). */
+  get seed(): number { return _seed; },
+
+  /**
+   * Seeded random number in [0, 1). Produces the same sequence on every
+   * generator run, so layouts (Voronoi, scatter, etc.) stay stable when
+   * the user tweaks a color or slider. Use instead of Math.random().
+   */
+  random(): number { return mulberry32(); },
+
+  /** Reset to a new random seed. Call from a "Randomize" button handler. */
+  reseed(newSeed?: number): void {
+    _seed = newSeed ?? Math.floor(Math.random() * 2147483647);
+    _rngState = _seed;
+  },
+
   randomColor(): { r: number; g: number; b: number } {
-    return hslToRgb(Math.random() * 360, 0.7 + Math.random() * 0.3, 0.5 + Math.random() * 0.15);
+    return hslToRgb(mulberry32() * 360, 0.7 + mulberry32() * 0.3, 0.5 + mulberry32() * 0.15);
   },
 
   randomInt(min: number, max: number): number {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
+    return Math.floor(mulberry32() * (max - min + 1)) + min;
   },
 
   lerp(a: number, b: number, t: number): number {
@@ -368,7 +401,7 @@ const generatorLib = {
   shuffle<T>(array: T[]): T[] {
     const a = [...array];
     for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = Math.floor(mulberry32() * (i + 1));
       [a[i], a[j]] = [a[j], a[i]];
     }
     return a;
@@ -511,6 +544,7 @@ export function executeGenerator(
   fn: GeneratorFn,
   params: Record<string, unknown>,
 ): ActionDescriptor[] {
+  resetRng();
   const result = fn(params, generatorLib);
 
   if (!Array.isArray(result)) {
