@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
 import { postToMain } from '../messaging';
 import {
   Slider,
@@ -17,6 +17,30 @@ import { CubePreview } from '../components/CubePreview';
 import type { UIControl, UISpec, ActionDescriptor } from '../../shared/message-types';
 import { collectControlDefaults } from '../template';
 import { compileGenerator, executeGenerator } from '../codegen';
+
+// ─── Synced state hook ────────────────────────────────────────────────────────
+
+/**
+ * Like useState, but resyncs to `externalValue` whenever it changes.
+ * Prevents stale internal state when the UISpec is updated by the LLM.
+ * Uses JSON comparison for objects so reconstructed-but-equal values
+ * don't trigger spurious resets (e.g. multi-stop color defaults).
+ */
+function useSyncedState<T>(externalValue: T): [T, Dispatch<SetStateAction<T>>] {
+  const [val, setVal] = useState<T>(externalValue);
+  const prevExternal = useRef(externalValue);
+  useEffect(() => {
+    const prev = prevExternal.current;
+    const changed = typeof prev === 'object' && prev !== null
+      ? JSON.stringify(prev) !== JSON.stringify(externalValue)
+      : prev !== externalValue;
+    if (changed) {
+      prevExternal.current = externalValue;
+      setVal(externalValue);
+    }
+  }, [externalValue]);
+  return [val, setVal];
+}
 
 // ─── Control renderer ─────────────────────────────────────────────────────────
 
@@ -45,10 +69,9 @@ function ControlRenderer({ control, mode, onControlChange, onControlValueChange 
 
   switch (type) {
     case 'slider': {
-      const [val, setVal] = useState<number>(
-        typeof props.defaultValue === 'number' ? props.defaultValue
-          : typeof props.min === 'number' ? props.min : 0,
-      );
+      const defaultVal = typeof props.defaultValue === 'number' ? props.defaultValue
+        : typeof props.min === 'number' ? props.min : 0;
+      const [val, setVal] = useSyncedState<number>(defaultVal);
       return (
         <Slider
           label={label}
@@ -62,7 +85,7 @@ function ControlRenderer({ control, mode, onControlChange, onControlValueChange 
     }
 
     case 'toggle': {
-      const [val, setVal] = useState<boolean>(props.defaultValue === true);
+      const [val, setVal] = useSyncedState<boolean>(props.defaultValue === true);
       return (
         <Toggle
           label={label}
@@ -73,10 +96,9 @@ function ControlRenderer({ control, mode, onControlChange, onControlValueChange 
     }
 
     case 'number': {
-      const [val, setVal] = useState<number>(
-        typeof props.defaultValue === 'number' ? props.defaultValue
-          : typeof props.min === 'number' ? props.min : 0,
-      );
+      const defaultVal = typeof props.defaultValue === 'number' ? props.defaultValue
+        : typeof props.min === 'number' ? props.min : 0;
+      const [val, setVal] = useSyncedState<number>(defaultVal);
       return (
         <NumberInput
           label={label}
@@ -93,7 +115,7 @@ function ControlRenderer({ control, mode, onControlChange, onControlValueChange 
       const options = Array.isArray(props.options)
         ? (props.options as string[])
         : ['Option A', 'Option B'];
-      const [val, setVal] = useState<string>(
+      const [val, setVal] = useSyncedState<string>(
         typeof props.defaultValue === 'string' ? props.defaultValue : options[0] ?? '',
       );
       return (
@@ -111,7 +133,7 @@ function ControlRenderer({ control, mode, onControlChange, onControlValueChange 
       const options: Opt[] = Array.isArray(props.options)
         ? (props.options as Opt[])
         : [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }];
-      const [val, setVal] = useState<string>(
+      const [val, setVal] = useSyncedState<string>(
         typeof props.defaultValue === 'string' ? props.defaultValue : (options[0]?.value ?? ''),
       );
       return (
@@ -131,7 +153,7 @@ function ControlRenderer({ control, mode, onControlChange, onControlValueChange 
         for (const stop of colorStops) {
           defaults[stop.id] = stop.defaultValue ?? '#000000';
         }
-        const [val, setVal] = useState<Record<string, string>>(defaults);
+        const [val, setVal] = useSyncedState<Record<string, string>>(defaults);
         return (
           <ColorSwatch
             label={label}
@@ -142,7 +164,7 @@ function ControlRenderer({ control, mode, onControlChange, onControlValueChange 
         );
       }
 
-      const [val, setVal] = useState<string>(
+      const [val, setVal] = useSyncedState<string>(
         typeof props.defaultValue === 'string' ? props.defaultValue : '#000000',
       );
       return (
@@ -155,7 +177,7 @@ function ControlRenderer({ control, mode, onControlChange, onControlValueChange 
     }
 
     case 'text': {
-      const [val, setVal] = useState<string>(
+      const [val, setVal] = useSyncedState<string>(
         typeof props.defaultValue === 'string' ? props.defaultValue : '',
       );
       return (
@@ -169,7 +191,7 @@ function ControlRenderer({ control, mode, onControlChange, onControlValueChange 
     }
 
     case 'dial': {
-      const [val, setVal] = useState<number>(
+      const [val, setVal] = useSyncedState<number>(
         typeof props.defaultValue === 'number' ? props.defaultValue : 0,
       );
       return (

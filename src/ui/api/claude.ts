@@ -1,13 +1,26 @@
-// TODO: move to settings UI — do not commit a real key here.
-const ANTHROPIC_API_KEY = 'sk-ant-REDACTED';
-
-// Local CORS proxy — run `node proxy.mjs` before launching the plugin.
-// The proxy forwards requests to api.anthropic.com and adds the
-// Access-Control-Allow-Origin: * header that Figma's null-origin iframe needs.
 const PROXY_URL = 'http://localhost:3333/v1/messages';
 
 const MODEL = 'claude-sonnet-4-5';
 const MAX_TOKENS = 16384;
+
+// ─── API key management ───────────────────────────────────────────────────────
+// Figma's plugin iframe has a null origin, so localStorage is unavailable.
+// The key lives in a module-level variable (survives the session) and is
+// persisted across sessions via figma.clientStorage on the main thread.
+
+let cachedApiKey: string | null = null;
+
+export function getStoredApiKey(): string | null {
+  return cachedApiKey;
+}
+
+export function setStoredApiKey(key: string): void {
+  cachedApiKey = key;
+}
+
+export function clearStoredApiKey(): void {
+  cachedApiKey = null;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -34,16 +47,18 @@ export type LLMResult = LLMSuccess | LLMError;
  * Calls the Claude API via the local CORS proxy and returns the raw text of
  * the first content block. Never throws — failures are returned as LLMError.
  *
- * Run `node proxy.mjs` in the project root before launching the plugin.
+ * The API key is read from localStorage. If absent, returns an error prompting
+ * the user to enter one via the /key command.
  */
 export async function callClaude(
   messages: ApiChatMessage[],
   systemPrompt: string,
 ): Promise<LLMResult> {
-  if (!ANTHROPIC_API_KEY || ANTHROPIC_API_KEY === 'YOUR_API_KEY_HERE') {
+  const apiKey = getStoredApiKey();
+  if (!apiKey) {
     return {
       ok: false,
-      error: 'No API key configured. Set ANTHROPIC_API_KEY in src/ui/api/claude.ts.',
+      error: 'No API key configured. Type /key YOUR_KEY to set your Anthropic API key.',
     };
   }
 
@@ -52,7 +67,7 @@ export async function callClaude(
     response = await fetch(PROXY_URL, {
       method: 'POST',
       headers: {
-        'x-api-key': ANTHROPIC_API_KEY,
+        'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
         'anthropic-dangerous-direct-browser-access': 'true',
         'content-type': 'application/json',

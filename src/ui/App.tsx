@@ -6,7 +6,7 @@ import { ChatInput } from './chat/ChatInput';
 import { ChatHistory } from './chat/ChatHistory';
 import type { ChatMessage } from './chat/ChatHistory';
 import type { SelectionContext, UISpec, UIControl, ActionDescriptor } from '../shared/message-types';
-import { callClaude } from './api/claude';
+import { callClaude, getStoredApiKey, setStoredApiKey, clearStoredApiKey } from './api/claude';
 import { composePrompt, parseLLMResponse } from './prompt/prompt-composer';
 import { UIRenderer } from './renderer/UIRenderer';
 import { resolveTemplate, collectControlDefaults } from './template';
@@ -37,6 +37,42 @@ function rewriteTempIds(spec: UISpec, map: Record<string, string>): UISpec {
   }
 
   return { ...spec, controls: spec.controls.map(rewriteControl) };
+}
+
+/** Real Figma node IDs look like "123:456". Anything else is a stale tempId. */
+const FIGMA_ID_RE = /^\d+:\d+$/;
+
+/**
+ * Replaces any stale tempId-style nodeId/parentId references in control actions
+ * with the real node ID. Called on restore so specs persisted before the
+ * re-persist fix still work.
+ */
+function fixStaleTempIds(spec: UISpec, realNodeId: string): UISpec {
+  let changed = false;
+
+  function fixAction(a: ActionDescriptor): ActionDescriptor {
+    let nodeId = a.nodeId;
+    let parentId = a.parentId;
+    if (nodeId && !FIGMA_ID_RE.test(nodeId)) {
+      nodeId = realNodeId;
+      changed = true;
+    }
+    if (parentId && !FIGMA_ID_RE.test(parentId)) {
+      parentId = realNodeId;
+      changed = true;
+    }
+    return { ...a, nodeId, parentId };
+  }
+
+  function fixControl(c: UIControl): UIControl {
+    const action = c.action ? fixAction(c.action) : c.action;
+    const actions = c.actions?.map(fixAction);
+    const children = c.children?.map(fixControl);
+    return { ...c, action, actions, children };
+  }
+
+  const fixed = { ...spec, controls: spec.controls.map(fixControl) };
+  return changed ? fixed : spec;
 }
 
 /**
@@ -140,13 +176,15 @@ function App() {
         // parse and restore the UI controls/generator without an LLM call.
         if (msg.payload.pluginSpec) {
           try {
-            const restored = JSON.parse(msg.payload.pluginSpec) as UISpec;
-            setCurrentUISpec(restored);
-            // The selected node IS the root frame — track it for in-place reuse.
-            if (msg.payload.nodes.length > 0) {
-              rootFrameIdRef.current = msg.payload.nodes[0].id;
-              createdNodeIdsRef.current = [msg.payload.nodes[0].id];
+            let restored = JSON.parse(msg.payload.pluginSpec) as UISpec;
+            // The selected node IS the root — track it for in-place reuse.
+            const nodeId = msg.payload.nodes[0]?.id;
+            if (nodeId) {
+              restored = fixStaleTempIds(restored, nodeId);
+              rootFrameIdRef.current = nodeId;
+              createdNodeIdsRef.current = [nodeId];
             }
+            setCurrentUISpec(restored);
             addMessage('assistant', 'Restored plugin controls from selected frame.');
           } catch {
             console.warn('[app] failed to parse stored pluginSpec');
@@ -165,10 +203,28 @@ function App() {
         createdNodeIdsRef.current = createdNodeIds;
         if (rootFrameId) {
           rootFrameIdRef.current = rootFrameId;
+        } else if (!rootFrameIdRef.current && createdNodeIds.length > 0) {
+          rootFrameIdRef.current = createdNodeIds[0];
         }
-        // Rewrite tempId references in the current UI spec with real node IDs.
+        // Rewrite tempId references in the current UI spec with real node IDs,
+        // then re-persist so restored specs use real IDs instead of tempIds.
         if (tempIdMap && Object.keys(tempIdMap).length > 0) {
-          setCurrentUISpec(prev => prev ? rewriteTempIds(prev, tempIdMap) : prev);
+          setCurrentUISpec(prev => {
+            if (!prev) return prev;
+            const rewritten = rewriteTempIds(prev, tempIdMap);
+            const targetId = rootFrameId ?? rootFrameIdRef.current;
+            if (targetId) {
+              postToMain({
+                type: 'EXECUTE_ACTIONS',
+                payload: { actions: [], pluginSpec: JSON.stringify(rewritten), persistNodeId: targetId },
+              });
+            }
+            return rewritten;
+          });
+        }
+      } else if (msg.type === 'CLIENT_STORAGE_VALUE') {
+        if (msg.payload.key === 'apiKey' && msg.payload.value) {
+          setStoredApiKey(msg.payload.value);
         }
       } else if (msg.type === 'ERROR') {
         addMessage('error', msg.payload.message);
@@ -194,7 +250,7 @@ function App() {
         if (msg.type === 'IMAGE_DATA' && msg.payload.requestId === requestId) {
           cleanup();
           resolve({ width: msg.payload.width, height: msg.payload.height, pixels: msg.payload.pixels });
-        } else if (msg.type === 'ERROR' && msg.payload.source === 'request-image-data') {
+        } else if (msg.type === 'ERROR' && msg.payload.source === `request-image-data:${requestId}`) {
           cleanup();
           reject(new Error(msg.payload.message));
         }
@@ -335,6 +391,30 @@ function App() {
     if (cmd === '/clear') {
       handleDetach();
       setMockSelectionName(null);
+      return;
+    }
+
+    // ── API key management ──────────────────────────────────────────────────
+    if (cmd === '/key' || cmd === '/key status') {
+      const hasKey = !!getStoredApiKey();
+      addMessage('assistant', hasKey ? 'API key is set.' : 'No API key configured. Type /key YOUR_KEY to set one.');
+      return;
+    }
+    if (cmd === '/key clear') {
+      clearStoredApiKey();
+      postToMain({ type: 'DELETE_CLIENT_STORAGE', payload: { key: 'apiKey' } });
+      addMessage('assistant', 'API key cleared.');
+      return;
+    }
+    if (text.trim().startsWith('/key ') && !cmd.startsWith('/key status') && !cmd.startsWith('/key clear')) {
+      const key = text.trim().slice(5).trim();
+      if (!key.startsWith('sk-')) {
+        addMessage('error', 'Invalid key format — Anthropic keys start with "sk-".');
+        return;
+      }
+      setStoredApiKey(key);
+      postToMain({ type: 'SET_CLIENT_STORAGE', payload: { key: 'apiKey', value: key } });
+      addMessage('assistant', 'API key saved.');
       return;
     }
 
@@ -772,7 +852,7 @@ function App() {
         if (targetId) {
           postToMain({
             type: 'EXECUTE_ACTIONS',
-            payload: { actions: [], pluginSpec: JSON.stringify(updated) },
+            payload: { actions: [], pluginSpec: JSON.stringify(updated), persistNodeId: targetId },
           });
         }
       }, 500);

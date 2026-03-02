@@ -14,6 +14,9 @@ import type {
   RequestImageDataMessage,
   ImageDataMessage,
   ClearPluginDataMessage,
+  SetClientStorageMessage,
+  DeleteClientStorageMessage,
+  ClientStorageValueMessage,
 } from '../shared/message-types';
 import { serializeSelection } from './selection-serializer';
 import { executeActions, applyControlChange } from './action-executor';
@@ -29,9 +32,20 @@ interface ResizeMessage {
 
 // ─── Handlers ─────────────────────────────────────────────────────────────────
 
-function handlePluginReady(_msg: PluginReadyMessage): void {
+async function handlePluginReady(_msg: PluginReadyMessage): Promise<void> {
   console.log('[main] iframe ready — sending selection context');
   sendSelectionContext();
+
+  try {
+    const apiKey = await figma.clientStorage.getAsync('apiKey') as string | undefined;
+    const msg: ClientStorageValueMessage = {
+      type: 'CLIENT_STORAGE_VALUE',
+      payload: { key: 'apiKey', value: apiKey ?? null },
+    };
+    figma.ui.postMessage(msg);
+  } catch {
+    // clientStorage unavailable — iframe will prompt for key.
+  }
 }
 
 function handleControlChange(msg: ControlChangeMessage): void {
@@ -58,8 +72,8 @@ function handleControlChange(msg: ControlChangeMessage): void {
 }
 
 function handleExecuteActions(msg: ExecuteActionsMessage): void {
-  const { actions, pluginSpec } = msg.payload;
-  executeActions(actions, pluginSpec).then((result) => {
+  const { actions, pluginSpec, persistNodeId } = msg.payload;
+  executeActions(actions, pluginSpec, persistNodeId).then((result) => {
     const response: ExecutionResultMessage = {
       type: 'EXECUTION_RESULT',
       payload: result,
@@ -148,8 +162,24 @@ async function handleRequestImageData(msg: RequestImageDataMessage): Promise<voi
     console.error('[main] handleRequestImageData failed:', message);
     figma.ui.postMessage({
       type: 'ERROR',
-      payload: { source: 'request-image-data', message },
+      payload: { source: `request-image-data:${requestId}`, message },
     });
+  }
+}
+
+async function handleSetClientStorage(msg: SetClientStorageMessage): Promise<void> {
+  try {
+    await figma.clientStorage.setAsync(msg.payload.key, msg.payload.value);
+  } catch (err) {
+    console.warn('[main] handleSetClientStorage failed:', err);
+  }
+}
+
+async function handleDeleteClientStorage(msg: DeleteClientStorageMessage): Promise<void> {
+  try {
+    await figma.clientStorage.deleteAsync(msg.payload.key);
+  } catch (err) {
+    console.warn('[main] handleDeleteClientStorage failed:', err);
   }
 }
 
@@ -217,7 +247,7 @@ export function registerMessageHandler(): void {
 
     switch (msg.type) {
       case 'PLUGIN_READY':
-        handlePluginReady(msg);
+        void handlePluginReady(msg);
         break;
       case 'CONTROL_CHANGE':
         handleControlChange(msg);
@@ -236,6 +266,12 @@ export function registerMessageHandler(): void {
         break;
       case 'CLEAR_PLUGIN_DATA':
         void handleClearPluginData(msg);
+        break;
+      case 'SET_CLIENT_STORAGE':
+        void handleSetClientStorage(msg);
+        break;
+      case 'DELETE_CLIENT_STORAGE':
+        void handleDeleteClientStorage(msg);
         break;
       case 'CLOSE_PLUGIN':
         figma.closePlugin();

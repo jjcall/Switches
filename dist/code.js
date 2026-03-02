@@ -5824,6 +5824,52 @@
       node.fills = [{ type: "SOLID", color: { r, g, b }, opacity: 1 }];
       return;
     }
+    if (typeof args.value === "object" && args.value !== null && !Array.isArray(args.value)) {
+      const colorMap = args.value;
+      const hexValues = Object.values(colorMap).filter(
+        (v) => typeof v === "string" && v.startsWith("#")
+      );
+      if (hexValues.length > 0) {
+        const geoNode = node;
+        const fills = geoNode.fills.map(clonePaint);
+        const firstFill = fills[0];
+        if (firstFill && typeof firstFill.type === "string" && firstFill.type.startsWith("GRADIENT_")) {
+          const stops = firstFill.gradientStops;
+          if (stops) {
+            for (let i = 0; i < Math.min(hexValues.length, stops.length); i++) {
+              const hex = hexValues[i].replace("#", "");
+              stops[i].color = {
+                r: parseInt(hex.slice(0, 2), 16) / 255,
+                g: parseInt(hex.slice(2, 4), 16) / 255,
+                b: parseInt(hex.slice(4, 6), 16) / 255,
+                a: stops[i].color.a
+              };
+            }
+            geoNode.fills = fills;
+            return;
+          }
+        }
+        const gradientStops = hexValues.map((hex, i) => {
+          const h = hex.replace("#", "");
+          return {
+            position: hexValues.length > 1 ? i / (hexValues.length - 1) : 0,
+            color: {
+              r: parseInt(h.slice(0, 2), 16) / 255,
+              g: parseInt(h.slice(2, 4), 16) / 255,
+              b: parseInt(h.slice(4, 6), 16) / 255,
+              a: 1
+            }
+          };
+        });
+        geoNode.fills = [{
+          type: "GRADIENT_LINEAR",
+          gradientTransform: [[1, 0, 0], [0, 1, 0]],
+          gradientStops,
+          opacity: 1
+        }];
+        return;
+      }
+    }
     if (typeof args.value === "number") {
       const geoNode = node;
       const property2 = typeof args.property === "string" ? args.property : null;
@@ -5867,6 +5913,14 @@
   function execSetStroke(node, args) {
     var _a;
     if (!("strokes" in node)) throw new Error(`Node type ${node.type} does not support strokes.`);
+    if (typeof args.value === "string" && args.value.startsWith("#")) {
+      const hex = args.value.replace("#", "");
+      const r = parseInt(hex.slice(0, 2), 16) / 255;
+      const g = parseInt(hex.slice(2, 4), 16) / 255;
+      const b = parseInt(hex.slice(4, 6), 16) / 255;
+      node.strokes = [{ type: "SOLID", color: { r, g, b }, opacity: 1 }];
+      return;
+    }
     const property = typeof args.property === "string" ? args.property : null;
     if (property !== null && "value" in args) {
       const geoNode = node;
@@ -6108,8 +6162,8 @@
         throw new Error(`Unknown action method: "${method}"`);
     }
   }
-  async function executeActions(actions, pluginSpec) {
-    var _a, _b, _c, _d;
+  async function executeActions(actions, pluginSpec, persistNodeId) {
+    var _a, _b, _c, _d, _e, _f;
     const errors = [];
     const createdNodeIds = [];
     let executedCount = 0;
@@ -6166,10 +6220,10 @@
         console.warn("[action-executor] failed to resize root frame:", err);
       }
     }
-    const persistTargetId = rootFrameId != null ? rootFrameId : actions.length > 0 ? actions[0].nodeId : void 0;
+    const persistTargetId = (_c = (_b = persistNodeId != null ? persistNodeId : rootFrameId) != null ? _b : createdNodeIds.length > 0 ? createdNodeIds[0] : void 0) != null ? _c : actions.length > 0 ? actions[0].nodeId : void 0;
     if (pluginSpec && persistTargetId) {
       try {
-        const targetNode = (_b = tempMap.get(persistTargetId)) != null ? _b : await figma.getNodeByIdAsync(persistTargetId);
+        const targetNode = (_d = tempMap.get(persistTargetId)) != null ? _d : await figma.getNodeByIdAsync(persistTargetId);
         if (targetNode && "setPluginData" in targetNode) {
           targetNode.setPluginData("pluginSpec", pluginSpec);
         }
@@ -6181,7 +6235,7 @@
     const isReapply = actions.length > 0 && actions[0].method === "deleteChildren";
     if (!isReapply && rootFrameId) {
       try {
-        const rootNode = (_c = tempMap.get(rootFrameId)) != null ? _c : await figma.getNodeByIdAsync(rootFrameId);
+        const rootNode = (_e = tempMap.get(rootFrameId)) != null ? _e : await figma.getNodeByIdAsync(rootFrameId);
         if (rootNode && "x" in rootNode) {
           const vp = figma.viewport.center;
           const node = rootNode;
@@ -6193,7 +6247,7 @@
       }
       const savedZoom = figma.viewport.zoom;
       const nodesToFocus = [];
-      const root = (_d = tempMap.get(rootFrameId)) != null ? _d : await figma.getNodeByIdAsync(rootFrameId);
+      const root = (_f = tempMap.get(rootFrameId)) != null ? _f : await figma.getNodeByIdAsync(rootFrameId);
       if (root) nodesToFocus.push(root);
       if (nodesToFocus.length > 0) {
         figma.viewport.scrollAndZoomIntoView(nodesToFocus);
@@ -6236,9 +6290,18 @@
 
   // src/main/message-handler.ts
   var import_upng_js = __toESM(require_UPNG());
-  function handlePluginReady(_msg) {
+  async function handlePluginReady(_msg) {
     console.log("[main] iframe ready \u2014 sending selection context");
     sendSelectionContext();
+    try {
+      const apiKey = await figma.clientStorage.getAsync("apiKey");
+      const msg = {
+        type: "CLIENT_STORAGE_VALUE",
+        payload: { key: "apiKey", value: apiKey != null ? apiKey : null }
+      };
+      figma.ui.postMessage(msg);
+    } catch (e) {
+    }
   }
   function handleControlChange(msg) {
     const { controlId, value, action, actions } = msg.payload;
@@ -6254,8 +6317,8 @@
     });
   }
   function handleExecuteActions(msg) {
-    const { actions, pluginSpec } = msg.payload;
-    executeActions(actions, pluginSpec).then((result) => {
+    const { actions, pluginSpec, persistNodeId } = msg.payload;
+    executeActions(actions, pluginSpec, persistNodeId).then((result) => {
       const response = {
         type: "EXECUTION_RESULT",
         payload: result
@@ -6335,8 +6398,22 @@
       console.error("[main] handleRequestImageData failed:", message);
       figma.ui.postMessage({
         type: "ERROR",
-        payload: { source: "request-image-data", message }
+        payload: { source: `request-image-data:${requestId}`, message }
       });
+    }
+  }
+  async function handleSetClientStorage(msg) {
+    try {
+      await figma.clientStorage.setAsync(msg.payload.key, msg.payload.value);
+    } catch (err) {
+      console.warn("[main] handleSetClientStorage failed:", err);
+    }
+  }
+  async function handleDeleteClientStorage(msg) {
+    try {
+      await figma.clientStorage.deleteAsync(msg.payload.key);
+    } catch (err) {
+      console.warn("[main] handleDeleteClientStorage failed:", err);
     }
   }
   async function handleClearPluginData(msg) {
@@ -6384,7 +6461,7 @@
       const msg = raw;
       switch (msg.type) {
         case "PLUGIN_READY":
-          handlePluginReady(msg);
+          void handlePluginReady(msg);
           break;
         case "CONTROL_CHANGE":
           handleControlChange(msg);
@@ -6403,6 +6480,12 @@
           break;
         case "CLEAR_PLUGIN_DATA":
           void handleClearPluginData(msg);
+          break;
+        case "SET_CLIENT_STORAGE":
+          void handleSetClientStorage(msg);
+          break;
+        case "DELETE_CLIENT_STORAGE":
+          void handleDeleteClientStorage(msg);
           break;
         case "CLOSE_PLUGIN":
           figma.closePlugin();

@@ -421,7 +421,7 @@ function clonePaint(paint: Paint): Paint {
 function execSetFill(node: SceneNode, args: Args): void {
   if (!('fills' in node)) throw new Error(`Node type ${node.type} does not support fills.`);
 
-  // If the value is a hex color string (from color control), convert it.
+  // Hex color string → solid fill.
   if (typeof args.value === 'string' && args.value.startsWith('#')) {
     const hex = args.value.replace('#', '');
     const r = parseInt(hex.slice(0, 2), 16) / 255;
@@ -429,6 +429,57 @@ function execSetFill(node: SceneNode, args: Args): void {
     const b = parseInt(hex.slice(4, 6), 16) / 255;
     (node as GeometryMixin).fills = [{ type: 'SOLID', color: { r, g, b }, opacity: 1 }];
     return;
+  }
+
+  // Multi-stop color map (from gradient color control) → update gradient stops.
+  if (typeof args.value === 'object' && args.value !== null && !Array.isArray(args.value)) {
+    const colorMap = args.value as Record<string, unknown>;
+    const hexValues = Object.values(colorMap).filter(
+      (v): v is string => typeof v === 'string' && v.startsWith('#'),
+    );
+    if (hexValues.length > 0) {
+      const geoNode = node as GeometryMixin;
+      const fills = (geoNode.fills as readonly Paint[]).map(clonePaint);
+      const firstFill = fills[0] as Record<string, unknown> | undefined;
+
+      if (firstFill && typeof firstFill.type === 'string' && firstFill.type.startsWith('GRADIENT_')) {
+        const stops = firstFill.gradientStops as { position: number; color: RGBA }[] | undefined;
+        if (stops) {
+          for (let i = 0; i < Math.min(hexValues.length, stops.length); i++) {
+            const hex = hexValues[i].replace('#', '');
+            stops[i].color = {
+              r: parseInt(hex.slice(0, 2), 16) / 255,
+              g: parseInt(hex.slice(2, 4), 16) / 255,
+              b: parseInt(hex.slice(4, 6), 16) / 255,
+              a: stops[i].color.a,
+            };
+          }
+          geoNode.fills = fills;
+          return;
+        }
+      }
+
+      // Fallback: no existing gradient, create one from the color stops.
+      const gradientStops: ColorStop[] = hexValues.map((hex, i) => {
+        const h = hex.replace('#', '');
+        return {
+          position: hexValues.length > 1 ? i / (hexValues.length - 1) : 0,
+          color: {
+            r: parseInt(h.slice(0, 2), 16) / 255,
+            g: parseInt(h.slice(2, 4), 16) / 255,
+            b: parseInt(h.slice(4, 6), 16) / 255,
+            a: 1,
+          },
+        };
+      });
+      geoNode.fills = [{
+        type: 'GRADIENT_LINEAR',
+        gradientTransform: [[1, 0, 0], [0, 1, 0]],
+        gradientStops,
+        opacity: 1,
+      } as GradientPaint];
+      return;
+    }
   }
 
   // Numeric value: treat as grayscale lightness (0–1) applied to the first fill.
@@ -482,6 +533,16 @@ function execSetFill(node: SceneNode, args: Args): void {
 
 function execSetStroke(node: SceneNode, args: Args): void {
   if (!('strokes' in node)) throw new Error(`Node type ${node.type} does not support strokes.`);
+
+  // Hex color string → replace stroke color, preserving weight and align.
+  if (typeof args.value === 'string' && args.value.startsWith('#')) {
+    const hex = args.value.replace('#', '');
+    const r = parseInt(hex.slice(0, 2), 16) / 255;
+    const g = parseInt(hex.slice(2, 4), 16) / 255;
+    const b = parseInt(hex.slice(4, 6), 16) / 255;
+    (node as GeometryMixin).strokes = [{ type: 'SOLID', color: { r, g, b }, opacity: 1 }];
+    return;
+  }
 
   // Property-patch: modify a single property on the first stroke or the stroke itself.
   const property = typeof args.property === 'string' ? args.property : null;
@@ -796,6 +857,7 @@ async function dispatchAction(action: ActionDescriptor, tempMap: TempNodeMap): P
 export async function executeActions(
   actions: ActionDescriptor[],
   pluginSpec?: string,
+  persistNodeId?: string,
 ): Promise<ExecutionResult> {
   const errors: string[] = [];
   const createdNodeIds: string[] = [];
@@ -862,8 +924,11 @@ export async function executeActions(
   }
 
   // Persist plugin spec so it can be restored on re-selection.
-  // Prefer the root frame; fall back to the first targeted node (live mode).
-  const persistTargetId = rootFrameId ?? (actions.length > 0 ? actions[0].nodeId : undefined);
+  // Explicit persistNodeId takes priority, then root frame, first created node, first targeted node.
+  const persistTargetId = persistNodeId
+    ?? rootFrameId
+    ?? (createdNodeIds.length > 0 ? createdNodeIds[0] : undefined)
+    ?? (actions.length > 0 ? actions[0].nodeId : undefined);
   if (pluginSpec && persistTargetId) {
     try {
       const targetNode = tempMap.get(persistTargetId)

@@ -141,6 +141,8 @@ export interface ExecuteActionsMessage {
     actions: ActionDescriptor[];
     /** Serialized UISpec JSON to persist on the root frame via setPluginData. */
     pluginSpec?: string;
+    /** Explicit node ID to persist pluginSpec on (used for spec-only updates). */
+    persistNodeId?: string;
   };
 }
 
@@ -223,7 +225,8 @@ export type MainToIframeMessage =
   | ExecutionResultMessage
   | ErrorMessage
   | ClaudeResponseMessage
-  | ImageDataMessage;
+  | ImageDataMessage
+  | ClientStorageValueMessage;
 
 export interface ClearPluginDataMessage {
   type: 'CLEAR_PLUGIN_DATA';
@@ -236,6 +239,32 @@ export interface ClosePluginMessage {
   type: 'CLOSE_PLUGIN';
 }
 
+/** Iframe → main: persist a value in figma.clientStorage. */
+export interface SetClientStorageMessage {
+  type: 'SET_CLIENT_STORAGE';
+  payload: {
+    key: string;
+    value: string;
+  };
+}
+
+/** Iframe → main: delete a value from figma.clientStorage. */
+export interface DeleteClientStorageMessage {
+  type: 'DELETE_CLIENT_STORAGE';
+  payload: {
+    key: string;
+  };
+}
+
+/** Main → iframe: delivers a value from figma.clientStorage. */
+export interface ClientStorageValueMessage {
+  type: 'CLIENT_STORAGE_VALUE';
+  payload: {
+    key: string;
+    value: string | null;
+  };
+}
+
 export type IframeToMainMessage =
   | PluginReadyMessage
   | ControlChangeMessage
@@ -244,7 +273,9 @@ export type IframeToMainMessage =
   | ClaudeRequestMessage
   | RequestImageDataMessage
   | ClearPluginDataMessage
-  | ClosePluginMessage;
+  | ClosePluginMessage
+  | SetClientStorageMessage
+  | DeleteClientStorageMessage;
 
 // ─── UI spec (LLM → renderer) ─────────────────────────────────────────────────
 

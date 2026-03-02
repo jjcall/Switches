@@ -34874,15 +34874,25 @@ body {
   }
 
   // src/ui/api/claude.ts
-  var ANTHROPIC_API_KEY = "sk-ant-REDACTED";
   var PROXY_URL = "http://localhost:3333/v1/messages";
   var MODEL = "claude-sonnet-4-5";
   var MAX_TOKENS = 16384;
+  var cachedApiKey = null;
+  function getStoredApiKey() {
+    return cachedApiKey;
+  }
+  function setStoredApiKey(key) {
+    cachedApiKey = key;
+  }
+  function clearStoredApiKey() {
+    cachedApiKey = null;
+  }
   async function callClaude(messages, systemPrompt) {
-    if (!ANTHROPIC_API_KEY || ANTHROPIC_API_KEY === "YOUR_API_KEY_HERE") {
+    const apiKey = getStoredApiKey();
+    if (!apiKey) {
       return {
         ok: false,
-        error: "No API key configured. Set ANTHROPIC_API_KEY in src/ui/api/claude.ts."
+        error: "No API key configured. Type /key YOUR_KEY to set your Anthropic API key."
       };
     }
     let response;
@@ -34890,7 +34900,7 @@ body {
       response = await fetch(PROXY_URL, {
         method: "POST",
         headers: {
-          "x-api-key": ANTHROPIC_API_KEY,
+          "x-api-key": apiKey,
           "anthropic-version": "2023-06-01",
           "anthropic-dangerous-direct-browser-access": "true",
           "content-type": "application/json"
@@ -46356,6 +46366,19 @@ void main() {
 
   // src/ui/renderer/UIRenderer.tsx
   var import_jsx_runtime21 = __toESM(require_jsx_runtime());
+  function useSyncedState(externalValue) {
+    const [val, setVal] = (0, import_react40.useState)(externalValue);
+    const prevExternal = (0, import_react40.useRef)(externalValue);
+    (0, import_react40.useEffect)(() => {
+      const prev = prevExternal.current;
+      const changed = typeof prev === "object" && prev !== null ? JSON.stringify(prev) !== JSON.stringify(externalValue) : prev !== externalValue;
+      if (changed) {
+        prevExternal.current = externalValue;
+        setVal(externalValue);
+      }
+    }, [externalValue]);
+    return [val, setVal];
+  }
   function ControlRenderer({ control, mode, onControlChange, onControlValueChange }) {
     const { id: id3, type, label = "", props = {}, action } = control;
     const onChange = (0, import_react40.useCallback)(
@@ -46369,9 +46392,8 @@ void main() {
     );
     switch (type) {
       case "slider": {
-        const [val, setVal] = (0, import_react40.useState)(
-          typeof props.defaultValue === "number" ? props.defaultValue : typeof props.min === "number" ? props.min : 0
-        );
+        const defaultVal = typeof props.defaultValue === "number" ? props.defaultValue : typeof props.min === "number" ? props.min : 0;
+        const [val, setVal] = useSyncedState(defaultVal);
         return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
           Slider,
           {
@@ -46388,7 +46410,7 @@ void main() {
         );
       }
       case "toggle": {
-        const [val, setVal] = (0, import_react40.useState)(props.defaultValue === true);
+        const [val, setVal] = useSyncedState(props.defaultValue === true);
         return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
           Toggle,
           {
@@ -46402,9 +46424,8 @@ void main() {
         );
       }
       case "number": {
-        const [val, setVal] = (0, import_react40.useState)(
-          typeof props.defaultValue === "number" ? props.defaultValue : typeof props.min === "number" ? props.min : 0
-        );
+        const defaultVal = typeof props.defaultValue === "number" ? props.defaultValue : typeof props.min === "number" ? props.min : 0;
+        const [val, setVal] = useSyncedState(defaultVal);
         return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
           NumberInput,
           {
@@ -46422,7 +46443,7 @@ void main() {
       }
       case "select": {
         const options = Array.isArray(props.options) ? props.options : ["Option A", "Option B"];
-        const [val, setVal] = (0, import_react40.useState)(
+        const [val, setVal] = useSyncedState(
           typeof props.defaultValue === "string" ? props.defaultValue : options[0] ?? ""
         );
         return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
@@ -46440,7 +46461,7 @@ void main() {
       }
       case "segmented": {
         const options = Array.isArray(props.options) ? props.options : [{ value: "a", label: "A" }, { value: "b", label: "B" }];
-        const [val, setVal] = (0, import_react40.useState)(
+        const [val, setVal] = useSyncedState(
           typeof props.defaultValue === "string" ? props.defaultValue : options[0]?.value ?? ""
         );
         return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
@@ -46462,7 +46483,7 @@ void main() {
           for (const stop of colorStops) {
             defaults[stop.id] = stop.defaultValue ?? "#000000";
           }
-          const [val2, setVal2] = (0, import_react40.useState)(defaults);
+          const [val2, setVal2] = useSyncedState(defaults);
           return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
             ColorControl,
             {
@@ -46476,7 +46497,7 @@ void main() {
             }
           );
         }
-        const [val, setVal] = (0, import_react40.useState)(
+        const [val, setVal] = useSyncedState(
           typeof props.defaultValue === "string" ? props.defaultValue : "#000000"
         );
         return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
@@ -46492,7 +46513,7 @@ void main() {
         );
       }
       case "text": {
-        const [val, setVal] = (0, import_react40.useState)(
+        const [val, setVal] = useSyncedState(
           typeof props.defaultValue === "string" ? props.defaultValue : ""
         );
         return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
@@ -46509,7 +46530,7 @@ void main() {
         );
       }
       case "dial": {
-        const [val, setVal] = (0, import_react40.useState)(
+        const [val, setVal] = useSyncedState(
           typeof props.defaultValue === "number" ? props.defaultValue : 0
         );
         return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
@@ -46871,6 +46892,31 @@ void main() {
     }
     return { ...spec, controls: spec.controls.map(rewriteControl) };
   }
+  var FIGMA_ID_RE = /^\d+:\d+$/;
+  function fixStaleTempIds(spec, realNodeId) {
+    let changed = false;
+    function fixAction(a2) {
+      let nodeId = a2.nodeId;
+      let parentId = a2.parentId;
+      if (nodeId && !FIGMA_ID_RE.test(nodeId)) {
+        nodeId = realNodeId;
+        changed = true;
+      }
+      if (parentId && !FIGMA_ID_RE.test(parentId)) {
+        parentId = realNodeId;
+        changed = true;
+      }
+      return { ...a2, nodeId, parentId };
+    }
+    function fixControl(c2) {
+      const action = c2.action ? fixAction(c2.action) : c2.action;
+      const actions = c2.actions?.map(fixAction);
+      const children = c2.children?.map(fixControl);
+      return { ...c2, action, actions, children };
+    }
+    const fixed = { ...spec, controls: spec.controls.map(fixControl) };
+    return changed ? fixed : spec;
+  }
   function specWithCurrentValues(spec, values) {
     function updateControl(c2) {
       const val = values[c2.id];
@@ -46927,12 +46973,14 @@ void main() {
           setSelectionContext(msg.payload);
           if (msg.payload.pluginSpec) {
             try {
-              const restored = JSON.parse(msg.payload.pluginSpec);
-              setCurrentUISpec(restored);
-              if (msg.payload.nodes.length > 0) {
-                rootFrameIdRef.current = msg.payload.nodes[0].id;
-                createdNodeIdsRef.current = [msg.payload.nodes[0].id];
+              let restored = JSON.parse(msg.payload.pluginSpec);
+              const nodeId = msg.payload.nodes[0]?.id;
+              if (nodeId) {
+                restored = fixStaleTempIds(restored, nodeId);
+                rootFrameIdRef.current = nodeId;
+                createdNodeIdsRef.current = [nodeId];
               }
+              setCurrentUISpec(restored);
               addMessage("assistant", "Restored plugin controls from selected frame.");
             } catch {
               console.warn("[app] failed to parse stored pluginSpec");
@@ -46952,9 +47000,26 @@ ${errors.join("\n")}`);
           createdNodeIdsRef.current = createdNodeIds;
           if (rootFrameId) {
             rootFrameIdRef.current = rootFrameId;
+          } else if (!rootFrameIdRef.current && createdNodeIds.length > 0) {
+            rootFrameIdRef.current = createdNodeIds[0];
           }
           if (tempIdMap && Object.keys(tempIdMap).length > 0) {
-            setCurrentUISpec((prev) => prev ? rewriteTempIds(prev, tempIdMap) : prev);
+            setCurrentUISpec((prev) => {
+              if (!prev) return prev;
+              const rewritten = rewriteTempIds(prev, tempIdMap);
+              const targetId = rootFrameId ?? rootFrameIdRef.current;
+              if (targetId) {
+                postToMain({
+                  type: "EXECUTE_ACTIONS",
+                  payload: { actions: [], pluginSpec: JSON.stringify(rewritten), persistNodeId: targetId }
+                });
+              }
+              return rewritten;
+            });
+          }
+        } else if (msg.type === "CLIENT_STORAGE_VALUE") {
+          if (msg.payload.key === "apiKey" && msg.payload.value) {
+            setStoredApiKey(msg.payload.value);
           }
         } else if (msg.type === "ERROR") {
           addMessage("error", msg.payload.message);
@@ -46974,7 +47039,7 @@ ${errors.join("\n")}`);
           if (msg.type === "IMAGE_DATA" && msg.payload.requestId === requestId) {
             cleanup();
             resolve({ width: msg.payload.width, height: msg.payload.height, pixels: msg.payload.pixels });
-          } else if (msg.type === "ERROR" && msg.payload.source === "request-image-data") {
+          } else if (msg.type === "ERROR" && msg.payload.source === `request-image-data:${requestId}`) {
             cleanup();
             reject(new Error(msg.payload.message));
           }
@@ -47093,6 +47158,28 @@ ${errors.join("\n")}`);
       if (cmd === "/clear") {
         handleDetach();
         setMockSelectionName(null);
+        return;
+      }
+      if (cmd === "/key" || cmd === "/key status") {
+        const hasKey = !!getStoredApiKey();
+        addMessage("assistant", hasKey ? "API key is set." : "No API key configured. Type /key YOUR_KEY to set one.");
+        return;
+      }
+      if (cmd === "/key clear") {
+        clearStoredApiKey();
+        postToMain({ type: "DELETE_CLIENT_STORAGE", payload: { key: "apiKey" } });
+        addMessage("assistant", "API key cleared.");
+        return;
+      }
+      if (text.trim().startsWith("/key ") && !cmd.startsWith("/key status") && !cmd.startsWith("/key clear")) {
+        const key = text.trim().slice(5).trim();
+        if (!key.startsWith("sk-")) {
+          addMessage("error", 'Invalid key format \u2014 Anthropic keys start with "sk-".');
+          return;
+        }
+        setStoredApiKey(key);
+        postToMain({ type: "SET_CLIENT_STORAGE", payload: { key: "apiKey", value: key } });
+        addMessage("assistant", "API key saved.");
         return;
       }
       if (cmd.startsWith("/state ")) {
@@ -47473,7 +47560,7 @@ ${errors.join("\n")}`);
           if (targetId) {
             postToMain({
               type: "EXECUTE_ACTIONS",
-              payload: { actions: [], pluginSpec: JSON.stringify(updated) }
+              payload: { actions: [], pluginSpec: JSON.stringify(updated), persistNodeId: targetId }
             });
           }
         }, 500);
