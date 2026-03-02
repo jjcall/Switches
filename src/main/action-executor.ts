@@ -702,9 +702,26 @@ function execSetLayoutProperties(node: SceneNode, args: Args): void {
 
 function execResize(node: SceneNode, args: Args): void {
   if (!('resize' in node)) throw new Error(`Node type ${node.type} does not support resize.`);
-  const w = typeof args.width === 'number' ? args.width : (node as LayoutMixin).width;
-  const h = typeof args.height === 'number' ? args.height : (node as LayoutMixin).height;
-  (node as LayoutMixin).resize(w, h);
+  const layout = node as LayoutMixin;
+  const property = typeof args.property === 'string' ? args.property : null;
+
+  if (typeof args.value === 'number' && property === 'width') {
+    layout.resize(args.value, layout.height);
+    return;
+  }
+  if (typeof args.value === 'number' && property === 'height') {
+    layout.resize(layout.width, args.value);
+    return;
+  }
+  // Uniform size: value drives both dimensions.
+  if (typeof args.value === 'number') {
+    layout.resize(args.value, args.value);
+    return;
+  }
+
+  const w = typeof args.width === 'number' ? args.width : layout.width;
+  const h = typeof args.height === 'number' ? args.height : layout.height;
+  layout.resize(w, h);
 }
 
 async function execAppendChild(action: ActionDescriptor, tempMap: TempNodeMap): Promise<void> {

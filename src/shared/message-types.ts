@@ -281,6 +281,8 @@ export type IframeToMainMessage =
 
 export interface UISpec {
   replace?: boolean;
+  /** Control IDs to remove during merge. Applied before adding new controls. */
+  removeControls?: string[];
   /** Control interaction mode. live = immediate canvas updates, apply = update on Apply button only. */
   mode?: 'live' | 'apply';
   /** Template actions used for apply-mode regeneration (simple placeholder substitution). */

@@ -28,7 +28,7 @@ Respond with a single JSON object — no prose, no markdown fences:
   "actions": [ ... ],
   "ui": {
     "replace": <true|false>,
-    "mode": <"live"|"apply">,
+    "removeControls": ["controlId1", ...],
     "controls": [ ... ]
   },
   "generate": "<JS function body string, optional>"
@@ -38,18 +38,19 @@ Respond with a single JSON object — no prose, no markdown fences:
   previous turn — do not re-run them.
 - "ui.replace": set true on the first response or when rebuilding from scratch. Set false when
   adding or updating individual controls (the renderer merges by control id).
-- "ui.mode": the runtime chooses this automatically based on the task:
-  * Use "live" when modifying properties on existing nodes (e.g. shadow, fill, stroke, opacity).
-    Controls patch nodes immediately on every slider drag.
-  * Use "apply" when creating/generating multiple nodes (grids, patterns, layouts, carousels),
-    when ANY control requires computation (randomness, loops, formulas, conditional logic),
-    or when a control needs a library function (color manipulation, noise, easing, etc.).
-    Controls collect values locally and an Apply button re-executes the full batch.
-  The user should NEVER have to ask for a mode — you decide based on the nature of the request.
+- "ui.removeControls": optional array of control IDs to remove from the existing panel.
+  Use when a control is being superseded (e.g. replacing a single "color" control with separate
+  "coldColor" and "warmColor" controls). Applied before merging new controls.
 - "ui.controls": the full or partial control list.
-- "generate": a JavaScript function body string for apply-mode plugins that need computation.
-  See the "Generator functions" section below. When "generate" is present, set "actions": []
-  (the generator auto-executes with default control values on first load).
+- "generate": a JavaScript function body string for plugins that need computation (loops,
+  randomness, color science, noise, multi-node creation, etc.). When "generate" is present,
+  set "actions": [] (the generator auto-executes with default control values on first load).
+  The runtime automatically re-runs the generator on every control change with a short debounce,
+  so the user sees live updates without needing to click Apply.
+
+All controls update the canvas immediately — either via direct property patching (for simple
+property changes on existing nodes) or via automatic generator re-execution (for computed outputs).
+The user experience is always "live."
 
 If you need to ask a clarifying question or cannot fulfill the request, return
 "actions": [], "ui": { "replace": false, "controls": [] }, and add a "message" key with your
@@ -82,7 +83,7 @@ Supported methods:
 | setEffect           | Replaces or patches effects            | See below                                               |
 | setCornerRadius     | Sets corner radius                     | radius (number)                                         |
 | setLayoutProperties | Sets auto-layout props                 | layoutMode, primaryAxisSizing, counterAxisSizing, padding, itemSpacing |
-| resize              | Resizes a node                         | width, height                                           |
+| resize              | Resizes a node                         | width, height. Control: value (uniform), or property "width"/"height" + value |
 | applyImageFill      | Creates/updates rect with processed PNG as image fill | imageBytes (number[]), targetNodeId, width, height, x, y, name, scaleMode |
 | appendChild         | Moves a node into a parent             | (use parentId on the action)                            |
 | deleteNode          | Deletes a node                         | (nodeId is the target)                                  |
@@ -139,13 +140,13 @@ Each control:
 
 ### How control actions work
 
-In **live mode** ("ui.mode": "live"), the "action" or "actions" on a control fire on each
-user interaction (slider drag, toggle click, etc.). The control value is passed as args.value.
+For simple property changes on existing nodes, give each control an "action" or "actions" field.
+These fire immediately on every user interaction (slider drag, toggle click, etc.). The control
+value is passed as args.value.
 
-In **apply mode** ("ui.mode": "apply"), control changes DO NOT fire actions immediately.
-Instead, controls collect values locally and the user clicks Apply. On Apply, the runtime
-calls the "generate" function with current control values and executes the returned actions.
-Controls in apply mode do NOT need "action" or "actions" — the generator handles everything.
+For generator-based plugins, controls do NOT need "action" or "actions" — the generator receives
+all current control values via the "params" object and returns the full actions array. The runtime
+automatically re-runs the generator on every control change.
 
 CRITICAL RULES:
 
@@ -159,19 +160,18 @@ CRITICAL RULES:
 3. Set "props.defaultValue" on every control to match the initial value from the top-level
    action. This keeps the UI and canvas in sync on first render.
 
-4. Use apply mode + "generate" whenever the plugin creates or arranges multiple nodes, uses
+4. Use a "generate" function whenever the plugin creates or arranges multiple nodes, uses
    randomness, loops, computed values, color manipulation (saturate, desaturate, darken, lighten,
    hue shift, color mixing, color scales, contrast), noise, easing, or any logic beyond simple
    property patching. Signs: "grid", "pattern", "generate", "create N items", "layout",
    "arrange", "distribute", "carousel", "randomize", "gradient", "spiral", "animate",
    "saturate", "desaturate", "darken", "lighten", "palette", "color scale", "noise",
    "organic", "scatter", "wavy", "easing", or any scenario needing computation.
-   The user will NEVER ask for apply mode explicitly — you detect it.
 
    IMPORTANT: Figma's fill API only stores { r, g, b } colors — there is no "saturation",
    "hue", or "lightness" property on a Figma paint. If a control needs to manipulate color
-   in HSL/LAB/LCH space, you MUST use apply mode with a generator that uses lib.chroma to
-   compute the final RGB, then emit a setFill action with the concrete color.
+   in HSL/LAB/LCH space, you MUST use a generator that uses lib.chroma to compute the
+   final RGB, then emit a setFill action with the concrete color.
 
 ### Coordinated actions (the power feature)
 
@@ -194,6 +194,14 @@ When the user asks to add or modify controls on an existing plugin:
   the generator and controls stay in sync.
 - Set "actions": [] if no new canvas changes are needed (the previous ones already ran).
 - Keep control IDs stable across turns so the user doesn't lose their current slider positions.
+- **When a control is being superseded or is no longer relevant**, use "removeControls" to
+  remove the old control by ID. Example: if the user had a single "color" control and now
+  asks for separate cold/warm gradient colors, set "removeControls": ["color"] and add the
+  new "coldColor" and "warmColor" controls. This prevents stale, non-functional controls
+  from lingering in the panel.
+- **Use "replace": true when fundamentally redesigning the plugin** (e.g. changing from
+  direct-action controls to a generator, or rebuilding the control set from scratch).
+  Use "removeControls" for surgical removal of specific controls without losing the rest.
 - **CRITICAL: When updating a generator, you MUST include the complete generate function
   that handles ALL controls — both existing and newly added.** The generator is replaced
   wholesale. If you only handle the new control, all previous functionality will break.
@@ -236,6 +244,13 @@ Single color: Props: defaultValue (string, hex). Value type: string (e.g. "#FF00
 Multi-color (gradients, multiple stops): Props: colors (array of { id, label, defaultValue }). Value type: Record<string, string> keyed by stop id.
 Example single: { "id": "fill", "type": "color", "label": "Fill", "props": { "defaultValue": "#FF0000" } }
 Example gradient: { "id": "gradient", "type": "color", "label": "Gradient", "props": { "colors": [{ "id": "start", "label": "Start", "defaultValue": "#FF0000" }, { "id": "end", "label": "End", "defaultValue": "#0000FF" }] } }
+
+**Generator param format for multi-color controls**: When the control id is "gradient" with
+stops "start" and "end", the runtime provides BOTH formats:
+  - params.gradient = { start: "#FF0000", end: "#0000FF" }  (nested object)
+  - params.start = "#FF0000", params.end = "#0000FF"          (flattened top-level)
+Use whichever is more convenient. The flattened keys are the stop IDs.
+Make sure stop IDs are unique and don't collide with other control IDs.
 
 ### dial
 Circular rotation dial. Only use when the user explicitly asks for a dial, knob, or circular rotation control. Do NOT auto-select — prefer slider for numeric ranges including angles unless the user specifically requests a dial.
@@ -617,7 +632,6 @@ In addition to createRectangle, createFrame, and createText, generators can also
   "actions": [],
   "ui": {
     "replace": true,
-    "mode": "apply",
     "controls": [
       { "id": "columns", "type": "slider", "label": "Columns", "props": { "min": 2, "max": 12, "step": 1, "defaultValue": 6 } },
       { "id": "size", "type": "slider", "label": "Circle Size", "props": { "min": 8, "max": 48, "step": 1, "defaultValue": 16 } },
@@ -633,7 +647,6 @@ In addition to createRectangle, createFrame, and createText, generators can also
   "actions": [],
   "ui": {
     "replace": true,
-    "mode": "apply",
     "controls": [
       { "id": "baseColor", "type": "color", "label": "Base Color", "props": { "defaultValue": "#3B82F6" } },
       { "id": "count", "type": "slider", "label": "Swatches", "props": { "min": 3, "max": 12, "step": 1, "defaultValue": 5 } },
@@ -652,7 +665,6 @@ The generator samples brightness from the image and creates proportionally-sized
   "actions": [],
   "ui": {
     "replace": true,
-    "mode": "apply",
     "imageNodeId": "10:5",
     "controls": [
       { "id": "density", "type": "slider", "label": "Dot Density", "props": { "min": 10, "max": 60, "step": 1, "defaultValue": 30 } },
@@ -672,7 +684,6 @@ stained-glass mosaic from a selected image. Each cell is a real editable Figma v
   "actions": [],
   "ui": {
     "replace": true,
-    "mode": "apply",
     "imageNodeId": "10:5",
     "controls": [
       { "id": "cells", "type": "slider", "label": "Cell Count", "props": { "min": 20, "max": 300, "step": 1, "defaultValue": 80 } },
@@ -692,7 +703,6 @@ The generator processes the source image through Canvas2D and writes back a new 
   "actions": [],
   "ui": {
     "replace": true,
-    "mode": "apply",
     "imageNodeId": "10:5",
     "imageMaxWidth": 400,
     "controls": [
@@ -711,7 +721,6 @@ to render a 3D wireframe as editable Figma vectors. Controls for X/Y rotation an
   "actions": [],
   "ui": {
     "replace": true,
-    "mode": "apply",
     "controls": [
       { "id": "rx", "type": "dial", "label": "Rotate X", "props": { "min": -180, "max": 180, "step": 1, "defaultValue": 30 } },
       { "id": "ry", "type": "dial", "label": "Rotate Y", "props": { "min": -180, "max": 180, "step": 1, "defaultValue": 45 } },
@@ -731,7 +740,6 @@ for symmetry (petals), roundness, and spikiness. A single createVector action ou
   "actions": [],
   "ui": {
     "replace": true,
-    "mode": "apply",
     "controls": [
       { "id": "petals", "type": "slider", "label": "Petals / Symmetry", "props": { "min": 1, "max": 12, "step": 1, "defaultValue": 5 } },
       { "id": "roundness", "type": "slider", "label": "Roundness", "props": { "min": 0.1, "max": 20, "step": 0.1, "defaultValue": 1 } },
@@ -752,7 +760,6 @@ scaleMode TILE to fill a rectangle with an infinite pattern. No source image nee
   "actions": [],
   "ui": {
     "replace": true,
-    "mode": "apply",
     "controls": [
       { "id": "spacing", "type": "slider", "label": "Dot Spacing", "props": { "min": 12, "max": 80, "step": 4, "defaultValue": 32 } },
       { "id": "dotSize", "type": "slider", "label": "Dot Size", "props": { "min": 2, "max": 30, "step": 1, "defaultValue": 8 } },
@@ -772,7 +779,6 @@ hexagonal dot pattern. The tile source frame is created first, then referenced a
   "actions": [],
   "ui": {
     "replace": true,
-    "mode": "apply",
     "controls": [
       { "id": "dotSize", "type": "slider", "label": "Dot Size", "props": { "min": 4, "max": 40, "step": 2, "defaultValue": 16 } },
       { "id": "spacing", "type": "slider", "label": "Spacing", "props": { "min": 0, "max": 0.5, "step": 0.05, "defaultValue": 0.1 } },
@@ -793,7 +799,6 @@ the pattern source. No node creation — the selected frame/vector becomes the r
   "actions": [],
   "ui": {
     "replace": true,
-    "mode": "apply",
     "controls": [
       { "id": "tileType", "type": "segmented", "label": "Tile Type", "props": { "options": [{ "value": "RECTANGULAR", "label": "Grid" }, { "value": "HORIZONTAL_HEXAGONAL", "label": "Hex H" }, { "value": "VERTICAL_HEXAGONAL", "label": "Hex V" }], "defaultValue": "RECTANGULAR" } },
       { "id": "scale", "type": "slider", "label": "Scale", "props": { "min": 0.1, "max": 2, "step": 0.05, "defaultValue": 1 } },
@@ -865,14 +870,15 @@ the pattern source. No node creation — the selected frame/vector becomes the r
     source remains editable. For "patternize this" requests, use lib.selectionId as the
     sourceNodeId and skip tile creation entirely.
 
-### When to use generate vs live mode
+### When to use a generator vs direct control actions
 
-- **Live mode** (no generate): Simple property manipulation on existing nodes.
+- **Direct control actions** (no generate): Simple property manipulation on existing nodes.
   Controls have "action"/"actions" that fire immediately. Good for shadows, fills, opacity, etc.
-- **Apply mode + generate**: Creating nodes, loops, randomness, computed layouts, patterns.
-  Controls have NO action/actions — the generator handles everything via the Apply button.
+- **Generator function** ("generate" field): Creating nodes, loops, randomness, computed layouts,
+  patterns, color science. Controls have NO action/actions — the generator handles everything.
+  The runtime auto-reruns the generator on every control change.
 
-Key points for the live-mode example above:
+Key points for the direct-actions example above:
 - Top-level action uses "effects": [...] (full replace, runs once).
 - Control actions use "property" + "effectType" (patch form, runs per interaction).
 - defaultValue on each control matches the initial state.
@@ -886,17 +892,17 @@ Key points for the live-mode example above:
 - If the request can't be fulfilled with the selection, set actions to [] and explain in "message".
 - Do not add controls for properties that can't be live-updated (e.g. font loading).
 - When in doubt, produce fewer, better-chosen controls rather than a long list.
-- For generative plugins (grids, patterns, randomized content), ALWAYS use apply mode with
-  a "generate" function. The generator can use loops, Math.random(), and the lib helpers.
+- For generative plugins (grids, patterns, randomized content), ALWAYS use a "generate"
+  function. The generator can use loops, Math.random(), and the lib helpers.
 - For ANY color manipulation beyond basic hex/opacity (saturate, desaturate, darken, lighten,
-  hue shift, palette generation, color mixing, contrast), ALWAYS use apply mode with a
-  generator that uses lib.chroma. Figma has no saturation/hue API — you must compute the
-  final RGB and emit it as a concrete color in a setFill/setStroke action.
+  hue shift, palette generation, color mixing, contrast), ALWAYS use a generator with
+  lib.chroma. Figma has no saturation/hue API — you must compute the final RGB and emit it
+  as a concrete color in a setFill/setStroke action.
 - The "generate" field is a string containing JavaScript function body code. It is the ONLY
   place where executable JS is allowed. Never put JS in "actions" or control "action" fields.
 - All lib functions are pre-bundled — never try to import or require external modules.
 - For bitmap image effects (blur, sharpen, posterize, vignette, color grading, glitch, pixelate,
-  etc.), ALWAYS use apply mode with imageNodeId, set imageMaxWidth to 400+, use
+  etc.), ALWAYS use a generator with imageNodeId, set imageMaxWidth to 400+, use
   lib.processImage for Canvas2D manipulation, and emit applyImageFill with the result bytes.
   This pipeline processes from the original source every time — non-destructive by design.
 `;

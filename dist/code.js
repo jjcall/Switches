@@ -6047,9 +6047,23 @@
   }
   function execResize(node, args) {
     if (!("resize" in node)) throw new Error(`Node type ${node.type} does not support resize.`);
-    const w = typeof args.width === "number" ? args.width : node.width;
-    const h = typeof args.height === "number" ? args.height : node.height;
-    node.resize(w, h);
+    const layout = node;
+    const property = typeof args.property === "string" ? args.property : null;
+    if (typeof args.value === "number" && property === "width") {
+      layout.resize(args.value, layout.height);
+      return;
+    }
+    if (typeof args.value === "number" && property === "height") {
+      layout.resize(layout.width, args.value);
+      return;
+    }
+    if (typeof args.value === "number") {
+      layout.resize(args.value, args.value);
+      return;
+    }
+    const w = typeof args.width === "number" ? args.width : layout.width;
+    const h = typeof args.height === "number" ? args.height : layout.height;
+    layout.resize(w, h);
   }
   async function execAppendChild(action, tempMap) {
     const child = await resolveNode(action.nodeId, tempMap);

@@ -44,27 +44,23 @@ function useSyncedState<T>(externalValue: T): [T, Dispatch<SetStateAction<T>>] {
 
 // ─── Control renderer ─────────────────────────────────────────────────────────
 
-type ControlMode = 'live' | 'apply';
 type ControlValues = Record<string, unknown>;
 
 interface ControlProps {
   control: UIControl;
-  mode: ControlMode;
   onControlChange: (controlId: string, value: unknown, action: ActionDescriptor | undefined, actions: ActionDescriptor[] | undefined) => void;
   onControlValueChange: (controlId: string, value: unknown) => void;
 }
 
-function ControlRenderer({ control, mode, onControlChange, onControlValueChange }: ControlProps) {
+function ControlRenderer({ control, onControlChange, onControlValueChange }: ControlProps) {
   const { id, type, label = '', props = {}, action } = control;
 
   const onChange = useCallback(
     (value: unknown) => {
       onControlValueChange(id, value);
-      if (mode === 'live') {
-        onControlChange(id, value, action, control.actions);
-      }
+      onControlChange(id, value, action, control.actions);
     },
-    [id, action, control.actions, mode, onControlChange, onControlValueChange],
+    [id, action, control.actions, onControlChange, onControlValueChange],
   );
 
   switch (type) {
@@ -228,7 +224,6 @@ function ControlRenderer({ control, mode, onControlChange, onControlValueChange 
               <ControlRenderer
                 key={child.id}
                 control={child}
-                mode={mode}
                 onControlChange={onControlChange}
                 onControlValueChange={onControlValueChange}
               />
@@ -322,24 +317,34 @@ interface UIRendererProps {
 }
 
 export function UIRenderer({ spec, onApply, onValueChange }: UIRendererProps) {
-  const mode: ControlMode = spec.mode === 'apply' ? 'apply' : 'live';
+  const hasGenerator = !!spec.generate;
   const [controlValues, setControlValues] = useState<ControlValues>(() => collectControlDefaults(spec.controls));
   const [previewActions, setPreviewActions] = useState<ActionDescriptor[] | null>(null);
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const applyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controlValuesRef = useRef<ControlValues>(controlValues);
   controlValuesRef.current = controlValues;
 
+  const AUTO_APPLY_DELAY = 400;
+
   const dialIds = findDialControls(spec.controls);
-  const hasCubePreview = mode === 'apply' && !!spec.generate && !spec.imageNodeId && !!dialIds;
+  const hasCubePreview = hasGenerator && !spec.imageNodeId && !!dialIds;
   const hasPreview = hasCubePreview;
 
   const cubeDialIdSet = hasCubePreview && dialIds
     ? new Set([dialIds.rx, dialIds.ry, ...(dialIds.rz ? [dialIds.rz] : [])])
     : null;
 
+  // Only reset control values when the control structure changes (IDs/types),
+  // NOT when defaultValues are stamped by auto-apply. This prevents the
+  // auto-apply → stampSpec → useEffect → reset-to-defaults race condition.
+  const controlStructureKey = spec.controls
+    .map(c => `${c.id}:${c.type}`)
+    .join(',');
   useEffect(() => {
     setControlValues(collectControlDefaults(spec.controls));
-  }, [spec]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [controlStructureKey]);
 
   // Run initial preview on mount when a generator is present (non-cube preview)
   useEffect(() => {
@@ -367,14 +372,26 @@ export function UIRenderer({ spec, onApply, onValueChange }: UIRendererProps) {
 
   const handleControlChange = useCallback(
     (controlId: string, value: unknown, action: ActionDescriptor | undefined, actions: ActionDescriptor[] | undefined) => {
+      // When a generator is present, all updates go through auto-apply
+      // (generator re-execution). Skip the live CONTROL_CHANGE to avoid
+      // spurious errors from actions targeting the wrong node.
+      if (hasGenerator) return;
       if (!action && !actions?.length) return;
       postToMain({
         type: 'CONTROL_CHANGE',
         payload: { controlId, value, action, actions },
       });
     },
-    [],
+    [hasGenerator],
   );
+
+  const scheduleAutoApply = useCallback(() => {
+    if (!hasGenerator || !onApply) return;
+    if (applyTimerRef.current) clearTimeout(applyTimerRef.current);
+    applyTimerRef.current = setTimeout(() => {
+      onApply(controlValuesRef.current);
+    }, AUTO_APPLY_DELAY);
+  }, [hasGenerator, onApply, AUTO_APPLY_DELAY]);
 
   const handleControlValueChange = useCallback((controlId: string, value: unknown) => {
     setControlValues(prev => {
@@ -388,7 +405,9 @@ export function UIRenderer({ spec, onApply, onValueChange }: UIRendererProps) {
       if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
       previewTimerRef.current = setTimeout(runPreview, 80);
     }
-  }, [onValueChange, hasPreview, hasCubePreview, runPreview]);
+
+    scheduleAutoApply();
+  }, [onValueChange, hasPreview, hasCubePreview, runPreview, scheduleAutoApply]);
 
   const handleCubeRotate = useCallback((newRx: number, newRy: number) => {
     if (!dialIds) return;
@@ -399,21 +418,21 @@ export function UIRenderer({ spec, onApply, onValueChange }: UIRendererProps) {
     });
     onValueChange?.(dialIds.rx, newRx);
     onValueChange?.(dialIds.ry, newRy);
-  }, [dialIds, onValueChange]);
+    scheduleAutoApply();
+  }, [dialIds, onValueChange, scheduleAutoApply]);
 
   if (!spec.controls || spec.controls.length === 0) return null;
 
-  const isConnected = (control: UIControl) => !!control.action || !!(control.actions?.length);
+  const isConnected = (control: UIControl) =>
+    hasGenerator || !!control.action || !!(control.actions?.length);
   const renderItems = groupControls(spec.controls, cubeDialIdSet);
 
   const renderControl = (control: UIControl) => {
-    // Section and button don't get ControlCard wrapper
     if (control.type === 'section' || control.type === 'button') {
       return (
         <ControlRenderer
           key={control.id}
           control={control}
-          mode={mode}
           onControlChange={handleControlChange}
           onControlValueChange={handleControlValueChange}
         />
@@ -424,7 +443,6 @@ export function UIRenderer({ spec, onApply, onValueChange }: UIRendererProps) {
       <ControlCard key={control.id} label={control.label ?? ''} connected={isConnected(control)}>
         <ControlRenderer
           control={control}
-          mode={mode}
           onControlChange={handleControlChange}
           onControlValueChange={handleControlValueChange}
         />
@@ -446,7 +464,6 @@ export function UIRenderer({ spec, onApply, onValueChange }: UIRendererProps) {
         if (item.kind === 'single') {
           return renderControl(item.control);
         }
-        // dial-row: multiple dials side by side
         return (
           <div key={`dial-row-${idx}`} className="dialkit-control-row">
             {item.controls.map(control => renderControl(control))}
@@ -455,14 +472,6 @@ export function UIRenderer({ spec, onApply, onValueChange }: UIRendererProps) {
       })}
       {hasPreview && !hasCubePreview && previewActions && previewActions.length > 0 && (
         <PreviewCanvas actions={previewActions} />
-      )}
-      {mode === 'apply' && onApply && (
-        <button
-          className="dialkit-button"
-          onClick={() => onApply(controlValues)}
-        >
-          Apply changes
-        </button>
       )}
     </div>
   );

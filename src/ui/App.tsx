@@ -76,6 +76,29 @@ function fixStaleTempIds(spec: UISpec, realNodeId: string): UISpec {
 }
 
 /**
+ * Flattens multi-stop color values into top-level params so the generator can
+ * read them directly (e.g. params.warm instead of params.gradient.warm).
+ * The original nested value is preserved alongside the flattened keys.
+ */
+function flattenColorStops(values: Record<string, unknown>): Record<string, unknown> {
+  const flat: Record<string, unknown> = { ...values };
+  for (const [, val] of Object.entries(values)) {
+    if (val && typeof val === 'object' && !Array.isArray(val)) {
+      const rec = val as Record<string, unknown>;
+      const allStrings = Object.values(rec).every(
+        v => typeof v === 'string' && v.startsWith('#'),
+      );
+      if (allStrings && Object.keys(rec).length > 0) {
+        for (const [stopId, stopVal] of Object.entries(rec)) {
+          if (!(stopId in flat)) flat[stopId] = stopVal;
+        }
+      }
+    }
+  }
+  return flat;
+}
+
+/**
  * Stamps current control values into the UISpec's defaultValue fields so that
  * persisted specs restore with the user's last-applied settings, not the
  * original defaults.
@@ -158,10 +181,14 @@ function App() {
   const createdNodeIdsRef = useRef<string[]>([]);
   const rootFrameIdRef = useRef<string | undefined>(undefined);
 
-  // Keep a ref to the latest messages so the submit callback always sees
-  // current history without needing to be in its dependency array.
+  // Keep refs to the latest values so callbacks always see the current state
+  // without needing to be in their dependency arrays.
   const messagesRef = useRef<ChatMessage[]>(messages);
   messagesRef.current = messages;
+  const currentUISpecRef = useRef<UISpec | null>(currentUISpec);
+  currentUISpecRef.current = currentUISpec;
+  const selectionContextRef = useRef<SelectionContext | null>(selectionContext);
+  selectionContextRef.current = selectionContext;
 
   // ── Messaging ──────────────────────────────────────────────────────────────
 
@@ -260,24 +287,27 @@ function App() {
   }, []);
 
   const handleApply = useCallback(async (values: Record<string, unknown>) => {
-    if (!currentUISpec || currentUISpec.mode !== 'apply') return;
+    const spec = currentUISpecRef.current;
+    if (!spec) return;
+    if (!spec.generate && !spec.actionTemplate?.length) return;
 
-    const stampedSpec = specWithCurrentValues(currentUISpec, values);
+    const stampedSpec = specWithCurrentValues(spec, values);
     setCurrentUISpec(stampedSpec);
     const specJson = JSON.stringify(stampedSpec);
 
     let resolved: ActionDescriptor[];
 
-    if (currentUISpec.generate) {
+    if (spec.generate) {
       try {
-        setSelectionId(selectionContext?.nodes[0]?.id ?? null);
-        if (currentUISpec.imageNodeId) {
-          const maxW = currentUISpec.imageMaxWidth ?? 100;
-          const imgData = await fetchImageData(currentUISpec.imageNodeId, maxW);
+        const genParams = flattenColorStops(values);
+        setSelectionId(selectionContextRef.current?.nodes[0]?.id ?? null);
+        if (spec.imageNodeId) {
+          const maxW = spec.imageMaxWidth ?? 100;
+          const imgData = await fetchImageData(spec.imageNodeId, maxW);
           setImageData(imgData);
         }
-        const fn = compileGenerator(currentUISpec.generate);
-        resolved = executeGenerator(fn, values);
+        const fn = compileGenerator(spec.generate);
+        resolved = executeGenerator(fn, genParams);
         setImageData(null);
         setSelectionId(null);
       } catch (err) {
@@ -286,8 +316,8 @@ function App() {
         addMessage('error', `Generator error: ${err instanceof Error ? err.message : String(err)}`);
         return;
       }
-    } else if (currentUISpec.actionTemplate?.length) {
-      resolved = resolveTemplate(currentUISpec.actionTemplate, values);
+    } else if (spec.actionTemplate?.length) {
+      resolved = resolveTemplate(spec.actionTemplate, values);
     } else {
       addMessage('error', 'Apply mode requires either a generate function or an actionTemplate.');
       return;
@@ -343,7 +373,9 @@ function App() {
         pluginSpec: specJson,
       },
     });
-  }, [addMessage, currentUISpec, fetchImageData]);
+  // Uses refs (currentUISpecRef, selectionContextRef) for stable callback identity.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addMessage, fetchImageData]);
 
   const handleDetach = useCallback(() => {
     const nodeId = rootFrameIdRef.current;
@@ -721,14 +753,11 @@ function App() {
     console.log('[llm] parsed:', JSON.stringify(parsed.data, null, 2));
 
     const { actions, ui, message, generate } = parsed.data;
-    const normalizedUi: UISpec = ui.mode === 'apply'
-      ? {
-          ...ui,
-          mode: 'apply',
-          generate: generate ?? ui.generate,
-          actionTemplate: ui.actionTemplate ?? (generate ? undefined : (actions as ActionDescriptor[])),
-        }
-      : ui;
+    const normalizedUi: UISpec = {
+      ...ui,
+      generate: generate ?? ui.generate,
+      actionTemplate: ui.actionTemplate ?? (generate ? undefined : undefined),
+    };
 
     // Show any explanatory message the LLM included.
     if (message) {
@@ -743,15 +772,20 @@ function App() {
       const prev = uiSpec;
       if (!prev || normalizedUi.replace) return normalizedUi;
       const existingById = new Map(prev.controls.map(c => [c.id, c]));
+      // Remove explicitly listed controls before merging.
+      if (normalizedUi.removeControls?.length) {
+        for (const id of normalizedUi.removeControls) existingById.delete(id);
+      }
       for (const c of normalizedUi.controls) existingById.set(c.id, c);
-      return {
+      const merged = {
         ...prev,
         ...normalizedUi,
-        mode: normalizedUi.mode ?? prev.mode,
         generate: normalizedUi.generate ?? prev.generate,
         actionTemplate: normalizedUi.actionTemplate ?? prev.actionTemplate,
         controls: Array.from(existingById.values()),
       };
+      delete merged.removeControls;
+      return merged;
     })();
 
     // Only reset frame tracking when the LLM is building from scratch.
@@ -768,8 +802,8 @@ function App() {
         type: 'EXECUTE_ACTIONS',
         payload: { actions: actions as ActionDescriptor[], pluginSpec: specJson },
       });
-    } else if (mergedUi.mode === 'apply' && mergedUi.generate) {
-      const defaults = collectControlDefaults(mergedUi.controls);
+    } else if (mergedUi.generate) {
+      const defaults = flattenColorStops(collectControlDefaults(mergedUi.controls));
 
       try {
         setSelectionId(selectionContext?.nodes[0]?.id ?? null);
@@ -822,7 +856,7 @@ function App() {
         setSelectionId(null);
         addMessage('error', `Generator error: ${err instanceof Error ? err.message : String(err)}`);
       }
-    } else if (mergedUi.mode === 'apply' && mergedUi.actionTemplate?.length) {
+    } else if (mergedUi.actionTemplate?.length) {
       const defaults = collectControlDefaults(mergedUi.controls);
       const resolved = resolveTemplate(mergedUi.actionTemplate, defaults);
       postToMain({
