@@ -6,18 +6,15 @@ interface ToggleProps {
   onChange: (checked: boolean) => void;
 }
 
-export function Toggle({ label, checked, onChange }: ToggleProps) {
+export function Toggle({ checked, onChange }: ToggleProps) {
   return (
-    <div className="dialkit-labeled-control">
-      <span className="dialkit-labeled-control-label">{label}</span>
-      <SegmentedControl
-        options={[
-          { value: 'off' as const, label: 'Off' },
-          { value: 'on' as const, label: 'On' },
-        ]}
-        value={checked ? 'on' : 'off'}
-        onChange={(val) => onChange(val === 'on')}
-      />
-    </div>
+    <SegmentedControl
+      options={[
+        { value: 'off' as const, label: 'Off' },
+        { value: 'on' as const, label: 'On' },
+      ]}
+      value={checked ? 'on' : 'off'}
+      onChange={(val) => onChange(val === 'on')}
+    />
   );
 }

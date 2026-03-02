@@ -24,7 +24,6 @@ function clamp(v: number, min?: number, max?: number): number {
 }
 
 export function NumberInput({
-  label,
   value,
   onChange,
   min,
@@ -77,7 +76,6 @@ export function NumberInput({
 
   return (
     <div className="dialkit-text-control">
-      <label className="dialkit-text-label">{label}</label>
       <input
         ref={inputRef}
         type="text"

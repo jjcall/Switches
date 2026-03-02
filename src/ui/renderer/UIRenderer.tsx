@@ -6,16 +6,14 @@ import {
   Select,
   Section,
   ColorSwatch,
-  SpringEditor,
   TextInput,
-  Button,
   NumberInput,
   SegmentedControl,
   AngleWheel,
+  ControlCard,
 } from '../components';
 import { PreviewCanvas } from '../components/PreviewCanvas';
 import { CubePreview } from '../components/CubePreview';
-import type { SpringConfig } from '../components';
 import type { UIControl, UISpec, ActionDescriptor } from '../../shared/message-types';
 import { collectControlDefaults } from '../template';
 import { compileGenerator, executeGenerator } from '../codegen';
@@ -117,18 +115,33 @@ function ControlRenderer({ control, mode, onControlChange, onControlValueChange 
         typeof props.defaultValue === 'string' ? props.defaultValue : (options[0]?.value ?? ''),
       );
       return (
-        <div className="dialkit-labeled-control">
-          <span className="dialkit-labeled-control-label">{label}</span>
-          <SegmentedControl
-            options={options}
-            value={val}
-            onChange={(v) => { setVal(v as string); onChange(v); }}
-          />
-        </div>
+        <SegmentedControl
+          options={options}
+          value={val}
+          onChange={(v) => { setVal(v as string); onChange(v); }}
+        />
       );
     }
 
     case 'color': {
+      const colorStops = Array.isArray(props.colors) ? props.colors as { id: string; label: string; defaultValue?: string }[] : null;
+
+      if (colorStops && colorStops.length > 0) {
+        const defaults: Record<string, string> = {};
+        for (const stop of colorStops) {
+          defaults[stop.id] = stop.defaultValue ?? '#000000';
+        }
+        const [val, setVal] = useState<Record<string, string>>(defaults);
+        return (
+          <ColorSwatch
+            label={label}
+            value={val}
+            colors={colorStops}
+            onChange={(v) => { setVal(v as Record<string, string>); onChange(v); }}
+          />
+        );
+      }
+
       const [val, setVal] = useState<string>(
         typeof props.defaultValue === 'string' ? props.defaultValue : '#000000',
       );
@@ -136,25 +149,7 @@ function ControlRenderer({ control, mode, onControlChange, onControlValueChange 
         <ColorSwatch
           label={label}
           value={val}
-          onChange={(v) => { setVal(v); onChange(v); }}
-        />
-      );
-    }
-
-    case 'spring': {
-      const [val, setVal] = useState<SpringConfig>({
-        type: 'spring',
-        visualDuration: 0.3,
-        bounce: 0.2,
-        ...(typeof props.defaultValue === 'object' && props.defaultValue !== null
-          ? (props.defaultValue as Partial<SpringConfig>)
-          : {}),
-      });
-      return (
-        <SpringEditor
-          label={label}
-          value={val}
-          onChange={(v) => { setVal(v); onChange(v); }}
+          onChange={(v) => { setVal(v as string); onChange(v); }}
         />
       );
     }
@@ -173,7 +168,7 @@ function ControlRenderer({ control, mode, onControlChange, onControlValueChange 
       );
     }
 
-    case 'angle': {
+    case 'dial': {
       const [val, setVal] = useState<number>(
         typeof props.defaultValue === 'number' ? props.defaultValue : 0,
       );
@@ -192,8 +187,7 @@ function ControlRenderer({ control, mode, onControlChange, onControlValueChange 
     case 'button':
       return (
         <button
-          className="dialkit-button"
-          style={{ width: '100%' }}
+          className="dialkit-button dialkit-button--secondary"
           onClick={() => onChange(null)}
         >
           {label}
@@ -231,17 +225,17 @@ function ControlRenderer({ control, mode, onControlChange, onControlValueChange 
   }
 }
 
-// ─── Angle control detection ──────────────────────────────────────────────────
+// ─── Dial control detection ──────────────────────────────────────────────────
 
-interface AngleControlIds {
+interface DialControlIds {
   rx: string;
   ry: string;
   rz?: string;
 }
 
-function findAngleControls(controls: UIControl[]): AngleControlIds | null {
-  const angleControls = controls.filter(c => c.type === 'angle');
-  if (angleControls.length < 2) return null;
+function findDialControls(controls: UIControl[]): DialControlIds | null {
+  const dialControls = controls.filter(c => c.type === 'dial');
+  if (dialControls.length < 2) return null;
 
   const rxPatterns = ['rx', 'rotateX', 'rotate_x', 'rotatex', 'angleX', 'angle_x'];
   const ryPatterns = ['ry', 'rotateY', 'rotate_y', 'rotatey', 'angleY', 'angle_y'];
@@ -250,16 +244,51 @@ function findAngleControls(controls: UIControl[]): AngleControlIds | null {
   const match = (id: string, patterns: string[]) =>
     patterns.some(p => id.toLowerCase() === p.toLowerCase());
 
-  const rxCtrl = angleControls.find(c => match(c.id, rxPatterns));
-  const ryCtrl = angleControls.find(c => match(c.id, ryPatterns));
-  const rzCtrl = angleControls.find(c => match(c.id, rzPatterns));
+  const rxCtrl = dialControls.find(c => match(c.id, rxPatterns));
+  const ryCtrl = dialControls.find(c => match(c.id, ryPatterns));
+  const rzCtrl = dialControls.find(c => match(c.id, rzPatterns));
 
   if (!rxCtrl || !ryCtrl) {
-    // Fallback: use first two angle controls as rx/ry
-    return { rx: angleControls[0].id, ry: angleControls[1].id, rz: angleControls[2]?.id };
+    // Fallback: use first two dial controls as rx/ry
+    return { rx: dialControls[0].id, ry: dialControls[1].id, rz: dialControls[2]?.id };
   }
 
   return { rx: rxCtrl.id, ry: ryCtrl.id, rz: rzCtrl?.id };
+}
+
+// ─── Render grouping (consecutive dials → rows) ─────────────────────────────
+
+type RenderItem =
+  | { kind: 'single'; control: UIControl }
+  | { kind: 'dial-row'; controls: UIControl[] };
+
+function groupControls(controls: UIControl[], cubeDialIds: Set<string> | null): RenderItem[] {
+  const items: RenderItem[] = [];
+  let dialBuffer: UIControl[] = [];
+
+  const flushDials = () => {
+    if (dialBuffer.length === 0) return;
+    if (dialBuffer.length === 1) {
+      items.push({ kind: 'single', control: dialBuffer[0] });
+    } else {
+      items.push({ kind: 'dial-row', controls: [...dialBuffer] });
+    }
+    dialBuffer = [];
+  };
+
+  for (const control of controls) {
+    // Skip dial controls consumed by CubePreview
+    if (cubeDialIds && cubeDialIds.has(control.id)) continue;
+
+    if (control.type === 'dial') {
+      dialBuffer.push(control);
+    } else {
+      flushDials();
+      items.push({ kind: 'single', control });
+    }
+  }
+  flushDials();
+  return items;
 }
 
 // ─── UIRenderer ───────────────────────────────────────────────────────────────
@@ -278,9 +307,13 @@ export function UIRenderer({ spec, onApply, onValueChange }: UIRendererProps) {
   const controlValuesRef = useRef<ControlValues>(controlValues);
   controlValuesRef.current = controlValues;
 
-  const angleIds = findAngleControls(spec.controls);
-  const hasCubePreview = mode === 'apply' && !!spec.generate && !spec.imageNodeId && !!angleIds;
+  const dialIds = findDialControls(spec.controls);
+  const hasCubePreview = mode === 'apply' && !!spec.generate && !spec.imageNodeId && !!dialIds;
   const hasPreview = hasCubePreview;
+
+  const cubeDialIdSet = hasCubePreview && dialIds
+    ? new Set([dialIds.rx, dialIds.ry, ...(dialIds.rz ? [dialIds.rz] : [])])
+    : null;
 
   useEffect(() => {
     setControlValues(collectControlDefaults(spec.controls));
@@ -336,49 +369,77 @@ export function UIRenderer({ spec, onApply, onValueChange }: UIRendererProps) {
   }, [onValueChange, hasPreview, hasCubePreview, runPreview]);
 
   const handleCubeRotate = useCallback((newRx: number, newRy: number) => {
-    if (!angleIds) return;
+    if (!dialIds) return;
     setControlValues(prev => {
-      const next = { ...prev, [angleIds.rx]: newRx, [angleIds.ry]: newRy };
+      const next = { ...prev, [dialIds.rx]: newRx, [dialIds.ry]: newRy };
       controlValuesRef.current = next;
       return next;
     });
-    onValueChange?.(angleIds.rx, newRx);
-    onValueChange?.(angleIds.ry, newRy);
-  }, [angleIds, onValueChange]);
+    onValueChange?.(dialIds.rx, newRx);
+    onValueChange?.(dialIds.ry, newRy);
+  }, [dialIds, onValueChange]);
 
   if (!spec.controls || spec.controls.length === 0) return null;
 
+  const isConnected = (control: UIControl) => !!control.action || !!(control.actions?.length);
+  const renderItems = groupControls(spec.controls, cubeDialIdSet);
+
+  const renderControl = (control: UIControl) => {
+    // Section and button don't get ControlCard wrapper
+    if (control.type === 'section' || control.type === 'button') {
+      return (
+        <ControlRenderer
+          key={control.id}
+          control={control}
+          mode={mode}
+          onControlChange={handleControlChange}
+          onControlValueChange={handleControlValueChange}
+        />
+      );
+    }
+
+    return (
+      <ControlCard key={control.id} label={control.label ?? ''} connected={isConnected(control)}>
+        <ControlRenderer
+          control={control}
+          mode={mode}
+          onControlChange={handleControlChange}
+          onControlValueChange={handleControlValueChange}
+        />
+      </ControlCard>
+    );
+  };
+
   return (
     <div className="ui-renderer" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      {hasCubePreview && angleIds && (
+      {hasCubePreview && dialIds && (
         <CubePreview
-          rx={(controlValues[angleIds.rx] as number) ?? 0}
-          ry={(controlValues[angleIds.ry] as number) ?? 0}
-          rz={angleIds.rz ? ((controlValues[angleIds.rz] as number) ?? 0) : 0}
+          rx={(controlValues[dialIds.rx] as number) ?? 0}
+          ry={(controlValues[dialIds.ry] as number) ?? 0}
+          rz={dialIds.rz ? ((controlValues[dialIds.rz] as number) ?? 0) : 0}
           onRotate={handleCubeRotate}
         />
       )}
-      {spec.controls
-        .filter(control => !(hasCubePreview && control.type === 'angle'))
-        .map(control => (
-          <ControlRenderer
-            key={control.id}
-            control={control}
-            mode={mode}
-            onControlChange={handleControlChange}
-            onControlValueChange={handleControlValueChange}
-          />
-        ))}
+      {renderItems.map((item, idx) => {
+        if (item.kind === 'single') {
+          return renderControl(item.control);
+        }
+        // dial-row: multiple dials side by side
+        return (
+          <div key={`dial-row-${idx}`} className="dialkit-control-row">
+            {item.controls.map(control => renderControl(control))}
+          </div>
+        );
+      })}
       {hasPreview && !hasCubePreview && previewActions && previewActions.length > 0 && (
         <PreviewCanvas actions={previewActions} />
       )}
       {mode === 'apply' && onApply && (
         <button
           className="dialkit-button"
-          style={{ width: '100%' }}
           onClick={() => onApply(controlValues)}
         >
-          Apply
+          Apply changes
         </button>
       )}
     </div>

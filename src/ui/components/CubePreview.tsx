@@ -9,39 +9,23 @@ interface CubePreviewProps {
   onRotate: (rx: number, ry: number) => void;
 }
 
-const VERTEX = /* glsl */ `
+const WIRE_VERTEX = /* glsl */ `
 attribute vec3 position;
-attribute vec3 normal;
 uniform mat4 modelViewMatrix;
 uniform mat4 projectionMatrix;
-uniform mat3 normalMatrix;
-varying vec3 vNormal;
-varying vec3 vViewPos;
 void main() {
-  vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
-  vNormal = normalize(normalMatrix * normal);
-  vViewPos = -mvPos.xyz;
-  gl_Position = projectionMatrix * mvPos;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }
 `;
 
-const FRAGMENT = /* glsl */ `
+const WIRE_FRAGMENT = /* glsl */ `
 precision highp float;
-varying vec3 vNormal;
-varying vec3 vViewPos;
 void main() {
-  vec3 normal = normalize(vNormal);
-  vec3 viewDir = normalize(vViewPos);
-  vec3 light = normalize(vec3(0.5, 1.0, 0.8));
-  float diff = max(dot(normal, light), 0.0);
-  float rim = pow(1.0 - max(dot(normal, viewDir), 0.0), 3.0);
-  float ambient = 0.12;
-  vec3 color = vec3(0.4, 0.5, 0.7) * (ambient + diff * 0.8) + vec3(0.6, 0.7, 1.0) * rim * 0.15;
-  gl_FragColor = vec4(color, 0.7);
+  gl_FragColor = vec4(1.0, 1.0, 1.0, 0.5);
 }
 `;
 
-const ORBIT_RADIUS = 4;
+const ORBIT_RADIUS = 5.5;
 const DEG = Math.PI / 180;
 const RAD = 180 / Math.PI;
 
@@ -72,7 +56,6 @@ export function CubePreview({ rx, ry, rz = 0, onRotate }: CubePreviewProps) {
     camera: Camera;
     orbit: InstanceType<typeof Orbit>;
     scene: Transform;
-    cube: Mesh;
     wire: Mesh;
     gl: OGLRenderingContext;
     rafId: number;
@@ -116,34 +99,11 @@ export function CubePreview({ rx, ry, rz = 0, onRotate }: CubePreviewProps) {
       depth: 1.6,
     });
 
-    const litProgram = new Program(gl, {
-      vertex: VERTEX,
-      fragment: FRAGMENT,
-      transparent: true,
-      cullFace: false,
-      depthWrite: false,
-    });
-
-    const cube = new Mesh(gl, { geometry: boxGeometry, program: litProgram });
-    cube.setParent(scene);
-
     const wireProgram = new Program(gl, {
-      vertex: /* glsl */ `
-attribute vec3 position;
-uniform mat4 modelViewMatrix;
-uniform mat4 projectionMatrix;
-void main() {
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}
-`,
-      fragment: /* glsl */ `
-precision highp float;
-void main() {
-  gl_FragColor = vec4(1.0, 1.0, 1.0, 0.35);
-}
-`,
+      vertex: WIRE_VERTEX,
+      fragment: WIRE_FRAGMENT,
       transparent: true,
-      depthTest: true,
+      depthTest: false,
       depthWrite: false,
     });
 
@@ -185,7 +145,6 @@ void main() {
       camera,
       orbit,
       scene,
-      cube,
       wire,
       gl,
       rafId: 0,
@@ -248,8 +207,14 @@ void main() {
   }, [rx, ry]);
 
   return (
-    <div ref={containerRef} className="dialkit-cube-preview-wrapper">
-      <span className="dialkit-preview-label">Drag to rotate</span>
+    <div className="dialkit-control-card">
+      <div className="dialkit-control-header">
+        <span className="dialkit-control-label">3D Preview</span>
+        <span className="dialkit-control-status dialkit-control-status--on" />
+      </div>
+      <div ref={containerRef} className="dialkit-cube-preview-wrapper">
+        <span className="dialkit-preview-label">Drag to rotate</span>
+      </div>
     </div>
   );
 }

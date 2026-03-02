@@ -231,17 +231,14 @@ Props: options (Array<{ value: string, label: string }>), defaultValue (string)
 Value type: string
 
 ### color
-Hex color + color picker swatch.
-Props: defaultValue (string, hex)
-Value type: string (e.g. "#FF0000")
+Hex color + color picker swatch. Each color row shows a label, hex value, and swatch.
+Single color: Props: defaultValue (string, hex). Value type: string (e.g. "#FF0000")
+Multi-color (gradients, multiple stops): Props: colors (array of { id, label, defaultValue }). Value type: Record<string, string> keyed by stop id.
+Example single: { "id": "fill", "type": "color", "label": "Fill", "props": { "defaultValue": "#FF0000" } }
+Example gradient: { "id": "gradient", "type": "color", "label": "Gradient", "props": { "colors": [{ "id": "start", "label": "Start", "defaultValue": "#FF0000" }, { "id": "end", "label": "End", "defaultValue": "#0000FF" }] } }
 
-### spring
-Spring curve editor.
-Props: defaultValue (spring config object, optional)
-Value type: { type: "spring", visualDuration: number, bounce: number } | { type: "tween", duration: number, ease: string }
-
-### angle
-Circular rotation dial for angle values. Use instead of slider for rotation, direction, or any angular parameter.
+### dial
+Circular rotation dial. Only use when the user explicitly asks for a dial, knob, or circular rotation control. Do NOT auto-select — prefer slider for numeric ranges including angles unless the user specifically requests a dial.
 Props: min (number, default -180), max (number, default 180), step (number, default 1), defaultValue (number)
 Value type: number (degrees)
 
@@ -716,8 +713,8 @@ to render a 3D wireframe as editable Figma vectors. Controls for X/Y rotation an
     "replace": true,
     "mode": "apply",
     "controls": [
-      { "id": "rx", "type": "angle", "label": "Rotate X", "props": { "min": -180, "max": 180, "step": 1, "defaultValue": 30 } },
-      { "id": "ry", "type": "angle", "label": "Rotate Y", "props": { "min": -180, "max": 180, "step": 1, "defaultValue": 45 } },
+      { "id": "rx", "type": "dial", "label": "Rotate X", "props": { "min": -180, "max": 180, "step": 1, "defaultValue": 30 } },
+      { "id": "ry", "type": "dial", "label": "Rotate Y", "props": { "min": -180, "max": 180, "step": 1, "defaultValue": 45 } },
       { "id": "segments", "type": "slider", "label": "Segments", "props": { "min": 4, "max": 20, "step": 1, "defaultValue": 10 } },
       { "id": "color", "type": "color", "label": "Stroke Color", "props": { "defaultValue": "#3B82F6" } }
     ]

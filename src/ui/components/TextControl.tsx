@@ -5,10 +5,9 @@ interface TextControlProps {
   placeholder?: string;
 }
 
-export function TextControl({ label, value, onChange, placeholder }: TextControlProps) {
+export function TextControl({ value, onChange, placeholder }: TextControlProps) {
   return (
     <div className="dialkit-text-control">
-      <label className="dialkit-text-label">{label}</label>
       <input
         type="text"
         className="dialkit-text-input"

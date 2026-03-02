@@ -21,11 +21,18 @@ function getControlDefaultValue(control: UIControl): unknown {
       const options: Opt[] = Array.isArray(props.options) ? (props.options as Opt[]) : [];
       return typeof props.defaultValue === 'string' ? props.defaultValue : (options[0]?.value ?? '');
     }
-    case 'color':
+    case 'color': {
+      const colorStops = Array.isArray(props.colors) ? props.colors as { id: string; defaultValue?: string }[] : null;
+      if (colorStops && colorStops.length > 0) {
+        const defaults: Record<string, string> = {};
+        for (const stop of colorStops) defaults[stop.id] = stop.defaultValue ?? '#000000';
+        return defaults;
+      }
       return typeof props.defaultValue === 'string' ? props.defaultValue : '#000000';
+    }
     case 'text':
       return typeof props.defaultValue === 'string' ? props.defaultValue : '';
-    case 'angle':
+    case 'dial':
       return typeof props.defaultValue === 'number'
         ? props.defaultValue
         : 0;

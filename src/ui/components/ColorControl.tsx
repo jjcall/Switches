@@ -1,10 +1,17 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { HexColorPicker } from 'react-colorful';
 
+interface ColorStop {
+  id: string;
+  label: string;
+  defaultValue?: string;
+}
+
 interface ColorControlProps {
   label: string;
-  value: string;
-  onChange: (value: string) => void;
+  value: string | Record<string, string>;
+  onChange: (value: string | Record<string, string>) => void;
+  colors?: ColorStop[];
 }
 
 const HEX_COLOR_REGEX = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/;
@@ -14,7 +21,16 @@ function expandShorthandHex(hex: string): string {
   return `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`;
 }
 
-export function ColorControl({ label, value, onChange }: ColorControlProps) {
+// Single color row
+function ColorRow({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(value);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -92,5 +108,38 @@ export function ColorControl({ label, value, onChange }: ColorControlProps) {
         </div>
       )}
     </div>
+  );
+}
+
+export function ColorControl({ label, value, onChange, colors }: ColorControlProps) {
+  // Multi-color mode: colors prop defines multiple stops
+  if (colors && colors.length > 0) {
+    const values = (typeof value === 'object' && value !== null ? value : {}) as Record<string, string>;
+
+    return (
+      <>
+        {colors.map((stop) => (
+          <ColorRow
+            key={stop.id}
+            label={stop.label}
+            value={values[stop.id] ?? stop.defaultValue ?? '#000000'}
+            onChange={(v) => {
+              const next = { ...values, [stop.id]: v };
+              onChange(next);
+            }}
+          />
+        ))}
+      </>
+    );
+  }
+
+  // Single color mode
+  const singleValue = typeof value === 'string' ? value : '#000000';
+  return (
+    <ColorRow
+      label={label}
+      value={singleValue}
+      onChange={(v) => onChange(v)}
+    />
   );
 }

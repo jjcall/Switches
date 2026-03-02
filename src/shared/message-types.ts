@@ -273,12 +273,11 @@ export interface UIControl {
     | 'select'
     | 'section'
     | 'color'
-    | 'spring'
     | 'text'
     | 'button'
     | 'number'
     | 'segmented'
-    | 'angle';
+    | 'dial';
   label?: string;
   props?: Record<string, unknown>;
   /** Single Figma API update when this control changes (simple case). */

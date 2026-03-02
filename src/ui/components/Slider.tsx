@@ -37,7 +37,6 @@ function snapToDecile(rawValue: number, min: number, max: number): number {
 }
 
 export function Slider({
-  label,
   value,
   onChange,
   min = 0,
@@ -47,7 +46,6 @@ export function Slider({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const labelRef = useRef<HTMLSpanElement>(null);
   const valueSpanRef = useRef<HTMLSpanElement>(null);
   const [isInteracting, setIsInteracting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -276,22 +274,17 @@ export function Slider({
   };
 
   const HANDLE_BUFFER = 8;
-  const LABEL_CSS_LEFT = 10;
   const VALUE_CSS_RIGHT = 10;
-  let leftThreshold = 30;
   let rightThreshold = 78;
   const trackWidth = wrapperRef.current?.offsetWidth;
   if (trackWidth && trackWidth > 0) {
-    if (labelRef.current) {
-      leftThreshold = ((LABEL_CSS_LEFT + labelRef.current.offsetWidth + HANDLE_BUFFER) / trackWidth) * 100;
-    }
     if (valueSpanRef.current) {
       rightThreshold = ((trackWidth - VALUE_CSS_RIGHT - valueSpanRef.current.offsetWidth - HANDLE_BUFFER) / trackWidth) * 100;
     }
   }
-  const valueDodge = percentage < leftThreshold || percentage > rightThreshold;
+  const valueDodge = percentage > rightThreshold;
   const handleOpacity = !isActive ? 0 : valueDodge ? 0.1 : isDragging ? 0.9 : 0.5;
-  const fillBackground = isActive ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.11)';
+  const fillBackground = isActive ? 'var(--surface-overlay-strong)' : 'var(--surface-overlay-active)';
 
   const discreteSteps = (max - min) / step;
   const hashMarks = discreteSteps <= 10
@@ -327,7 +320,7 @@ export function Slider({
 
         <motion.div
           className="dialkit-slider-handle"
-          style={{ left: handleLeft, y: '-50%', background: 'rgba(255, 255, 255, 0.9)' }}
+          style={{ left: handleLeft, y: '-50%', background: '#A4A4A4' }}
           animate={{
             opacity: handleOpacity,
             scaleX: isActive ? 1 : 0.25,
@@ -339,8 +332,6 @@ export function Slider({
             opacity: { duration: 0.15 },
           }}
         />
-
-        <span ref={labelRef} className="dialkit-slider-label">{label}</span>
 
         {showInput ? (
           <input

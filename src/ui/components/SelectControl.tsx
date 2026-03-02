@@ -21,7 +21,7 @@ function normalizeOptions(options: SelectOption[]): { value: string; label: stri
   );
 }
 
-export function SelectControl({ label, value, options, onChange }: SelectControlProps) {
+export function SelectControl({ value, options, onChange }: SelectControlProps) {
   const [isOpen, setIsOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -76,9 +76,8 @@ export function SelectControl({ label, value, options, onChange }: SelectControl
         onClick={() => setIsOpen(!isOpen)}
         data-open={String(isOpen)}
       >
-        <span className="dialkit-select-label">{label}</span>
+        <span className="dialkit-select-value">{selectedOption?.label ?? value}</span>
         <div className="dialkit-select-right">
-          <span className="dialkit-select-value">{selectedOption?.label ?? value}</span>
           <motion.svg
             className="dialkit-select-chevron"
             viewBox="0 0 24 24"

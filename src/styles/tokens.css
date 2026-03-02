@@ -9,14 +9,26 @@
   --surface-secondary: #383838;
   --surface-elevated: #444444;
 
+  /* ── Surface overlays (white-alpha on dark bg) ──── */
+  --surface-overlay-ghost: rgba(255, 255, 255, 0.04);
+  --surface-overlay: rgba(255, 255, 255, 0.06);
+  --surface-overlay-hover: rgba(255, 255, 255, 0.10);
+  --surface-overlay-active: rgba(255, 255, 255, 0.12);
+  --surface-overlay-strong: rgba(255, 255, 255, 0.15);
+  --surface-canvas: rgba(0, 0, 0, 0.25);
+
   /* ── Border ──────────────────────────────────────── */
   --border-default: #444444;
+  --border-active: #808080;
   --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(255, 255, 255, 0.14);
+  --border-strong: rgba(255, 255, 255, 0.2);
 
   /* ── Text ────────────────────────────────────────── */
   --text-primary: #FFFFFF;
   --text-secondary: rgba(255, 255, 255, 0.9);
   --text-tertiary: rgba(255, 255, 255, 0.7);
+  --text-label: rgba(255, 255, 255, 0.65);
   --text-quaternary: rgba(255, 255, 255, 0.4);
   --text-placeholder: rgba(255, 255, 255, 0.35);
 
@@ -32,6 +44,11 @@
   --icon-on-accent: #FFFFFF;
   --icon-disabled: rgba(255, 255, 255, 0.12);
 
+  /* ── Status ────────────────────────────────────── */
+  --status-on: #8C9D6D;
+  --status-on-glow: rgba(140, 157, 109, 0.68);
+  --status-error: #C96B6C;
+
   /* ── Layer badge ───────────────────────────────────── */
   --badge-layer-bg: rgba(52, 87, 145, 0.28);
   --badge-layer-border: #345791;
@@ -45,6 +62,7 @@
 
   /* ── Typography ──────────────────────────────────── */
   --font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-family-mono: ui-monospace, 'SF Mono', 'Courier New', monospace;
   --font-size-xs: 11px;
   --font-size-sm: 13px;
   --line-height-xs: 16px;
@@ -52,6 +70,7 @@
   --font-weight-regular: 400;
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
+  --letter-spacing-label: 0.005em;
 
   /* ── Sizing ──────────────────────────────────────── */
   --header-height: 40px;

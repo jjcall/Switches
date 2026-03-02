@@ -347,6 +347,7 @@ function App() {
 
       switch (state) {
         case 'idle':
+          setCurrentUISpec(null);
           setMockSelectionName(null);
           setIsLoading(false);
           setLoadingVerb(null);
@@ -354,6 +355,7 @@ function App() {
           addMessage('assistant', 'State → idle');
           break;
         case 'ready':
+          setCurrentUISpec(null);
           setMockSelectionName('Button Primary');
           setIsLoading(false);
           setLoadingVerb(null);
@@ -361,12 +363,14 @@ function App() {
           addMessage('assistant', 'State → ready (mock layer: "Button Primary")');
           break;
         case 'loading':
+          setCurrentUISpec(null);
           setMockSelectionName('Button Primary');
           setFlaskState('loading');
           setLoadingVerb(getRandomVerb());
           addMessage('assistant', 'State → loading');
           break;
         case 'success':
+          setCurrentUISpec(null);
           setIsLoading(false);
           setLoadingVerb(null);
           finishLoading(true);
@@ -412,6 +416,172 @@ function App() {
         setFlaskState('ready');
       }, 5600));
 
+      return;
+    }
+
+    if (cmd === '/ui' || cmd.startsWith('/ui ')) {
+      const sub = cmd.slice(3).trim();
+
+      const mockControls: Record<string, { label: string; spec: UISpec }> = {
+        '': {
+          label: 'All Controls',
+          spec: {
+            mode: 'live',
+            controls: [
+              { id: 'dial-a', type: 'dial', label: 'Rotation X', props: { min: -180, max: 180, step: 1, defaultValue: 0 } },
+              { id: 'dial-b', type: 'dial', label: 'Rotation Y', props: { min: -180, max: 180, step: 1, defaultValue: 34 } },
+              { id: 'dial-full', type: 'dial', label: 'Angle', props: { min: -180, max: 180, step: 1, defaultValue: 0 } },
+              { id: 'slider', type: 'slider', label: 'Opacity', props: { min: 0, max: 100, step: 1, defaultValue: 73 } },
+              { id: 'select', type: 'select', label: 'Blend Mode', props: { options: ['Off', 'Multiply', 'Screen', 'Overlay'], defaultValue: 'Off' } },
+              { id: 'toggle', type: 'toggle', label: 'Visible', props: { defaultValue: true } },
+              { id: 'segmented', type: 'segmented', label: 'Alignment', props: { options: [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Center' }, { value: 'right', label: 'Right' }], defaultValue: 'center' } },
+              { id: 'number', type: 'number', label: 'Border Radius', props: { min: 0, max: 100, step: 1, defaultValue: 8 } },
+              { id: 'color', type: 'color', label: 'Fill Color', props: { defaultValue: '#3B82F6' } },
+              { id: 'text', type: 'text', label: 'Layer Name', props: { placeholder: 'Enter a name…', defaultValue: '' } },
+              { id: 'button', type: 'button', label: 'Randomize' },
+              { id: 'section', type: 'section', label: 'Advanced', props: { defaultOpen: true }, children: [
+                { id: 'sec-slider', type: 'slider', label: 'Blur', props: { min: 0, max: 50, step: 0.5, defaultValue: 4 } },
+                { id: 'sec-toggle', type: 'toggle', label: 'Clip Content', props: { defaultValue: false } },
+              ] },
+            ],
+          },
+        },
+        'dials': {
+          label: 'Dials',
+          spec: {
+            mode: 'live',
+            controls: [
+              { id: 'dial-a', type: 'dial', label: 'Rotation X', props: { min: -180, max: 180, step: 1, defaultValue: -45 } },
+              { id: 'dial-b', type: 'dial', label: 'Rotation Y', props: { min: -180, max: 180, step: 1, defaultValue: 34 } },
+              { id: 'dial-c', type: 'dial', label: 'Skew', props: { min: -90, max: 90, step: 1, defaultValue: 0 } },
+            ],
+          },
+        },
+        'slider': {
+          label: 'Sliders',
+          spec: {
+            mode: 'live',
+            controls: [
+              { id: 'sl-opacity', type: 'slider', label: 'Opacity', props: { min: 0, max: 100, step: 1, defaultValue: 73 } },
+              { id: 'sl-blur', type: 'slider', label: 'Blur', props: { min: 0, max: 50, step: 0.5, defaultValue: 4 } },
+              { id: 'sl-spread', type: 'slider', label: 'Spread', props: { min: -20, max: 20, step: 1, defaultValue: 0 } },
+            ],
+          },
+        },
+        '3d': {
+          label: '3D Cube',
+          spec: {
+            mode: 'apply',
+            generate: 'const rx = params.rx ?? 0; const ry = params.ry ?? 0; const rz = params.rz ?? 0; return [];',
+            controls: [
+              { id: 'rx', type: 'dial', label: 'Rotate X', props: { min: -180, max: 180, step: 1, defaultValue: 25 } },
+              { id: 'ry', type: 'dial', label: 'Rotate Y', props: { min: -180, max: 180, step: 1, defaultValue: -35 } },
+              { id: 'rz', type: 'dial', label: 'Rotate Z', props: { min: -180, max: 180, step: 1, defaultValue: 0 } },
+              { id: 'scale', type: 'slider', label: 'Scale', props: { min: 0.1, max: 3, step: 0.1, defaultValue: 1 } },
+            ],
+          },
+        },
+        'toggle': {
+          label: 'Toggle',
+          spec: {
+            mode: 'live',
+            controls: [
+              { id: 'tg-visible', type: 'toggle', label: 'Visible', props: { defaultValue: true } },
+              { id: 'tg-clip', type: 'toggle', label: 'Clip Content', props: { defaultValue: false } },
+              { id: 'tg-lock', type: 'toggle', label: 'Lock Aspect', props: { defaultValue: true } },
+            ],
+          },
+        },
+        'select': {
+          label: 'Select',
+          spec: {
+            mode: 'live',
+            controls: [
+              { id: 'sel-blend', type: 'select', label: 'Blend Mode', props: { options: ['Normal', 'Multiply', 'Screen', 'Overlay', 'Darken', 'Lighten'], defaultValue: 'Normal' } },
+              { id: 'sel-font', type: 'select', label: 'Font Weight', props: { options: ['Light', 'Regular', 'Medium', 'Bold', 'Black'], defaultValue: 'Regular' } },
+            ],
+          },
+        },
+        'segmented': {
+          label: 'Segmented',
+          spec: {
+            mode: 'live',
+            controls: [
+              { id: 'seg-align', type: 'segmented', label: 'Alignment', props: { options: [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Center' }, { value: 'right', label: 'Right' }], defaultValue: 'center' } },
+              { id: 'seg-size', type: 'segmented', label: 'Size', props: { options: [{ value: 'sm', label: 'S' }, { value: 'md', label: 'M' }, { value: 'lg', label: 'L' }, { value: 'xl', label: 'XL' }], defaultValue: 'md' } },
+            ],
+          },
+        },
+        'number': {
+          label: 'Number',
+          spec: {
+            mode: 'live',
+            controls: [
+              { id: 'num-radius', type: 'number', label: 'Border Radius', props: { min: 0, max: 100, step: 1, defaultValue: 8 } },
+              { id: 'num-spacing', type: 'number', label: 'Spacing', props: { min: 0, max: 64, step: 1, defaultValue: 16 } },
+            ],
+          },
+        },
+        'color': {
+          label: 'Color',
+          spec: {
+            mode: 'live',
+            controls: [
+              { id: 'col-fill', type: 'color', label: 'Fill Color', props: { defaultValue: '#3B82F6' } },
+              { id: 'col-multi', type: 'color', label: 'Gradient', props: { colors: [{ id: 'start', label: 'Start', defaultValue: '#3B82F6' }, { id: 'end', label: 'End', defaultValue: '#8B5CF6' }] } },
+            ],
+          },
+        },
+        'text': {
+          label: 'Text',
+          spec: {
+            mode: 'live',
+            controls: [
+              { id: 'txt-name', type: 'text', label: 'Layer Name', props: { placeholder: 'Enter a name…', defaultValue: '' } },
+              { id: 'txt-desc', type: 'text', label: 'Description', props: { placeholder: 'Add a description…', defaultValue: 'A sample description' } },
+            ],
+          },
+        },
+        'button': {
+          label: 'Button',
+          spec: {
+            mode: 'live',
+            controls: [
+              { id: 'btn-random', type: 'button', label: 'Randomize' },
+              { id: 'btn-reset', type: 'button', label: 'Reset' },
+            ],
+          },
+        },
+        'section': {
+          label: 'Section',
+          spec: {
+            mode: 'live',
+            controls: [
+              { id: 'sec-a', type: 'section', label: 'Transform', props: { defaultOpen: true }, children: [
+                { id: 'sec-a-dial-a', type: 'dial', label: 'Rotation', props: { min: -180, max: 180, step: 1, defaultValue: 0 } },
+                { id: 'sec-a-dial-b', type: 'dial', label: 'Skew', props: { min: -45, max: 45, step: 1, defaultValue: 0 } },
+                { id: 'sec-a-slider', type: 'slider', label: 'Scale', props: { min: 0, max: 200, step: 1, defaultValue: 100 } },
+              ] },
+              { id: 'sec-b', type: 'section', label: 'Appearance', props: { defaultOpen: false }, children: [
+                { id: 'sec-b-color', type: 'color', label: 'Fill', props: { defaultValue: '#E11D48' } },
+                { id: 'sec-b-toggle', type: 'toggle', label: 'Visible', props: { defaultValue: true } },
+              ] },
+            ],
+          },
+        },
+      };
+
+      const entry = mockControls[sub];
+      if (!entry) {
+        const keys = Object.keys(mockControls).filter(k => k !== '').join(', ');
+        addMessage('error', `Unknown: /ui ${sub}. Options: ${keys}`);
+        return;
+      }
+
+      setCurrentUISpec(entry.spec);
+      setMockSelectionName(entry.label);
+      setFlaskState('ready');
+      addMessage('assistant', `Loaded ${entry.label}`);
       return;
     }
 

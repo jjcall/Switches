@@ -5,7 +5,8 @@
   "scripts": {
     "build": "node esbuild.config.js",
     "watch": "node esbuild.config.js --watch",
-    "proxy": "node proxy.mjs"
+    "proxy": "node proxy.mjs",
+    "preview": "node esbuild.config.js --preview"
   },
   "dependencies": {
     "bezier-easing": "^2.1.0",
