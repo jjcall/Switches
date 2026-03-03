@@ -7,44 +7,40 @@
   <style>
     /* src/styles/tokens.css */
 :root {
-  --surface-primary: #2C2C2C;
-  --surface-secondary: #383838;
-  --surface-elevated: #444444;
-  --surface-overlay-ghost: rgba(255, 255, 255, 0.04);
-  --surface-overlay: rgba(255, 255, 255, 0.06);
-  --surface-overlay-hover: rgba(255, 255, 255, 0.10);
-  --surface-overlay-active: rgba(255, 255, 255, 0.12);
-  --surface-overlay-strong: rgba(255, 255, 255, 0.15);
+  --dark-primary: #2C2C2C;
+  --dark-secondary: #414141;
+  --dark-tertiary: #757575;
+  --light-primary: #FFFFFF;
+  --light-secondary: rgba(255, 255, 255, 0.7);
+  --light-tertiary: rgba(255, 255, 255, 0.4);
+  --light-active: rgba(255, 255, 255, 0.5);
+  --light-overlay: rgba(255, 255, 255, 0.1);
+  --light-overlay-hover: rgba(255, 255, 255, 0.15);
+  --light-ghost: rgba(255, 255, 255, 0.06);
+  --surface-primary: var(--dark-primary);
+  --surface-secondary: var(--dark-secondary);
+  --surface-control: var(--light-overlay);
+  --surface-active: var(--light-active);
   --surface-canvas: rgba(0, 0, 0, 0.25);
-  --border-default: #444444;
-  --border-active: #808080;
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-hover: rgba(255, 255, 255, 0.14);
-  --border-strong: rgba(255, 255, 255, 0.2);
-  --text-primary: #FFFFFF;
-  --text-secondary: rgba(255, 255, 255, 0.9);
-  --text-tertiary: rgba(255, 255, 255, 0.7);
-  --text-label: rgba(255, 255, 255, 0.65);
-  --text-quaternary: rgba(255, 255, 255, 0.4);
+  --border-default: var(--dark-secondary);
+  --border-active: var(--light-active);
+  --border-subtle: var(--light-overlay);
+  --text-primary: var(--light-primary);
+  --text-secondary: var(--light-secondary);
+  --text-tertiary: var(--light-tertiary);
   --text-placeholder: rgba(255, 255, 255, 0.35);
+  --icon-default: var(--light-tertiary);
+  --icon-disabled: rgba(255, 255, 255, 0.12);
   --accent-blue: #0D99FF;
   --accent-blue-hover: #2BA6FF;
-  --accent-blue-light: #7CC4F8;
+  --accent-blue-active: #0A7AD4;
   --accent-green: #14AE5C;
-  --accent-liquid-blue: #3B82F6;
-  --icon-default: rgba(255, 255, 255, 0.4);
-  --icon-on-accent: #FFFFFF;
-  --icon-disabled: rgba(255, 255, 255, 0.12);
   --status-on: #8C9D6D;
   --status-on-glow: rgba(140, 157, 109, 0.68);
   --status-error: #C96B6C;
   --badge-layer-bg: rgba(52, 87, 145, 0.28);
   --badge-layer-border: #345791;
   --badge-layer-text: #6991D4;
-  --send-disabled: #757575;
-  --send-active: var(--accent-blue);
-  --send-active-hover: var(--accent-blue-hover);
-  --send-icon: #FFFFFF;
   --font-family:
     "Inter",
     system-ui,
@@ -66,9 +62,9 @@
   --header-height: 40px;
   --icon-size-sm: 16px;
   --icon-size-md: 24px;
-  --radius-sm: 5px;
-  --radius-md: 13px;
-  --radius-full: 9999px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-full: 0px;
   --space-xs: 4px;
   --space-sm: 8px;
   --space-md: 12px;
@@ -98,29 +94,26 @@ body {
 #preview-root {
   width: 100%;
   height: 100vh;
-  --dial-surface: var(--surface-overlay);
-  --dial-surface-hover: var(--surface-overlay-hover);
-  --dial-surface-active: var(--surface-overlay-active);
-  --dial-text-root: var(--text-primary);
-  --dial-text-section: var(--text-label);
-  --dial-text-label: var(--text-label);
+  --dial-surface: var(--surface-control);
+  --dial-surface-hover: var(--light-overlay-hover);
+  --dial-surface-active: var(--light-overlay);
+  --dial-text-section: var(--text-secondary);
+  --dial-text-label: var(--text-secondary);
   --dial-text-primary: var(--text-secondary);
-  --dial-text-secondary: rgba(255, 255, 255, 0.55);
-  --dial-text-tertiary: var(--text-placeholder);
   --dial-border: var(--border-subtle);
-  --dial-border-hover: var(--border-hover);
+  --dial-border-hover: var(--border-subtle);
   --dial-glass-bg: var(--surface-primary);
-  --dial-radius: 6px;
+  --dial-radius: 0px;
   --dial-row-height: 24px;
 }
 .dialkit-control-card {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: var(--space-sm);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
+  gap: 8px;
+  padding: var(--space-md);
+  border: none;
+  border-bottom: 1px solid var(--border-default);
   background: transparent;
   width: 100%;
 }
@@ -136,7 +129,7 @@ body {
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-xs);
   letter-spacing: var(--letter-spacing-label);
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 .dialkit-control-status {
   width: 8px;
@@ -176,12 +169,17 @@ body {
 }
 .dialkit-control-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-wrap: nowrap;
+  gap: 0;
+  border-bottom: 1px solid var(--border-default);
 }
 .dialkit-control-row > .dialkit-control-card {
-  flex: 1 1 calc(50% - 4px);
+  flex: 1 1 0%;
   min-width: 0;
+  border-bottom: none;
+}
+.dialkit-control-row > .dialkit-control-card:not(:last-child) {
+  border-right: 1px solid var(--border-default);
 }
 .dialkit-slider-wrapper {
   position: relative;
@@ -217,10 +215,10 @@ body {
   transition: background 200ms;
 }
 .dialkit-slider-active .dialkit-slider-hashmark {
-  background: var(--surface-overlay-strong);
+  background: var(--light-overlay-hover);
 }
 .dialkit-slider-active .dialkit-slider-value {
-  color: #A4A4A4;
+  color: var(--text-secondary);
 }
 .dialkit-slider-fill {
   position: absolute;
@@ -244,14 +242,14 @@ body {
   transform: translateY(calc(-50% + 0.5px));
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-regular);
-  color: #A4A4A4;
+  color: var(--text-secondary);
   pointer-events: auto;
   transition: color 0.15s, border-color 0.15s;
   border-bottom: 1px solid transparent;
   padding-bottom: 1px;
 }
 .dialkit-slider-value-editable {
-  border-bottom-color: #A4A4A4;
+  border-bottom-color: var(--text-secondary);
 }
 .dialkit-slider-input {
   position: absolute;
@@ -263,10 +261,10 @@ body {
   max-width: 6ch;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-regular);
-  color: #A4A4A4;
+  color: var(--text-secondary);
   background: transparent;
   border: none;
-  border-bottom: 1px solid #A4A4A4;
+  border-bottom: 1px solid var(--text-secondary);
   padding: 0 0 1px 0;
   outline: none;
   text-align: right;
@@ -278,7 +276,7 @@ body {
   width: 100%;
   height: var(--dial-row-height);
   background: transparent;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 .dialkit-segmented-pill {
   display: none;
@@ -292,19 +290,19 @@ body {
   font-family: inherit;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-regular);
-  background: var(--border-default);
+  background: var(--surface-control);
   border: none;
   cursor: pointer;
   transition: color 0.15s, background 0.15s;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 .dialkit-segmented-button[data-active=true] {
-  color: var(--text-primary);
-  background: var(--border-active);
+  color: var(--dark-primary);
+  background: var(--surface-active);
 }
 .dialkit-segmented-button[data-active=false] {
-  color: var(--text-tertiary);
-  background: var(--border-default);
+  color: var(--text-secondary);
+  background: var(--surface-control);
 }
 .dialkit-labeled-control {
   display: flex;
@@ -337,7 +335,7 @@ body {
   font-family: inherit;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
-  color: #FFFFFF;
+  color: var(--light-primary);
   background: var(--accent-blue);
   border: none;
   border-radius: var(--radius-sm);
@@ -350,18 +348,18 @@ body {
   background: var(--accent-blue-hover);
 }
 .dialkit-button:active {
-  background: #0A7AD4;
+  background: var(--accent-blue-active);
 }
 .dialkit-button--secondary {
   background: transparent;
   border: 1px solid var(--border-default);
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-weight: var(--font-weight-regular);
 }
 .dialkit-button--secondary:hover {
   background: transparent;
   border-color: var(--border-active);
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 .dialkit-button--secondary:active {
   background: transparent;
@@ -373,8 +371,8 @@ body {
   width: 100%;
   height: var(--dial-row-height);
   padding: 0 8px;
-  background: var(--border-default);
-  border-radius: 5px;
+  background: var(--surface-control);
+  border-radius: var(--radius-sm);
 }
 .dialkit-text-input {
   flex: 1;
@@ -382,7 +380,7 @@ body {
   font-family: inherit;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-regular);
-  color: #A4A4A4;
+  color: var(--text-secondary);
   background: transparent;
   border: none;
   padding: 0;
@@ -394,7 +392,7 @@ body {
   color: var(--text-primary);
 }
 .dialkit-text-input::placeholder {
-  color: var(--text-quaternary);
+  color: var(--text-tertiary);
 }
 .dialkit-select-row {
   width: 100%;
@@ -409,23 +407,23 @@ body {
   font-family: inherit;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-regular);
-  color: #A4A4A4;
-  background: var(--border-default);
+  color: var(--text-secondary);
+  background: var(--surface-control);
   border: none;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background 0.15s;
 }
 .dialkit-select-trigger:hover {
-  background: var(--border-active);
+  background: var(--light-overlay-hover);
 }
 .dialkit-select-trigger[data-open=true] {
-  background: var(--border-active);
+  background: var(--light-overlay-hover);
 }
 .dialkit-select-value {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-regular);
-  color: #A4A4A4;
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -438,7 +436,7 @@ body {
   width: 14px;
   height: 14px;
   flex-shrink: 0;
-  color: #A4A4A4;
+  color: var(--text-secondary);
 }
 .dialkit-select-dropdown {
   background: var(--dial-glass-bg);
@@ -447,12 +445,12 @@ body {
   padding: 4px;
   z-index: 10000;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-  --dial-surface: var(--surface-overlay);
-  --dial-surface-hover: var(--surface-overlay-hover);
-  --dial-surface-active: var(--surface-overlay-active);
-  --dial-text-label: var(--text-label);
-  --dial-text-primary: var(--text-secondary);
-  --dial-radius: 6px;
+  --dial-surface: var(--surface-control);
+  --dial-surface-hover: var(--light-overlay-hover);
+  --dial-surface-active: var(--light-overlay);
+  --dial-text-label: var(--text-secondary);
+  --dial-text-primary: var(--text-primary);
+  --dial-radius: 0px;
   font-family: var(--font-family);
   font-size: var(--font-size-xs);
   -webkit-font-smoothing: antialiased;
@@ -467,7 +465,7 @@ body {
   color: var(--dial-text-label);
   background: transparent;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   text-align: left;
   transition: background 0.15s, color 0.15s;
@@ -493,7 +491,7 @@ body {
 .dialkit-color-label {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-regular);
-  color: #A4A4A4;
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 .dialkit-color-inputs {
@@ -504,14 +502,14 @@ body {
 .dialkit-color-hex {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-regular);
-  color: #A4A4A4;
+  color: var(--text-secondary);
   cursor: text;
 }
 .dialkit-color-hex-input {
   width: 7ch;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-regular);
-  color: #A4A4A4;
+  color: var(--text-secondary);
   background: transparent;
   border: none;
   padding: 0;
@@ -524,8 +522,8 @@ body {
 .dialkit-color-swatch {
   width: 18px;
   height: 18px;
-  border-radius: 4px;
-  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
   cursor: pointer;
   transition: transform 0.15s;
   padding: 0;
@@ -550,13 +548,13 @@ body {
   height: auto !important;
 }
 .dialkit-color-picker-popover .react-colorful__saturation {
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   height: 140px;
   border-bottom: none;
 }
 .dialkit-color-picker-popover .react-colorful__hue {
   height: 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   margin-top: 8px;
 }
 .dialkit-color-picker-popover .react-colorful__saturation-pointer,
@@ -588,19 +586,19 @@ body {
 .dialkit-dial-value-container {
   min-width: 37px;
   height: 16px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
   transition: background 0.15s;
 }
 .dialkit-dial-value-container--active {
-  background: #444444;
+  background: var(--surface-secondary);
 }
 .dialkit-angle-value {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-regular);
-  color: #A4A4A4;
+  color: var(--text-secondary);
   text-align: center;
   line-height: 16px;
   padding: 0 4px;
@@ -610,7 +608,7 @@ body {
   height: 16px;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-regular);
-  color: #A4A4A4;
+  color: var(--text-secondary);
   background: transparent;
   border: none;
   padding: 0 4px;
@@ -619,25 +617,18 @@ body {
   line-height: 16px;
 }
 .dialkit-folder {
-  border-top: 1px solid var(--surface-overlay);
-  border-bottom: 1px solid var(--surface-overlay);
-  margin-top: 4px;
-  margin-bottom: 4px;
+  border-top: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--border-default);
+  margin: 0;
 }
 .dialkit-folder + .dialkit-folder {
-  margin-top: -4px;
   border-top: none;
-}
-.dialkit-folder:first-child {
-  margin-top: 0;
-}
-.dialkit-folder:last-child {
-  margin-bottom: 0;
 }
 .dialkit-folder-header {
   cursor: pointer;
   user-select: none;
   height: var(--dial-row-height);
+  padding: 0 var(--space-md);
 }
 .dialkit-folder-header-top {
   display: flex;
@@ -674,9 +665,8 @@ body {
 .dialkit-folder-inner {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding-bottom: 8px;
-  padding-top: 2px;
+  gap: 0;
+  padding: 0;
 }
 .shell {
   display: flex;
@@ -690,7 +680,7 @@ body {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 16px 12px;
+  padding: 0;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -702,8 +692,8 @@ body {
   background: transparent;
 }
 .render-zone::-webkit-scrollbar-thumb {
-  background: var(--surface-overlay-active);
-  border-radius: 2px;
+  background: var(--light-overlay);
+  border-radius: var(--radius-sm);
 }
 .render-zone-empty {
   flex: 1;
@@ -745,7 +735,7 @@ body {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-xs);
-  color: var(--text-quaternary);
+  color: var(--text-tertiary);
   max-width: 228px;
 }
 .render-zone-loading-text {
@@ -753,7 +743,7 @@ body {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-sm);
-  color: var(--text-quaternary);
+  color: var(--text-tertiary);
   -webkit-mask-image:
     linear-gradient(
       -75deg,
@@ -790,7 +780,7 @@ body {
   cursor: grabbing;
 }
 .ui-renderer {
-  padding-bottom: 8px;
+  padding-bottom: 0;
 }
 .dialkit-preview-wrapper {
   position: relative;
@@ -849,8 +839,8 @@ body {
 .chat-prompt {
   width: 100%;
   padding: 8px 12px;
-  border-radius: 10px;
-  background: var(--surface-secondary);
+  border-radius: var(--radius-sm);
+  background: var(--surface-control);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -860,7 +850,7 @@ body {
   flex-shrink: 0;
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: var(--radius-sm);
   background: var(--badge-layer-border);
 }
 .chat-prompt--user::before {
@@ -873,7 +863,7 @@ body {
   display: block;
   font-size: var(--font-size-xs);
   line-height: 1.4;
-  color: var(--text-quaternary);
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -881,7 +871,7 @@ body {
 }
 .chat-input-box {
   position: relative;
-  border-top: 1px solid var(--border-default);
+  border-top: 1px solid var(--border-subtle);
   padding: var(--space-md) var(--space-sm) var(--space-md) var(--space-lg);
   transition: padding 0.15s ease;
 }
@@ -925,10 +915,10 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--send-disabled);
+  background: var(--dark-tertiary);
   border: none;
   border-radius: var(--radius-full);
-  color: var(--send-icon);
+  color: var(--light-primary);
   cursor: default;
   transition:
     background 0.15s,
@@ -937,12 +927,12 @@ body {
   padding: 0;
 }
 .chat-input-send--active {
-  background: var(--send-active);
-  color: var(--send-icon);
+  background: var(--accent-blue);
+  color: var(--light-primary);
   cursor: pointer;
 }
 .chat-input-send--active:hover {
-  background: var(--send-active-hover);
+  background: var(--accent-blue-hover);
 }
 .chat-input-send--active:active {
   transform: scale(0.92);
@@ -960,13 +950,13 @@ body {
   align-items: center;
   gap: 10px;
   font-size: var(--font-size-sm);
-  color: var(--text-quaternary);
+  color: var(--text-tertiary);
 }
 .chat-input-spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid var(--surface-overlay-active);
-  border-top-color: var(--text-quaternary);
+  border: 2px solid var(--light-overlay);
+  border-top-color: var(--text-tertiary);
   border-radius: 50%;
   animation: chat-spin 0.7s linear infinite;
 }
@@ -35074,8 +35064,7 @@ Each control:
   "label":    "<display label>",
   "props":    { <type-specific props, including defaultValue> },
   "action":   { <single action descriptor> },
-  "actions":  [ <array of action descriptors \u2014 for coordinated multi-property updates> ],
-  "children": [ <controls, only for type=section> ]
+  "actions":  [ <array of action descriptors \u2014 for coordinated multi-property updates> ]
 }
 
 ### How control actions work
@@ -35196,11 +35185,6 @@ Make sure stop IDs are unique and don't collide with other control IDs.
 Circular rotation dial. Only use when the user explicitly asks for a dial, knob, or circular rotation control. Do NOT auto-select \u2014 prefer slider for numeric ranges including angles unless the user specifically requests a dial.
 Props: min (number, default -180), max (number, default 180), step (number, default 1), defaultValue (number)
 Value type: number (degrees)
-
-### section
-Collapsible container. Use to group related controls.
-Props: defaultOpen (boolean, default true)
-Children: array of controls
 
 ### text
 Labeled text input.
@@ -35840,7 +35824,7 @@ Key points for the direct-actions example above:
 ## Constraints
 
 - Only reference node IDs from the selection context, or tempIds assigned in the same batch.
-- Keep panels concise \u2014 3 to 8 controls is ideal. Use sections for grouping.
+- Keep panels concise \u2014 3 to 8 controls is ideal.
 - If the request can't be fulfilled with the selection, set actions to [] and explain in "message".
 - Do not add controls for properties that can't be live-updated (e.g. font loading).
 - When in doubt, produce fewer, better-chosen controls rather than a long list.
@@ -36196,7 +36180,7 @@ ${text.slice(0, 300)}` };
     }
     const valueDodge = percentage > rightThreshold;
     const handleOpacity = !isActive ? 0 : valueDodge ? 0.1 : isDragging2 ? 0.9 : 0.5;
-    const fillBackground = isActive ? "var(--surface-overlay-strong)" : "var(--surface-overlay-active)";
+    const fillBackground = isActive ? "var(--light-active)" : "var(--light-overlay-hover)";
     const discreteSteps = (max6 - min6) / step;
     const hashMarks = discreteSteps <= 10 ? Array.from({ length: discreteSteps - 1 }, (_2, i2) => {
       const pct = (i2 + 1) * step / (max6 - min6) * 100;
@@ -36230,7 +36214,7 @@ ${text.slice(0, 300)}` };
             motion.div,
             {
               className: "dialkit-slider-handle",
-              style: { left: handleLeft, y: "-50%", background: "#A4A4A4" },
+              style: { left: handleLeft, y: "-50%", background: "var(--text-secondary)" },
               animate: {
                 opacity: handleOpacity,
                 scaleX: isActive ? 1 : 0.25,
@@ -36462,34 +36446,6 @@ ${text.slice(0, 300)}` };
   // src/ui/components/Folder.tsx
   var import_react33 = __toESM(require_react());
   var import_jsx_runtime12 = __toESM(require_jsx_runtime());
-  function Folder({ title, children, defaultOpen = true, onOpenChange }) {
-    const [isOpen, setIsOpen] = (0, import_react33.useState)(defaultOpen);
-    const handleToggle = () => {
-      const next = !isOpen;
-      setIsOpen(next);
-      onOpenChange?.(next);
-    };
-    return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "dialkit-folder", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: "dialkit-folder-header", onClick: handleToggle, children: /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "dialkit-folder-header-top", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: "dialkit-folder-title-row", children: /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "dialkit-folder-title", children: title }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
-          "svg",
-          {
-            className: "dialkit-folder-icon",
-            viewBox: "0 0 24 24",
-            fill: "none",
-            stroke: "currentColor",
-            strokeWidth: "2.5",
-            strokeLinecap: "round",
-            strokeLinejoin: "round",
-            style: { transform: isOpen ? "rotate(0deg)" : "rotate(180deg)", transition: "transform 0.2s ease" },
-            children: /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("path", { d: "M6 9.5L12 15.5L18 9.5" })
-          }
-        )
-      ] }) }),
-      isOpen && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: "dialkit-folder-inner", children })
-    ] });
-  }
 
   // src/ui/components/ColorControl.tsx
   var import_react35 = __toESM(require_react());
@@ -37128,7 +37084,7 @@ ${text.slice(0, 300)}` };
                   {
                     d: arcPath,
                     fill: "none",
-                    stroke: "#808080",
+                    stroke: "var(--dark-tertiary)",
                     strokeWidth: STROKE_WIDTH,
                     strokeLinecap: "round"
                   }
@@ -37140,7 +37096,7 @@ ${text.slice(0, 300)}` };
                       opacity: showDots ? 0.5 : 0,
                       transition: showDots ? "opacity 0.5s ease" : "opacity 0.2s ease"
                     },
-                    children: dots.map((pt, i2) => /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("circle", { cx: pt.x, cy: pt.y, r: 1, fill: "#808080" }, i2))
+                    children: dots.map((pt, i2) => /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("circle", { cx: pt.x, cy: pt.y, r: 1, fill: "var(--dark-tertiary)" }, i2))
                   }
                 ),
                 /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
@@ -37150,7 +37106,7 @@ ${text.slice(0, 300)}` };
                     y1: CENTER,
                     x2: needleTip.x,
                     y2: needleTip.y,
-                    stroke: "#808080",
+                    stroke: "var(--dark-tertiary)",
                     strokeWidth: STROKE_WIDTH,
                     strokeLinecap: "round"
                   }
@@ -41194,22 +41150,15 @@ void main() {
         return typeof props.defaultValue === "number" ? props.defaultValue : 0;
       case "button":
         return null;
-      case "section":
       default:
         return void 0;
     }
   }
   function collectControlDefaults(controls) {
     const values = {};
-    const walk = (list) => {
-      for (const control of list) {
-        if (control.type !== "section") {
-          values[control.id] = getControlDefaultValue(control);
-        }
-        if (control.children?.length) walk(control.children);
-      }
-    };
-    walk(controls);
+    for (const control of controls) {
+      values[control.id] = getControlDefaultValue(control);
+    }
     return values;
   }
   var PLACEHOLDER_RE = /\{\{(\w+)\}\}/g;
@@ -46595,33 +46544,14 @@ void main() {
         );
       }
       case "button":
-        return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+        return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("div", { className: "dialkit-control-card", children: /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
           "button",
           {
             className: "dialkit-button dialkit-button--secondary",
             onClick: () => onChange(null),
             children: label
           }
-        );
-      case "section": {
-        const children = control.children ?? [];
-        return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
-          Folder,
-          {
-            title: label,
-            defaultOpen: props.defaultOpen !== false,
-            children: /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: children.map((child) => /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
-              ControlRenderer,
-              {
-                control: child,
-                onControlChange,
-                onControlValueChange
-              },
-              child.id
-            )) })
-          }
-        );
-      }
+        ) });
       default:
         return /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { style: { fontSize: 10, color: "rgba(255,80,80,0.7)", padding: "4px 8px" }, children: [
           "Unknown control type: ",
@@ -46645,27 +46575,26 @@ void main() {
     return { rx: rxCtrl.id, ry: ryCtrl.id, rz: rzCtrl?.id };
   }
   function groupControls(controls, cubeDialIds) {
+    const filtered = cubeDialIds ? controls.filter((c2) => !cubeDialIds.has(c2.id)) : controls;
+    const allDials = filtered.filter((c2) => c2.type === "dial");
+    const dialRows = [];
+    for (let i2 = 0; i2 < allDials.length; i2 += 2) {
+      dialRows.push(allDials.slice(i2, i2 + 2));
+    }
     const items = [];
-    let dialBuffer = [];
-    const flushDials = () => {
-      if (dialBuffer.length === 0) return;
-      if (dialBuffer.length === 1) {
-        items.push({ kind: "single", control: dialBuffer[0] });
-      } else {
-        items.push({ kind: "dial-row", controls: [...dialBuffer] });
-      }
-      dialBuffer = [];
-    };
-    for (const control of controls) {
-      if (cubeDialIds && cubeDialIds.has(control.id)) continue;
-      if (control.type === "dial") {
-        dialBuffer.push(control);
-      } else {
-        flushDials();
+    let nextDialRow = 0;
+    const dialIdSet = new Set(allDials.map((d2) => d2.id));
+    for (const control of filtered) {
+      if (control.type !== "dial") {
         items.push({ kind: "single", control });
+      } else if (dialIdSet.has(control.id)) {
+        const row = dialRows[nextDialRow];
+        if (row && row[0].id === control.id) {
+          items.push({ kind: "dial-row", controls: row });
+          nextDialRow++;
+        }
       }
     }
-    flushDials();
     return items;
   }
   function UIRenderer({ spec, onApply, onValueChange }) {
@@ -46751,7 +46680,7 @@ void main() {
     const isConnected = (control) => hasGenerator || !!control.action || !!control.actions?.length;
     const renderItems = groupControls(spec.controls, cubeDialIdSet);
     const renderControl = (control) => {
-      if (control.type === "section" || control.type === "button") {
+      if (control.type === "button") {
         return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
           ControlRenderer,
           {
@@ -46771,7 +46700,7 @@ void main() {
         }
       ) }, control.id);
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "ui-renderer", style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "ui-renderer", style: { display: "flex", flexDirection: "column" }, children: [
       hasCubePreview && dialIds && /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
         CubePreview,
         {
@@ -46798,7 +46727,7 @@ void main() {
   var FLASK_MASK = "M22 20.359C22 20.984 21.805 21.594 21.441 22.103L14.072 32.419C13.6 33.081 14.074 34 14.887 34H33.113C33.926 34 34.4 33.081 33.928 32.419L26.559 22.103C26.195 21.594 26 20.984 26 20.359V14H22V20.359Z";
   var BLUE = "#3B82F6";
   var GREEN = "#14AE5C";
-  var FLASK_COLOR = "rgba(255, 255, 255, 0.4)";
+  var FLASK_COLOR = "var(--light-tertiary)";
   var BUBBLES = [
     { cx: 13, cy: 19, r: 3 },
     { cx: 35, cy: 21, r: 1 },
@@ -47337,11 +47266,7 @@ ${errors.join("\n")}`);
                 { id: "number", type: "number", label: "Border Radius", props: { min: 0, max: 100, step: 1, defaultValue: 8 } },
                 { id: "color", type: "color", label: "Fill Color", props: { defaultValue: "#3B82F6" } },
                 { id: "text", type: "text", label: "Layer Name", props: { placeholder: "Enter a name\u2026", defaultValue: "" } },
-                { id: "button", type: "button", label: "Randomize" },
-                { id: "section", type: "section", label: "Advanced", props: { defaultOpen: true }, children: [
-                  { id: "sec-slider", type: "slider", label: "Blur", props: { min: 0, max: 50, step: 0.5, defaultValue: 4 } },
-                  { id: "sec-toggle", type: "toggle", label: "Clip Content", props: { defaultValue: false } }
-                ] }
+                { id: "button", type: "button", label: "Randomize" }
               ]
             }
           },
@@ -47448,23 +47373,6 @@ ${errors.join("\n")}`);
               controls: [
                 { id: "btn-random", type: "button", label: "Randomize" },
                 { id: "btn-reset", type: "button", label: "Reset" }
-              ]
-            }
-          },
-          "section": {
-            label: "Section",
-            spec: {
-              mode: "live",
-              controls: [
-                { id: "sec-a", type: "section", label: "Transform", props: { defaultOpen: true }, children: [
-                  { id: "sec-a-dial-a", type: "dial", label: "Rotation", props: { min: -180, max: 180, step: 1, defaultValue: 0 } },
-                  { id: "sec-a-dial-b", type: "dial", label: "Skew", props: { min: -45, max: 45, step: 1, defaultValue: 0 } },
-                  { id: "sec-a-slider", type: "slider", label: "Scale", props: { min: 0, max: 200, step: 1, defaultValue: 100 } }
-                ] },
-                { id: "sec-b", type: "section", label: "Appearance", props: { defaultOpen: false }, children: [
-                  { id: "sec-b-color", type: "color", label: "Fill", props: { defaultValue: "#E11D48" } },
-                  { id: "sec-b-toggle", type: "toggle", label: "Visible", props: { defaultValue: true } }
-                ] }
               ]
             }
           }

@@ -25,7 +25,7 @@ const FLASK_MASK =
 
 const BLUE = '#3B82F6';
 const GREEN = '#14AE5C';
-const FLASK_COLOR = 'rgba(255, 255, 255, 0.4)';
+const FLASK_COLOR = 'var(--light-tertiary)';
 
 const BUBBLES = [
   { cx: 13, cy: 19, r: 3 },

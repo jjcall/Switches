@@ -295,7 +295,7 @@ function renderNode(ctx: CanvasRenderingContext2D, node: NodeState) {
           ctx.stroke(path);
         }
         if (!fill && !stroke) {
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; // --light-tertiary
           ctx.lineWidth = 1;
           ctx.stroke(path);
         }

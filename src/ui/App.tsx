@@ -551,10 +551,6 @@ function App() {
               { id: 'color', type: 'color', label: 'Fill Color', props: { defaultValue: '#3B82F6' } },
               { id: 'text', type: 'text', label: 'Layer Name', props: { placeholder: 'Enter a name…', defaultValue: '' } },
               { id: 'button', type: 'button', label: 'Randomize' },
-              { id: 'section', type: 'section', label: 'Advanced', props: { defaultOpen: true }, children: [
-                { id: 'sec-slider', type: 'slider', label: 'Blur', props: { min: 0, max: 50, step: 0.5, defaultValue: 4 } },
-                { id: 'sec-toggle', type: 'toggle', label: 'Clip Content', props: { defaultValue: false } },
-              ] },
             ],
           },
         },
@@ -661,23 +657,6 @@ function App() {
             controls: [
               { id: 'btn-random', type: 'button', label: 'Randomize' },
               { id: 'btn-reset', type: 'button', label: 'Reset' },
-            ],
-          },
-        },
-        'section': {
-          label: 'Section',
-          spec: {
-            mode: 'live',
-            controls: [
-              { id: 'sec-a', type: 'section', label: 'Transform', props: { defaultOpen: true }, children: [
-                { id: 'sec-a-dial-a', type: 'dial', label: 'Rotation', props: { min: -180, max: 180, step: 1, defaultValue: 0 } },
-                { id: 'sec-a-dial-b', type: 'dial', label: 'Skew', props: { min: -45, max: 45, step: 1, defaultValue: 0 } },
-                { id: 'sec-a-slider', type: 'slider', label: 'Scale', props: { min: 0, max: 200, step: 1, defaultValue: 100 } },
-              ] },
-              { id: 'sec-b', type: 'section', label: 'Appearance', props: { defaultOpen: false }, children: [
-                { id: 'sec-b-color', type: 'color', label: 'Fill', props: { defaultValue: '#E11D48' } },
-                { id: 'sec-b-toggle', type: 'toggle', label: 'Visible', props: { defaultValue: true } },
-              ] },
             ],
           },
         },

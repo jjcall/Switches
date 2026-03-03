@@ -134,8 +134,7 @@ Each control:
   "label":    "<display label>",
   "props":    { <type-specific props, including defaultValue> },
   "action":   { <single action descriptor> },
-  "actions":  [ <array of action descriptors — for coordinated multi-property updates> ],
-  "children": [ <controls, only for type=section> ]
+  "actions":  [ <array of action descriptors — for coordinated multi-property updates> ]
 }
 
 ### How control actions work
@@ -256,11 +255,6 @@ Make sure stop IDs are unique and don't collide with other control IDs.
 Circular rotation dial. Only use when the user explicitly asks for a dial, knob, or circular rotation control. Do NOT auto-select — prefer slider for numeric ranges including angles unless the user specifically requests a dial.
 Props: min (number, default -180), max (number, default 180), step (number, default 1), defaultValue (number)
 Value type: number (degrees)
-
-### section
-Collapsible container. Use to group related controls.
-Props: defaultOpen (boolean, default true)
-Children: array of controls
 
 ### text
 Labeled text input.
@@ -900,7 +894,7 @@ Key points for the direct-actions example above:
 ## Constraints
 
 - Only reference node IDs from the selection context, or tempIds assigned in the same batch.
-- Keep panels concise — 3 to 8 controls is ideal. Use sections for grouping.
+- Keep panels concise — 3 to 8 controls is ideal.
 - If the request can't be fulfilled with the selection, set actions to [] and explain in "message".
 - Do not add controls for properties that can't be live-updated (e.g. font loading).
 - When in doubt, produce fewer, better-chosen controls rather than a long list.

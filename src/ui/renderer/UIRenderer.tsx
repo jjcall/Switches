@@ -4,7 +4,6 @@ import {
   Slider,
   Toggle,
   Select,
-  Section,
   ColorSwatch,
   TextInput,
   NumberInput,
@@ -204,34 +203,15 @@ function ControlRenderer({ control, onControlChange, onControlValueChange }: Con
 
     case 'button':
       return (
-        <button
-          className="dialkit-button dialkit-button--secondary"
-          onClick={() => onChange(null)}
-        >
-          {label}
-        </button>
+        <div className="dialkit-control-card">
+          <button
+            className="dialkit-button dialkit-button--secondary"
+            onClick={() => onChange(null)}
+          >
+            {label}
+          </button>
+        </div>
       );
-
-    case 'section': {
-      const children = control.children ?? [];
-      return (
-        <Section
-          title={label}
-          defaultOpen={props.defaultOpen !== false}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {children.map(child => (
-              <ControlRenderer
-                key={child.id}
-                control={child}
-                onControlChange={onControlChange}
-                onControlValueChange={onControlValueChange}
-              />
-            ))}
-          </div>
-        </Section>
-      );
-    }
 
     default:
       return (
@@ -273,38 +253,43 @@ function findDialControls(controls: UIControl[]): DialControlIds | null {
   return { rx: rxCtrl.id, ry: ryCtrl.id, rz: rzCtrl?.id };
 }
 
-// ─── Render grouping (consecutive dials → rows) ─────────────────────────────
+// ─── Render grouping (dials paired into rows, max 2 per row) ─────────────────
 
 type RenderItem =
   | { kind: 'single'; control: UIControl }
   | { kind: 'dial-row'; controls: UIControl[] };
 
 function groupControls(controls: UIControl[], cubeDialIds: Set<string> | null): RenderItem[] {
+  const filtered = cubeDialIds
+    ? controls.filter(c => !cubeDialIds.has(c.id))
+    : controls;
+
+  // Collect all dials and pair them (max 2 per row)
+  const allDials = filtered.filter(c => c.type === 'dial');
+  const dialRows: UIControl[][] = [];
+  for (let i = 0; i < allDials.length; i += 2) {
+    dialRows.push(allDials.slice(i, i + 2));
+  }
+
+  // Build render list: place each dial-row at the position of its first dial
   const items: RenderItem[] = [];
-  let dialBuffer: UIControl[] = [];
+  let nextDialRow = 0;
+  const dialIdSet = new Set(allDials.map(d => d.id));
 
-  const flushDials = () => {
-    if (dialBuffer.length === 0) return;
-    if (dialBuffer.length === 1) {
-      items.push({ kind: 'single', control: dialBuffer[0] });
-    } else {
-      items.push({ kind: 'dial-row', controls: [...dialBuffer] });
-    }
-    dialBuffer = [];
-  };
-
-  for (const control of controls) {
-    // Skip dial controls consumed by CubePreview
-    if (cubeDialIds && cubeDialIds.has(control.id)) continue;
-
-    if (control.type === 'dial') {
-      dialBuffer.push(control);
-    } else {
-      flushDials();
+  for (const control of filtered) {
+    if (control.type !== 'dial') {
       items.push({ kind: 'single', control });
+    } else if (dialIdSet.has(control.id)) {
+      // Render the dial-row at the position of its first member
+      const row = dialRows[nextDialRow];
+      if (row && row[0].id === control.id) {
+        items.push({ kind: 'dial-row', controls: row });
+        nextDialRow++;
+      }
+      // Skip second dial in pair — already included in the row
     }
   }
-  flushDials();
+
   return items;
 }
 
@@ -428,7 +413,7 @@ export function UIRenderer({ spec, onApply, onValueChange }: UIRendererProps) {
   const renderItems = groupControls(spec.controls, cubeDialIdSet);
 
   const renderControl = (control: UIControl) => {
-    if (control.type === 'section' || control.type === 'button') {
+    if (control.type === 'button') {
       return (
         <ControlRenderer
           key={control.id}
@@ -451,7 +436,7 @@ export function UIRenderer({ spec, onApply, onValueChange }: UIRendererProps) {
   };
 
   return (
-    <div className="ui-renderer" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div className="ui-renderer" style={{ display: 'flex', flexDirection: 'column' }}>
       {hasCubePreview && dialIds && (
         <CubePreview
           rx={(controlValues[dialIds.rx] as number) ?? 0}

@@ -304,7 +304,6 @@ export interface UIControl {
     | 'slider'
     | 'toggle'
     | 'select'
-    | 'section'
     | 'color'
     | 'text'
     | 'button'
@@ -317,8 +316,6 @@ export interface UIControl {
   action?: ActionDescriptor;
   /** Multiple coordinated Figma API updates (for controls that drive multiple properties). */
   actions?: ActionDescriptor[];
-  /** Nested controls (for section type). */
-  children?: UIControl[];
 }
 
 // ─── Action descriptor (LLM → executor) ──────────────────────────────────────

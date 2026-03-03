@@ -5,7 +5,6 @@ import {
   Toggle,
   SegmentedControl,
   Select,
-  Section,
   ColorSwatch,
   Button,
   NumberInput,
@@ -20,7 +19,7 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
   return (
     <div style={{
       background: '#2C2C2C',
-      borderRadius: 'var(--radius-md)',
+      borderRadius: 'var(--radius-sm)',
       padding: '16px',
       display: 'flex',
       flexDirection: 'column',
@@ -181,23 +180,6 @@ function CubePreviewDemo() {
   );
 }
 
-function SectionDemo() {
-  const [slider, setSlider] = useState(0.7);
-  const [toggle, setToggle] = useState(false);
-  return (
-    <Card title="Section">
-      <Section title="Transform">
-        <ControlCard label="Amount" connected={true}>
-          <Slider label="Amount" value={slider} onChange={setSlider} />
-        </ControlCard>
-        <ControlCard label="Enabled" connected={false}>
-          <Toggle label="Enabled" checked={toggle} onChange={setToggle} />
-        </ControlCard>
-      </Section>
-    </Card>
-  );
-}
-
 function ButtonDemo() {
   const [last, setLast] = useState('(none)');
   return (
@@ -253,11 +235,10 @@ function App() {
       </div>
       <CubePreviewDemo />
 
-      {/* Layout */}
+      {/* Actions */}
       <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 600, marginTop: '8px' }}>
-        Layout
+        Actions
       </div>
-      <SectionDemo />
       <ButtonDemo />
     </div>
   );

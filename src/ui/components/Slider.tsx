@@ -284,7 +284,7 @@ export function Slider({
   }
   const valueDodge = percentage > rightThreshold;
   const handleOpacity = !isActive ? 0 : valueDodge ? 0.1 : isDragging ? 0.9 : 0.5;
-  const fillBackground = isActive ? 'var(--surface-overlay-strong)' : 'var(--surface-overlay-active)';
+  const fillBackground = isActive ? 'var(--light-active)' : 'var(--light-overlay-hover)';
 
   const discreteSteps = (max - min) / step;
   const hashMarks = discreteSteps <= 10
@@ -320,7 +320,7 @@ export function Slider({
 
         <motion.div
           className="dialkit-slider-handle"
-          style={{ left: handleLeft, y: '-50%', background: '#A4A4A4' }}
+          style={{ left: handleLeft, y: '-50%', background: 'var(--text-secondary)' }}
           animate={{
             opacity: handleOpacity,
             scaleX: isActive ? 1 : 0.25,

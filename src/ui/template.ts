@@ -38,7 +38,6 @@ function getControlDefaultValue(control: UIControl): unknown {
         : 0;
     case 'button':
       return null;
-    case 'section':
     default:
       return undefined;
   }
@@ -46,15 +45,9 @@ function getControlDefaultValue(control: UIControl): unknown {
 
 export function collectControlDefaults(controls: UIControl[]): Record<string, unknown> {
   const values: Record<string, unknown> = {};
-  const walk = (list: UIControl[]) => {
-    for (const control of list) {
-      if (control.type !== 'section') {
-        values[control.id] = getControlDefaultValue(control);
-      }
-      if (control.children?.length) walk(control.children);
-    }
-  };
-  walk(controls);
+  for (const control of controls) {
+    values[control.id] = getControlDefaultValue(control);
+  }
   return values;
 }
 

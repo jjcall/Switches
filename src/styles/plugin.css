@@ -28,19 +28,16 @@ body {
   width: 100%;
   height: 100vh;
   /* Component aliases — map to design tokens */
-  --dial-surface: var(--surface-overlay);
-  --dial-surface-hover: var(--surface-overlay-hover);
-  --dial-surface-active: var(--surface-overlay-active);
-  --dial-text-root: var(--text-primary);
-  --dial-text-section: var(--text-label);
-  --dial-text-label: var(--text-label);
+  --dial-surface: var(--surface-control);
+  --dial-surface-hover: var(--light-overlay-hover);
+  --dial-surface-active: var(--light-overlay);
+  --dial-text-section: var(--text-secondary);
+  --dial-text-label: var(--text-secondary);
   --dial-text-primary: var(--text-secondary);
-  --dial-text-secondary: rgba(255, 255, 255, 0.55);
-  --dial-text-tertiary: var(--text-placeholder);
   --dial-border: var(--border-subtle);
-  --dial-border-hover: var(--border-hover);
+  --dial-border-hover: var(--border-subtle);
   --dial-glass-bg: var(--surface-primary);
-  --dial-radius: 6px;
+  --dial-radius: 0px;
   --dial-row-height: 24px;
 }
 
@@ -51,10 +48,10 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: var(--space-sm);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
+  gap: 8px;
+  padding: var(--space-md);
+  border: none;
+  border-bottom: 1px solid var(--border-default);
   background: transparent;
   width: 100%;
 }
@@ -72,7 +69,7 @@ body {
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-xs);
   letter-spacing: var(--letter-spacing-label);
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 
 .dialkit-control-status {
@@ -119,15 +116,22 @@ body {
   width: 100%;
 }
 
+/* ── Dial row (side-by-side dials) ───────────────── */
 .dialkit-control-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-wrap: nowrap;
+  gap: 0;
+  border-bottom: 1px solid var(--border-default);
 }
 
 .dialkit-control-row > .dialkit-control-card {
-  flex: 1 1 calc(50% - 4px);
+  flex: 1 1 0%;
   min-width: 0;
+  border-bottom: none;
+}
+
+.dialkit-control-row > .dialkit-control-card:not(:last-child) {
+  border-right: 1px solid var(--border-default);
 }
 
 /* ============================================================
@@ -171,11 +175,11 @@ body {
 }
 
 .dialkit-slider-active .dialkit-slider-hashmark {
-  background: var(--surface-overlay-strong);
+  background: var(--light-overlay-hover);
 }
 
 .dialkit-slider-active .dialkit-slider-value {
-  color: #A4A4A4;
+  color: var(--text-secondary);
 }
 
 .dialkit-slider-fill {
@@ -202,7 +206,7 @@ body {
   transform: translateY(calc(-50% + 0.5px));
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-regular);
-  color: #A4A4A4;
+  color: var(--text-secondary);
   pointer-events: auto;
   transition: color 0.15s, border-color 0.15s;
   border-bottom: 1px solid transparent;
@@ -210,7 +214,7 @@ body {
 }
 
 .dialkit-slider-value-editable {
-  border-bottom-color: #A4A4A4;
+  border-bottom-color: var(--text-secondary);
 }
 
 .dialkit-slider-input {
@@ -223,10 +227,10 @@ body {
   max-width: 6ch;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-regular);
-  color: #A4A4A4;
+  color: var(--text-secondary);
   background: transparent;
   border: none;
-  border-bottom: 1px solid #A4A4A4;
+  border-bottom: 1px solid var(--text-secondary);
   padding: 0 0 1px 0;
   outline: none;
   text-align: right;
@@ -242,7 +246,7 @@ body {
   width: 100%;
   height: var(--dial-row-height);
   background: transparent;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 
 .dialkit-segmented-pill {
@@ -258,21 +262,21 @@ body {
   font-family: inherit;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-regular);
-  background: var(--border-default);
+  background: var(--surface-control);
   border: none;
   cursor: pointer;
   transition: color 0.15s, background 0.15s;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 
 .dialkit-segmented-button[data-active="true"] {
-  color: var(--text-primary);
-  background: var(--border-active);
+  color: var(--dark-primary);
+  background: var(--surface-active);
 }
 
 .dialkit-segmented-button[data-active="false"] {
-  color: var(--text-tertiary);
-  background: var(--border-default);
+  color: var(--text-secondary);
+  background: var(--surface-control);
 }
 
 /* ============================================================
@@ -316,7 +320,7 @@ body {
   font-family: inherit;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
-  color: #FFFFFF;
+  color: var(--light-primary);
   background: var(--accent-blue);
   border: none;
   border-radius: var(--radius-sm);
@@ -331,21 +335,21 @@ body {
 }
 
 .dialkit-button:active {
-  background: #0A7AD4;
+  background: var(--accent-blue-active);
 }
 
 /* Secondary button — outline */
 .dialkit-button--secondary {
   background: transparent;
   border: 1px solid var(--border-default);
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-weight: var(--font-weight-regular);
 }
 
 .dialkit-button--secondary:hover {
   background: transparent;
   border-color: var(--border-active);
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .dialkit-button--secondary:active {
@@ -362,8 +366,8 @@ body {
   width: 100%;
   height: var(--dial-row-height);
   padding: 0 8px;
-  background: var(--border-default);
-  border-radius: 5px;
+  background: var(--surface-control);
+  border-radius: var(--radius-sm);
 }
 
 .dialkit-text-input {
@@ -372,7 +376,7 @@ body {
   font-family: inherit;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-regular);
-  color: #A4A4A4;
+  color: var(--text-secondary);
   background: transparent;
   border: none;
   padding: 0;
@@ -386,7 +390,7 @@ body {
 }
 
 .dialkit-text-input::placeholder {
-  color: var(--text-quaternary);
+  color: var(--text-tertiary);
 }
 
 /* ============================================================
@@ -406,26 +410,26 @@ body {
   font-family: inherit;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-regular);
-  color: #A4A4A4;
-  background: var(--border-default);
+  color: var(--text-secondary);
+  background: var(--surface-control);
   border: none;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background 0.15s;
 }
 
 .dialkit-select-trigger:hover {
-  background: var(--border-active);
+  background: var(--light-overlay-hover);
 }
 
 .dialkit-select-trigger[data-open="true"] {
-  background: var(--border-active);
+  background: var(--light-overlay-hover);
 }
 
 .dialkit-select-value {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-regular);
-  color: #A4A4A4;
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -440,7 +444,7 @@ body {
   width: 14px;
   height: 14px;
   flex-shrink: 0;
-  color: #A4A4A4;
+  color: var(--text-secondary);
 }
 
 .dialkit-select-dropdown {
@@ -451,12 +455,12 @@ body {
   z-index: 10000;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   /* Variables need to be restated here since dropdown is portaled */
-  --dial-surface: var(--surface-overlay);
-  --dial-surface-hover: var(--surface-overlay-hover);
-  --dial-surface-active: var(--surface-overlay-active);
-  --dial-text-label: var(--text-label);
-  --dial-text-primary: var(--text-secondary);
-  --dial-radius: 6px;
+  --dial-surface: var(--surface-control);
+  --dial-surface-hover: var(--light-overlay-hover);
+  --dial-surface-active: var(--light-overlay);
+  --dial-text-label: var(--text-secondary);
+  --dial-text-primary: var(--text-primary);
+  --dial-radius: 0px;
   font-family: var(--font-family);
   font-size: var(--font-size-xs);
   -webkit-font-smoothing: antialiased;
@@ -472,7 +476,7 @@ body {
   color: var(--dial-text-label);
   background: transparent;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   text-align: left;
   transition: background 0.15s, color 0.15s;
@@ -506,7 +510,7 @@ body {
 .dialkit-color-label {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-regular);
-  color: #A4A4A4;
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 
@@ -519,7 +523,7 @@ body {
 .dialkit-color-hex {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-regular);
-  color: #A4A4A4;
+  color: var(--text-secondary);
   cursor: text;
 }
 
@@ -527,7 +531,7 @@ body {
   width: 7ch;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-regular);
-  color: #A4A4A4;
+  color: var(--text-secondary);
   background: transparent;
   border: none;
   padding: 0;
@@ -542,8 +546,8 @@ body {
 .dialkit-color-swatch {
   width: 18px;
   height: 18px;
-  border-radius: 4px;
-  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
   cursor: pointer;
   transition: transform 0.15s;
   padding: 0;
@@ -572,14 +576,14 @@ body {
 }
 
 .dialkit-color-picker-popover .react-colorful__saturation {
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   height: 140px;
   border-bottom: none;
 }
 
 .dialkit-color-picker-popover .react-colorful__hue {
   height: 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   margin-top: 8px;
 }
 
@@ -617,18 +621,18 @@ body {
 .dialkit-dial-value-container {
   min-width: 37px;
   height: 16px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
   transition: background 0.15s;
 }
-.dialkit-dial-value-container--active { background: #444444; }
+.dialkit-dial-value-container--active { background: var(--surface-secondary); }
 
 .dialkit-angle-value {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-regular);
-  color: #A4A4A4;
+  color: var(--text-secondary);
   text-align: center;
   line-height: 16px;
   padding: 0 4px;
@@ -639,7 +643,7 @@ body {
   height: 16px;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-regular);
-  color: #A4A4A4;
+  color: var(--text-secondary);
   background: transparent;
   border: none;
   padding: 0 4px;
@@ -652,29 +656,20 @@ body {
    Folder / Section
    ============================================================ */
 .dialkit-folder {
-  border-top: 1px solid var(--surface-overlay);
-  border-bottom: 1px solid var(--surface-overlay);
-  margin-top: 4px;
-  margin-bottom: 4px;
+  border-top: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--border-default);
+  margin: 0;
 }
 
 .dialkit-folder + .dialkit-folder {
-  margin-top: -4px;
   border-top: none;
-}
-
-.dialkit-folder:first-child {
-  margin-top: 0;
-}
-
-.dialkit-folder:last-child {
-  margin-bottom: 0;
 }
 
 .dialkit-folder-header {
   cursor: pointer;
   user-select: none;
   height: var(--dial-row-height);
+  padding: 0 var(--space-md);
 }
 
 .dialkit-folder-header-top {
@@ -717,9 +712,8 @@ body {
 .dialkit-folder-inner {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding-bottom: 8px;
-  padding-top: 2px;
+  gap: 0;
+  padding: 0;
 }
 
 
@@ -742,7 +736,7 @@ body {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 16px 12px;
+  padding: 0;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -758,8 +752,8 @@ body {
   background: transparent;
 }
 .render-zone::-webkit-scrollbar-thumb {
-  background: var(--surface-overlay-active);
-  border-radius: 2px;
+  background: var(--light-overlay);
+  border-radius: var(--radius-sm);
 }
 
 /* ── Empty state ─────────────────────────────────── */
@@ -807,7 +801,7 @@ body {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-xs);
-  color: var(--text-quaternary);
+  color: var(--text-tertiary);
   max-width: 228px;
 }
 
@@ -816,7 +810,7 @@ body {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-sm);
-  color: var(--text-quaternary);
+  color: var(--text-tertiary);
   -webkit-mask-image: linear-gradient(
     -75deg,
     rgba(0, 0, 0, 0.6) 30%,
@@ -858,7 +852,7 @@ body {
 
 /* ── UI renderer ─────────────────────────────────── */
 .ui-renderer {
-  padding-bottom: 8px;
+  padding-bottom: 0;
 }
 
 /* ── Preview canvas ──────────────────────────────── */
@@ -924,8 +918,8 @@ body {
 .chat-prompt {
   width: 100%;
   padding: 8px 12px;
-  border-radius: 10px;
-  background: var(--surface-secondary);
+  border-radius: var(--radius-sm);
+  background: var(--surface-control);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -937,7 +931,7 @@ body {
   flex-shrink: 0;
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: var(--radius-sm);
   background: var(--badge-layer-border);
 }
 
@@ -953,7 +947,7 @@ body {
   display: block;
   font-size: var(--font-size-xs);
   line-height: 1.4;
-  color: var(--text-quaternary);
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -964,7 +958,7 @@ body {
 /* ── Chat input box ──────────────────────────────── */
 .chat-input-box {
   position: relative;
-  border-top: 1px solid var(--border-default);
+  border-top: 1px solid var(--border-subtle);
   padding: var(--space-md) var(--space-sm) var(--space-md) var(--space-lg);
   transition: padding 0.15s ease;
 }
@@ -1015,23 +1009,23 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--send-disabled);
+  background: var(--dark-tertiary);
   border: none;
   border-radius: var(--radius-full);
-  color: var(--send-icon);
+  color: var(--light-primary);
   cursor: default;
   transition: background 0.15s, color 0.15s, transform 0.1s;
   padding: 0;
 }
 
 .chat-input-send--active {
-  background: var(--send-active);
-  color: var(--send-icon);
+  background: var(--accent-blue);
+  color: var(--light-primary);
   cursor: pointer;
 }
 
 .chat-input-send--active:hover {
-  background: var(--send-active-hover);
+  background: var(--accent-blue-hover);
 }
 
 .chat-input-send--active:active {
@@ -1054,14 +1048,14 @@ body {
   align-items: center;
   gap: 10px;
   font-size: var(--font-size-sm);
-  color: var(--text-quaternary);
+  color: var(--text-tertiary);
 }
 
 .chat-input-spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid var(--surface-overlay-active);
-  border-top-color: var(--text-quaternary);
+  border: 2px solid var(--light-overlay);
+  border-top-color: var(--text-tertiary);
   border-radius: 50%;
   animation: chat-spin 0.7s linear infinite;
 }

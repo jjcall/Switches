@@ -280,7 +280,7 @@ export function AngleWheel({
           <path
             d={arcPath}
             fill="none"
-            stroke="#808080"
+            stroke="var(--dark-tertiary)"
             strokeWidth={STROKE_WIDTH}
             strokeLinecap="round"
           />
@@ -292,7 +292,7 @@ export function AngleWheel({
             }}
           >
             {dots.map((pt, i) => (
-              <circle key={i} cx={pt.x} cy={pt.y} r={1} fill="#808080" />
+              <circle key={i} cx={pt.x} cy={pt.y} r={1} fill="var(--dark-tertiary)" />
             ))}
           </g>
           {/* Needle */}
@@ -301,7 +301,7 @@ export function AngleWheel({
             y1={CENTER}
             x2={needleTip.x}
             y2={needleTip.y}
-            stroke="#808080"
+            stroke="var(--dark-tertiary)"
             strokeWidth={STROKE_WIDTH}
             strokeLinecap="round"
           />
