@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grid Loader Preview</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #1a1a1a;
+    color: #fff;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 48px 20px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Entrance animations ───────────────────── */
+  @keyframes fadeSlideUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  @keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.92); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+
+  .entrance {
+    opacity: 0;
+    animation: fadeSlideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  .entrance-fade {
+    opacity: 0;
+    animation: fadeIn 0.4s ease forwards;
+  }
+
+  .entrance-scale {
+    opacity: 0;
+    animation: scaleIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  /* Stagger delays via custom property */
+  .d1 { animation-delay: 0.05s; }
+  .d2 { animation-delay: 0.1s; }
+  .d3 { animation-delay: 0.15s; }
+  .d4 { animation-delay: 0.2s; }
+  .d5 { animation-delay: 0.3s; }
+  .d6 { animation-delay: 0.4s; }
+  .d7 { animation-delay: 0.5s; }
+  .d8 { animation-delay: 0.6s; }
+  .d9 { animation-delay: 0.7s; }
+  .d10 { animation-delay: 0.8s; }
+
+  /* ── Title ─────────────────────────────────── */
+  h1 {
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 40px;
+    color: rgba(255,255,255,0.3);
+  }
+
+  /* ── Preview area ──────────────────────────── */
+  .preview {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 48px;
+  }
+
+  .preview-sizes {
+    display: flex;
+    gap: 48px;
+    align-items: flex-end;
+  }
+
+  .preview-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .preview-label {
+    font-size: 10px;
+    color: rgba(255,255,255,0.25);
+    font-family: ui-monospace, monospace;
+    letter-spacing: 0.04em;
+  }
+
+  .state-label {
+    font-size: 14px;
+    font-weight: 600;
+    font-family: ui-monospace, monospace;
+    margin-top: 20px;
+    transition: color 0.3s ease;
+    color: #6891D4;
+  }
+  .state-label[data-state="idle"]    { color: rgba(255,255,255,0.3); }
+  .state-label[data-state="ready"]   { color: rgba(255,255,255,0.5); }
+  .state-label[data-state="loading"] { color: #6891D4; }
+  .state-label[data-state="success"] { color: #14AE5C; }
+
+  .phase-label {
+    font-size: 10px;
+    color: rgba(255,255,255,0.2);
+    font-family: ui-monospace, monospace;
+    transition: opacity 0.3s ease;
+  }
+
+  /* ── Controls ──────────────────────────────── */
+  .controls {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+    max-width: 480px;
+  }
+
+  .control-group-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: rgba(255,255,255,0.25);
+    margin-bottom: 2px;
+  }
+
+  /* ── State button row with sliding pill ───── */
+  .state-row {
+    position: relative;
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 6px;
+    margin-top: 6px;
+  }
+
+  .state-row .pill {
+    position: absolute;
+    top: 2px;
+    height: calc(100% - 4px);
+    background: #6891D4;
+    border-radius: 4px;
+    transition: left 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+                width 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+                background 0.3s ease;
+    z-index: 0;
+    pointer-events: none;
+  }
+  .state-row .pill[data-state="idle"]    { background: rgba(255,255,255,0.1); }
+  .state-row .pill[data-state="ready"]   { background: rgba(255,255,255,0.15); }
+  .state-row .pill[data-state="loading"] { background: #6891D4; }
+  .state-row .pill[data-state="success"] { background: #14AE5C; }
+
+  .state-btn {
+    position: relative;
+    z-index: 1;
+    flex: 1;
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 7px 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: rgba(255,255,255,0.4);
+    cursor: pointer;
+    transition: color 0.2s ease;
+  }
+  .state-btn:hover { color: rgba(255,255,255,0.7); }
+  .state-btn.active { color: #fff; }
+
+  /* ── Demo buttons ──────────────────────────── */
+  .btn-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+  }
+
+  button {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 7px 14px;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 5px;
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.5);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    overflow: hidden;
+  }
+  button:hover {
+    background: rgba(255,255,255,0.08);
+    border-color: rgba(255,255,255,0.12);
+    color: rgba(255,255,255,0.8);
+    transform: translateY(-1px);
+  }
+  button:active {
+    transform: translateY(0) scale(0.98);
+    transition-duration: 0.05s;
+  }
+
+  button.demo {
+    background: transparent;
+    border-color: rgba(20, 174, 92, 0.3);
+    color: #14AE5C;
+  }
+  button.demo:hover {
+    background: rgba(20, 174, 92, 0.1);
+    border-color: rgba(20, 174, 92, 0.5);
+    color: #1fd06e;
+    box-shadow: 0 0 20px rgba(20, 174, 92, 0.08);
+  }
+
+  button.stop-btn {
+    border-color: rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.3);
+  }
+  button.stop-btn:hover {
+    border-color: rgba(201, 107, 108, 0.3);
+    color: #C96B6C;
+    background: rgba(201, 107, 108, 0.08);
+  }
+
+  .separator {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06) 20%, rgba(255,255,255,0.06) 80%, transparent);
+    margin: 4px 0;
+  }
+
+  .grid-line {
+    stroke-dasharray: 25;
+    stroke-dashoffset: 25;
+    animation: grid-line-draw 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  @keyframes grid-line-draw {
+    to { stroke-dashoffset: 0; }
+  }
+</style>
+</head>
+<body>
+
+<h1 class="entrance d1">Grid Loader Preview</h1>
+
+<div class="preview">
+  <div class="preview-sizes">
+    <div class="preview-item entrance-scale d2">
+      <span class="preview-label">24</span>
+      <div id="s24"></div>
+    </div>
+    <div class="preview-item entrance-scale d3">
+      <span class="preview-label">48</span>
+      <div id="s48"></div>
+    </div>
+    <div class="preview-item entrance-scale d4">
+      <span class="preview-label">96</span>
+      <div id="s96"></div>
+    </div>
+    <div class="preview-item entrance-scale d5">
+      <span class="preview-label">160</span>
+      <div id="s160"></div>
+    </div>
+  </div>
+  <div class="state-label entrance-fade d6" id="state-display" data-state="idle">idle</div>
+  <div class="phase-label entrance-fade d7" id="phase-display">phase: idle</div>
+</div>
+
+<div class="controls">
+  <div class="entrance d7">
+    <span class="control-group-label">State</span>
+    <div class="state-row" id="state-buttons">
+      <div class="pill" id="pill" data-state="idle"></div>
+      <button class="state-btn active" onclick="setState('idle')" data-state="idle">idle</button>
+      <button class="state-btn" onclick="setState('ready')" data-state="ready">ready</button>
+      <button class="state-btn" onclick="setState('loading')" data-state="loading">loading</button>
+      <button class="state-btn" onclick="setState('success')" data-state="success">success</button>
+    </div>
+  </div>
+
+  <div class="separator entrance-fade d8"></div>
+
+  <div class="entrance d9">
+    <span class="control-group-label">Demo Sequence</span>
+    <div class="btn-row">
+      <button class="demo" onclick="runDemo()">idle &rarr; ready &rarr; loading &rarr; success &rarr; idle</button>
+      <button class="demo" onclick="runLoop()">loop loading &harr; success</button>
+      <button class="stop-btn" onclick="stopDemo()">stop</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const BLUE   = '#6891D4';
+const GREEN  = '#14AE5C';
+const GRID_C = '#757575';
+
+const GRID_LINES = [
+  { x1: 0, y1: 0.5, x2: 25, y2: 0.5 },
+  { x1: 0, y1: 24.5, x2: 25, y2: 24.5 },
+  { x1: 0.5, y1: 0, x2: 0.5, y2: 25 },
+  { x1: 24.5, y1: 0, x2: 24.5, y2: 25 },
+  { x1: 12.5, y1: 0, x2: 12.5, y2: 25 },
+  { x1: 0, y1: 12.5, x2: 25, y2: 12.5 },
+];
+
+const CELLS = {
+  tl: { x: 3, y: 3, w: 7, h: 7 },
+  tr: { x: 15, y: 3, w: 7, h: 7 },
+  bl: { x: 3, y: 15, w: 7, h: 7 },
+  br: { x: 15, y: 15, w: 7, h: 7 },
+};
+
+const ORBIT_ORDER = ['br', 'tr', 'tl', 'bl'];
+const FILL_ORDER  = ['tl', 'bl', 'br'];
+const ORBIT_STEP_MS   = 200;
+const FILL_STAGGER_MS = 200;
+const TRAIL_OPACITIES = [0.35, 0.12];
+
+const SIZES = [24, 48, 96, 160];
+
+function buildSVG(size) {
+  const lines = GRID_LINES.map((l, i) =>
+    `<line x1="${l.x1}" y1="${l.y1}" x2="${l.x2}" y2="${l.y2}" stroke="${GRID_C}" stroke-width="1" class="grid-line" style="animation-delay:${i * 40}ms"/>`
+  ).join('');
+  return `<svg width="${size}" height="${size}" viewBox="0 0 25 25" fill="none" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">` +
+    `<g class="cell-layer"></g>` +
+    lines +
+    `</svg>`;
+}
+
+SIZES.forEach(size => {
+  document.getElementById('s' + size).innerHTML = buildSVG(size);
+});
+
+function rect(c, fill, opacity) {
+  const op = opacity !== undefined ? ` fill-opacity="${opacity}"` : '';
+  return `<rect x="${c.x}" y="${c.y}" width="${c.w}" height="${c.h}" fill="${fill}"${op}/>`;
+}
+
+function renderAll(phase, orbitIndex, trail, greenCells) {
+  document.querySelectorAll('.cell-layer').forEach(layer => {
+    let html = '';
+
+    if (phase === 'orbiting') {
+      for (let i = 0; i < trail.length; i++) {
+        html += rect(CELLS[trail[i]], BLUE, TRAIL_OPACITIES[i]);
+      }
+    }
+
+    for (const key of greenCells) {
+      html += rect(CELLS[key], GREEN);
+    }
+
+    const showBlue = phase !== 'idle' && phase !== 'complete';
+    const blueIsGreen = phase === 'filling' && greenCells.has('tr');
+    if (showBlue && !blueIsGreen) {
+      html += rect(CELLS[ORBIT_ORDER[orbitIndex]], BLUE);
+    }
+
+    if (phase === 'complete') {
+      for (const c of Object.values(CELLS)) {
+        html += rect(c, GREEN);
+      }
+    }
+
+    layer.innerHTML = html;
+  });
+
+  document.getElementById('phase-display').textContent = 'phase: ' + phase;
+}
+
+// ── Sliding pill ────────────────────────────────────
+function updatePill(state) {
+  const row = document.getElementById('state-buttons');
+  const pill = document.getElementById('pill');
+  const btn = row.querySelector(`[data-state="${state}"]`);
+  if (!btn || !pill) return;
+
+  const rowRect = row.getBoundingClientRect();
+  const btnRect = btn.getBoundingClientRect();
+  pill.style.left = (btnRect.left - rowRect.left) + 'px';
+  pill.style.width = btnRect.width + 'px';
+  pill.setAttribute('data-state', state);
+
+  const display = document.getElementById('state-display');
+  display.setAttribute('data-state', state);
+
+  row.querySelectorAll('.state-btn').forEach(b => {
+    b.classList.toggle('active', b.getAttribute('data-state') === state);
+  });
+}
+
+// ── State machine ───────────────────────────────────
+let phase = 'idle';
+let orbitIndex = 0;
+let trail = [];
+let greenCells = new Set();
+let timers = [];
+let orbitInterval = null;
+
+function clearTimers() {
+  timers.forEach(clearTimeout);
+  timers = [];
+  if (orbitInterval) { clearInterval(orbitInterval); orbitInterval = null; }
+}
+
+function setState(state) {
+  clearTimers();
+  clearDemo();
+  greenCells = new Set();
+  orbitIndex = 0;
+  trail = [];
+
+  document.getElementById('state-display').textContent = state;
+  updatePill(state);
+
+  if (state === 'loading') {
+    phase = 'orbiting';
+    let idx = 0;
+    orbitInterval = setInterval(() => {
+      trail.unshift(ORBIT_ORDER[idx]);
+      trail = trail.slice(0, TRAIL_OPACITIES.length);
+      idx = (idx + 1) % ORBIT_ORDER.length;
+      orbitIndex = idx;
+      renderAll(phase, orbitIndex, trail, greenCells);
+    }, ORBIT_STEP_MS);
+
+  } else if (state === 'success') {
+    phase = 'filling';
+    orbitIndex = 1;
+
+    FILL_ORDER.forEach((cell, i) => {
+      timers.push(setTimeout(() => {
+        greenCells.add(cell);
+        renderAll(phase, orbitIndex, trail, greenCells);
+      }, (i + 1) * FILL_STAGGER_MS));
+    });
+
+    const completeDelay = (FILL_ORDER.length + 1) * FILL_STAGGER_MS;
+    timers.push(setTimeout(() => {
+      greenCells.add('tr');
+      phase = 'complete';
+      renderAll(phase, orbitIndex, trail, greenCells);
+    }, completeDelay));
+
+  } else if (state === 'ready') {
+    phase = 'ready';
+  } else {
+    phase = 'idle';
+  }
+
+  renderAll(phase, orbitIndex, trail, greenCells);
+}
+
+// ── Demo sequences ──────────────────────────────────
+let demoTimers = [];
+let demoLoop = null;
+
+function clearDemo() {
+  demoTimers.forEach(clearTimeout);
+  demoTimers = [];
+  if (demoLoop) { clearInterval(demoLoop); demoLoop = null; }
+}
+
+function runDemo() {
+  clearDemo(); clearTimers();
+  [
+    { state: 'idle',    at: 0    },
+    { state: 'ready',   at: 1000 },
+    { state: 'loading', at: 2000 },
+    { state: 'success', at: 4000 },
+    { state: 'idle',    at: 6000 },
+  ].forEach(({ state, at }) => {
+    demoTimers.push(setTimeout(() => setState(state), at));
+  });
+}
+
+function runLoop() {
+  clearDemo(); clearTimers();
+  setState('loading');
+  function cycle() {
+    clearTimers(); setState('loading');
+    demoTimers.push(setTimeout(() => { clearTimers(); setState('success'); }, 2000));
+  }
+  cycle();
+  demoLoop = setInterval(cycle, 4000);
+}
+
+function stopDemo() { clearDemo(); clearTimers(); setState('idle'); }
+
+// ── Init ────────────────────────────────────────────
+renderAll(phase, orbitIndex, trail, greenCells);
+
+// Position pill after layout settles
+requestAnimationFrame(() => {
+  requestAnimationFrame(() => updatePill('idle'));
+});
+</script>
+</body>
+</html>

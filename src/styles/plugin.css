@@ -546,7 +546,7 @@ body {
 .dialkit-color-swatch {
   width: 18px;
   height: 18px;
-  border-radius: var(--radius-sm);
+  border-radius: 4px;
   border: 1px solid var(--border-subtle);
   cursor: pointer;
   transition: transform 0.15s;
@@ -560,14 +560,23 @@ body {
 .dialkit-color-picker-popover {
   position: absolute;
   right: 0;
+  top: 100%;
   z-index: 10;
   padding: 8px;
   margin-top: 4px;
-  border-radius: var(--dial-radius);
-  background: var(--dial-surface);
-  border: 1px solid var(--dial-border);
+  border-radius: 6px;
+  background: var(--surface-primary);
+  border: 1px solid var(--border-default);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
   width: 220px;
+  visibility: hidden;
+}
+
+.dialkit-color-picker-popover--flip {
+  top: auto;
+  bottom: 100%;
+  margin-top: 0;
+  margin-bottom: 4px;
 }
 
 .dialkit-color-picker-popover .react-colorful {
@@ -734,7 +743,7 @@ body {
 .render-zone {
   position: relative;
   flex: 1;
-  overflow-y: auto;
+  overflow-y: overlay;
   overflow-x: hidden;
   padding: 0;
   display: flex;
@@ -762,7 +771,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0;
+  gap: var(--space-md);
   text-align: center;
   padding-top: 209px;
 }
@@ -853,6 +862,46 @@ body {
 /* ── UI renderer ─────────────────────────────────── */
 .ui-renderer {
   padding-bottom: 0;
+}
+
+/* Wireframe-first entrance: each row has a skeleton layer
+   (border wireframe) that clip-path reveals L-to-R, then content fades on top. */
+.ui-enter-card {
+  position: relative;
+}
+
+.ui-enter-skeleton {
+  position: absolute;
+  inset: 0;
+  border-bottom: 1px solid var(--border-default);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Dial-row skeleton also gets a vertical center divider */
+.ui-enter-card--dial-row .ui-enter-skeleton::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: var(--border-default);
+}
+
+.ui-enter-content {
+  position: relative;
+}
+
+/* Suppress real borders — the skeleton provides them */
+.ui-enter-card .dialkit-control-card {
+  border-bottom-color: transparent !important;
+}
+.ui-enter-card .dialkit-control-row {
+  border-bottom-color: transparent !important;
+}
+.ui-enter-card .dialkit-control-row > .dialkit-control-card:not(:last-child) {
+  border-right-color: transparent !important;
 }
 
 /* ── Preview canvas ──────────────────────────────── */
@@ -1011,7 +1060,7 @@ body {
   justify-content: center;
   background: var(--dark-tertiary);
   border: none;
-  border-radius: var(--radius-full);
+  border-radius: 50%;
   color: var(--light-primary);
   cursor: default;
   transition: background 0.15s, color 0.15s, transform 0.1s;
@@ -1038,77 +1087,61 @@ body {
 
 /* ── Loading state inside input ──────────────────── */
 .chat-input-box--loading {
-  min-height: 48px;
-  justify-content: center;
-  align-items: center;
-}
-
-.chat-input-loading {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  padding: var(--space-md) var(--space-sm) var(--space-md) var(--space-lg);
+  border-top: 1px solid var(--border-subtle);
 }
 
-.chat-input-spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid var(--light-overlay);
-  border-top-color: var(--text-tertiary);
-  border-radius: 50%;
-  animation: chat-spin 0.7s linear infinite;
+.chat-input-box--loading .chat-input-send {
+  position: static;
+  opacity: 0.3;
 }
 
-@keyframes chat-spin {
-  to { transform: rotate(360deg); }
+.chat-input-loading-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
 }
 
-/* ── Flask Loader ────────────────────────────────── */
-
-/* Slide wrapper — handles vertical position via translateY */
-.flask-liquid-slide {
-  transform: translateY(20px);
-  transition: transform 0.6s ease-out;
-}
-.flask-liquid-slide--ready,
-.flask-liquid-slide--filling,
-.flask-liquid-slide--settling {
-  transform: translateY(0);
-}
-.flask-liquid-slide--draining {
-  transform: translateY(20px);
-  transition: transform 0.8s cubic-bezier(0.4, 0, 1, 1);
-}
-.flask-liquid-slide--idle {
-  transform: translateY(20px);
-  transition: transform 0.4s ease-in;
+.chat-input-loading-verb {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-normal);
+  color: var(--text-placeholder);
+  letter-spacing: -0.025em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* Liquid fill — color transition + wave animation */
-.flask-liquid-fill {
-  transition: fill 0.4s ease, fill-opacity 0.4s ease;
-}
-.flask-liquid-fill--filling {
-  animation: flask-wave-shift 2s linear infinite;
+/* ── Grid Loader ─────────────────────────────────── */
+
+.grid-loader {
+  display: block;
 }
 
-@keyframes flask-wave-shift {
-  from { transform: translateX(0); }
-  to { transform: translateX(-22px); }
+.grid-loader-pulse {
+  animation: grid-pulse-travel 1.8s linear infinite;
 }
 
-/* Bubbles */
-.flask-bubble {
-  animation: flask-bubble-rise 1.8s ease-out infinite;
+@keyframes grid-pulse-travel {
+  0%   { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -148; }
 }
 
-.flask-bubble-0 { animation-delay: 0s; }
-.flask-bubble-1 { animation-delay: 0.5s; }
-.flask-bubble-2 { animation-delay: 1s; }
+/* Grid lines draw themselves in */
+.grid-loader-line {
+  stroke-dasharray: 25;
+  stroke-dashoffset: 25;
+  animation: grid-line-draw 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
 
-@keyframes flask-bubble-rise {
-  0% { opacity: 0; transform: translateY(0); }
-  20% { opacity: 0.7; }
-  100% { opacity: 0; transform: translateY(-10px); }
+.grid-loader-line--drawn {
+  stroke-dashoffset: 0;
+}
+
+@keyframes grid-line-draw {
+  to { stroke-dashoffset: 0; }
 }

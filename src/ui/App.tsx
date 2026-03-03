@@ -12,8 +12,9 @@ import { UIRenderer } from './renderer/UIRenderer';
 import { resolveTemplate, collectControlDefaults } from './template';
 import { compileGenerator, executeGenerator, setImageData, setSelectionId } from './codegen';
 import type { ImagePixelData } from './codegen';
-import { FlaskLoader } from './components/FlaskLoader';
+import { GridLoader } from './components/GridLoader';
 import { getRandomVerb } from './components/LoadingVerbs';
+import { motion, AnimatePresence } from 'motion/react';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -119,7 +120,7 @@ function specWithCurrentValues(spec: UISpec, values: Record<string, unknown>): U
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const PLUGIN_WIDTH = 300;
+const PLUGIN_WIDTH = 260;
 const MAX_HEIGHT = 600;
 
 // ─── Shell resize ─────────────────────────────────────────────────────────────
@@ -135,15 +136,15 @@ function useShellResize() {
 
 // ─── Empty state ──────────────────────────────────────────────────────────────
 
-function EmptyState({ selectionName, flaskState, loadingVerb }: {
+function EmptyState({ selectionName, loaderState, loadingVerb }: {
   selectionName: string | null;
-  flaskState: 'idle' | 'ready' | 'loading' | 'success';
+  loaderState: 'idle' | 'loading' | 'success';
   loadingVerb: string | null;
 }) {
-  const isLoading = flaskState === 'loading';
+  const isLoading = loaderState === 'loading';
   return (
     <div className="render-zone-empty">
-      <FlaskLoader state={flaskState} size={48} />
+      <GridLoader state={loaderState} size={24} />
       <div className="render-zone-empty-info">
         {isLoading ? (
           <p className="render-zone-loading-text">{loadingVerb}...</p>
@@ -171,8 +172,9 @@ function App() {
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [currentUISpec, setCurrentUISpec] = useState<UISpec | null>(null);
+  const [animateEntrance, setAnimateEntrance] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
-  const [flaskState, setFlaskState] = useState<'idle' | 'ready' | 'loading' | 'success'>('idle');
+  const [loaderState, setLoaderState] = useState<'idle' | 'loading' | 'success'>('idle');
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [loadingVerb, setLoadingVerb] = useState<string | null>(null);
   const [selectionContext, setSelectionContext] = useState<SelectionContext | null>(null);
@@ -211,6 +213,7 @@ function App() {
               rootFrameIdRef.current = nodeId;
               createdNodeIdsRef.current = [nodeId];
             }
+            setAnimateEntrance(false);
             setCurrentUISpec(restored);
             addMessage('assistant', 'Restored plugin controls from selected frame.');
           } catch {
@@ -388,14 +391,7 @@ function App() {
     setMessages([]);
   }, []);
 
-  // Derive flask ready state from selection + typing (when not loading/success)
-  const hasSelection = mockSelectionName !== null || (selectionContext !== null && selectionContext.nodes.length > 0);
-  useEffect(() => {
-    setFlaskState(prev => {
-      if (prev === 'loading' || prev === 'success') return prev;
-      return (hasSelection || isInputFocused) ? 'ready' : 'idle';
-    });
-  }, [hasSelection, isInputFocused]);
+
 
   const handleFocusChange = useCallback((focused: boolean) => {
     setIsInputFocused(focused);
@@ -405,13 +401,12 @@ function App() {
     setIsLoading(false);
     setLoadingVerb(null);
     if (success) {
-      setFlaskState('success');
+      setLoaderState('success');
       setTimeout(() => {
-        // Return to ready if there's context, otherwise idle
-        setFlaskState(prev => prev === 'success' ? 'idle' : prev);
-      }, 1600);
+        setLoaderState(prev => prev === 'success' ? 'idle' : prev);
+      }, 2000);
     } else {
-      setFlaskState('idle');
+      setLoaderState('idle');
     }
   }, []);
 
@@ -463,21 +458,13 @@ function App() {
           setMockSelectionName(null);
           setIsLoading(false);
           setLoadingVerb(null);
-          setFlaskState('idle');
+          setLoaderState('idle');
           addMessage('assistant', 'State → idle');
-          break;
-        case 'ready':
-          setCurrentUISpec(null);
-          setMockSelectionName('Button Primary');
-          setIsLoading(false);
-          setLoadingVerb(null);
-          setFlaskState('ready');
-          addMessage('assistant', 'State → ready (mock layer: "Button Primary")');
           break;
         case 'loading':
           setCurrentUISpec(null);
           setMockSelectionName('Button Primary');
-          setFlaskState('loading');
+          setLoaderState('loading');
           setLoadingVerb(getRandomVerb());
           addMessage('assistant', 'State → loading');
           break;
@@ -489,7 +476,7 @@ function App() {
           addMessage('assistant', 'State → success');
           break;
         default:
-          addMessage('error', `Unknown state "${state}". Use: idle, ready, loading, success`);
+          addMessage('error', `Unknown state "${state}". Use: idle, loading, success`);
       }
       return;
     }
@@ -497,36 +484,92 @@ function App() {
     if (cmd === '/loader') {
       demoTimersRef.current.forEach(clearTimeout);
       demoTimersRef.current = [];
-      addMessage('assistant', 'Demo: idle → ready → loading → success');
+      addMessage('assistant', 'Demo: idle → loading → success → idle');
 
       // idle
       setMockSelectionName(null);
       setIsLoading(false);
       setLoadingVerb(null);
-      setFlaskState('idle');
+      setLoaderState('idle');
 
-      // → ready after 1s
+      // → loading after 1s
       demoTimersRef.current.push(setTimeout(() => {
         setMockSelectionName('Button Primary');
-        setFlaskState('ready');
+        setLoaderState('loading');
+        setLoadingVerb(getRandomVerb());
       }, 1000));
 
-      // → loading after 2s
-      demoTimersRef.current.push(setTimeout(() => {
-        setFlaskState('loading');
-        setLoadingVerb(getRandomVerb());
-      }, 2000));
-
-      // → success after 4s
+      // → success after 3s
       demoTimersRef.current.push(setTimeout(() => {
         setLoadingVerb(null);
-        setFlaskState('success');
-      }, 4000));
+        setLoaderState('success');
+      }, 3000));
 
-      // → back to ready after 5.6s (1.6s success animation)
+      // → back to idle after 5s (2s success animation)
       demoTimersRef.current.push(setTimeout(() => {
-        setFlaskState('ready');
-      }, 5600));
+        setLoaderState('idle');
+      }, 5000));
+
+      return;
+    }
+
+    if (cmd === '/demo' || cmd.startsWith('/demo ')) {
+      const sub = cmd.slice(5).trim();
+      demoTimersRef.current.forEach(clearTimeout);
+      demoTimersRef.current = [];
+
+      const demoSpecs: Record<string, { label: string; spec: UISpec }> = {
+        '': {
+          label: 'All Controls',
+          spec: {
+            mode: 'live',
+            controls: [
+              { id: 'dial-a', type: 'dial', label: 'Rotation X', props: { min: -180, max: 180, step: 1, defaultValue: 0 } },
+              { id: 'slider', type: 'slider', label: 'Opacity', props: { min: 0, max: 100, step: 1, defaultValue: 73 } },
+              { id: 'toggle', type: 'toggle', label: 'Visible', props: { defaultValue: true } },
+              { id: 'select', type: 'select', label: 'Blend Mode', props: { options: ['Off', 'Multiply', 'Screen', 'Overlay'], defaultValue: 'Off' } },
+            ],
+          },
+        },
+        'full': {
+          label: 'All Controls',
+          spec: {
+            mode: 'live',
+            controls: [
+              { id: 'dial-a', type: 'dial', label: 'Rotation X', props: { min: -180, max: 180, step: 1, defaultValue: 0 } },
+              { id: 'dial-b', type: 'dial', label: 'Rotation Y', props: { min: -180, max: 180, step: 1, defaultValue: 34 } },
+              { id: 'slider', type: 'slider', label: 'Opacity', props: { min: 0, max: 100, step: 1, defaultValue: 73 } },
+              { id: 'select', type: 'select', label: 'Blend Mode', props: { options: ['Off', 'Multiply', 'Screen', 'Overlay'], defaultValue: 'Off' } },
+              { id: 'toggle', type: 'toggle', label: 'Visible', props: { defaultValue: true } },
+              { id: 'segmented', type: 'segmented', label: 'Alignment', props: { options: [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Center' }, { value: 'right', label: 'Right' }], defaultValue: 'center' } },
+              { id: 'color', type: 'color', label: 'Fill Color', props: { defaultValue: '#3B82F6' } },
+            ],
+          },
+        },
+      };
+
+      const entry = demoSpecs[sub] ?? demoSpecs[''];
+      addMessage('assistant', `Demo: loading → success → ${entry.label}`);
+
+      // Start in loading
+      setCurrentUISpec(null);
+      setMockSelectionName('Button Primary');
+      setLoaderState('loading');
+      setLoadingVerb(getRandomVerb());
+
+      // → success after 2s
+      demoTimersRef.current.push(setTimeout(() => {
+        setLoadingVerb(null);
+        setLoaderState('success');
+      }, 2000));
+
+      // → show UI after success animation completes (2s + 2s)
+      demoTimersRef.current.push(setTimeout(() => {
+        setIsLoading(false);
+        setLoaderState('idle');
+        setAnimateEntrance(true);
+        setCurrentUISpec(entry.spec);
+      }, 4000));
 
       return;
     }
@@ -669,9 +712,10 @@ function App() {
         return;
       }
 
+      setAnimateEntrance(true);
       setCurrentUISpec(entry.spec);
       setMockSelectionName(entry.label);
-      setFlaskState('ready');
+      setLoaderState('idle');
       addMessage('assistant', `Loaded ${entry.label}`);
       return;
     }
@@ -700,7 +744,7 @@ function App() {
 
     addMessage('user', text);
     setIsLoading(true);
-    setFlaskState('loading');
+    setLoaderState('loading');
     setLoadingVerb(getRandomVerb());
 
     // Snapshot current state at submission time.
@@ -845,6 +889,7 @@ function App() {
     }
 
     // Update the rendered UI spec with the merged result.
+    setAnimateEntrance(true);
     setCurrentUISpec(mergedUi);
 
     finishLoading(true);
@@ -879,14 +924,51 @@ function App() {
     <div className="shell">
       {/* Controls zone */}
       <div className="render-zone">
-        {!hasSpec && <EmptyState selectionName={mockSelectionName ?? (selectionContext?.nodes[0]?.name ?? null)} flaskState={flaskState} loadingVerb={loadingVerb} />}
-        {hasSpec && <UIRenderer spec={currentUISpec!} onApply={handleApply} onValueChange={handleValueChange} />}
+        {animateEntrance ? (
+          <AnimatePresence mode="wait">
+            {!hasSpec && (
+              <motion.div
+                key="empty"
+                initial={false}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0, transition: { duration: 0.15 } }}
+                style={{ flex: 1, display: 'flex' }}
+              >
+                <EmptyState selectionName={mockSelectionName ?? (selectionContext?.nodes[0]?.name ?? null)} loaderState={loaderState} loadingVerb={loadingVerb} />
+              </motion.div>
+            )}
+            {hasSpec && (
+              <motion.div
+                key="ui"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0, y: -4, transition: { duration: 0.12 } }}
+                transition={{ duration: 0.2 }}
+                style={{ display: 'flex', flexDirection: 'column', flex: 1 }}
+              >
+                <UIRenderer spec={currentUISpec!} onApply={handleApply} onValueChange={handleValueChange} animateEntrance />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        ) : (
+          <>
+            {!hasSpec && (
+              <div style={{ flex: 1, display: 'flex' }}>
+                <EmptyState selectionName={mockSelectionName ?? (selectionContext?.nodes[0]?.name ?? null)} loaderState={loaderState} loadingVerb={loadingVerb} />
+              </div>
+            )}
+            {hasSpec && (
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                <UIRenderer spec={currentUISpec!} onApply={handleApply} onValueChange={handleValueChange} animateEntrance={false} />
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* Chat area */}
       <div className="chat-area">
-        <ChatHistory messages={messages} />
-        <ChatInput onSubmit={handleSubmit} disabled={isLoading} isLoading={isLoading} onFocusChange={handleFocusChange} />
+        <ChatInput onSubmit={handleSubmit} disabled={isLoading} isLoading={isLoading && hasSpec} loadingVerb={loadingVerb} onFocusChange={handleFocusChange} />
       </div>
     </div>
   );

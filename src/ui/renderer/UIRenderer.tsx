@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
+import { motion } from 'motion/react';
 import { postToMain } from '../messaging';
 import {
   Slider,
@@ -280,13 +281,15 @@ function groupControls(controls: UIControl[], cubeDialIds: Set<string> | null): 
     if (control.type !== 'dial') {
       items.push({ kind: 'single', control });
     } else if (dialIdSet.has(control.id)) {
-      // Render the dial-row at the position of its first member
       const row = dialRows[nextDialRow];
       if (row && row[0].id === control.id) {
-        items.push({ kind: 'dial-row', controls: row });
+        if (row.length === 1) {
+          items.push({ kind: 'single', control: row[0] });
+        } else {
+          items.push({ kind: 'dial-row', controls: row });
+        }
         nextDialRow++;
       }
-      // Skip second dial in pair — already included in the row
     }
   }
 
@@ -299,9 +302,10 @@ interface UIRendererProps {
   spec: UISpec;
   onApply?: (values: Record<string, unknown>) => void;
   onValueChange?: (controlId: string, value: unknown) => void;
+  animateEntrance?: boolean;
 }
 
-export function UIRenderer({ spec, onApply, onValueChange }: UIRendererProps) {
+export function UIRenderer({ spec, onApply, onValueChange, animateEntrance = true }: UIRendererProps) {
   const hasGenerator = !!spec.generate;
   const [controlValues, setControlValues] = useState<ControlValues>(() => collectControlDefaults(spec.controls));
   const [previewActions, setPreviewActions] = useState<ActionDescriptor[] | null>(null);
@@ -435,8 +439,62 @@ export function UIRenderer({ spec, onApply, onValueChange }: UIRendererProps) {
     );
   };
 
+  const SKELETON_STAGGER = 0.25;
+  const SKELETON_DURATION = 0.35;
+  const skeletonTotal = renderItems.length * SKELETON_STAGGER + SKELETON_DURATION;
+  const CONTENT_DELAY = skeletonTotal + 0.05;
+  const CONTENT_STAGGER = 0.04;
+
+  if (!animateEntrance) {
+    return (
+      <div
+        className="ui-renderer"
+        style={{ display: 'flex', flexDirection: 'column' }}
+      >
+        {hasCubePreview && dialIds && (
+          <CubePreview
+            rx={(controlValues[dialIds.rx] as number) ?? 0}
+            ry={(controlValues[dialIds.ry] as number) ?? 0}
+            rz={dialIds.rz ? ((controlValues[dialIds.rz] as number) ?? 0) : 0}
+            onRotate={handleCubeRotate}
+          />
+        )}
+        {renderItems.map((item, idx) => {
+          const content = item.kind === 'single'
+            ? renderControl(item.control)
+            : (
+              <div key={`dial-row-${idx}`} className="dialkit-control-row">
+                {item.controls.map(control => renderControl(control))}
+              </div>
+            );
+          return (
+            <div key={item.kind === 'single' ? item.control.id : `dial-row-${idx}`}>
+              {content}
+            </div>
+          );
+        })}
+        {hasPreview && !hasCubePreview && previewActions && previewActions.length > 0 && (
+          <PreviewCanvas actions={previewActions} />
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div className="ui-renderer" style={{ display: 'flex', flexDirection: 'column' }}>
+    <motion.div
+      className="ui-renderer"
+      style={{ display: 'flex', flexDirection: 'column' }}
+      initial="skeleton"
+      animate="visible"
+      variants={{
+        skeleton: {},
+        visible: {
+          transition: {
+            staggerChildren: SKELETON_STAGGER,
+          },
+        },
+      }}
+    >
       {hasCubePreview && dialIds && (
         <CubePreview
           rx={(controlValues[dialIds.rx] as number) ?? 0}
@@ -446,18 +504,52 @@ export function UIRenderer({ spec, onApply, onValueChange }: UIRendererProps) {
         />
       )}
       {renderItems.map((item, idx) => {
-        if (item.kind === 'single') {
-          return renderControl(item.control);
-        }
+        const content = item.kind === 'single'
+          ? renderControl(item.control)
+          : (
+            <div key={`dial-row-${idx}`} className="dialkit-control-row">
+              {item.controls.map(control => renderControl(control))}
+            </div>
+          );
+        const contentDelay = CONTENT_DELAY + idx * CONTENT_STAGGER;
+        const isDialRow = item.kind === 'dial-row';
         return (
-          <div key={`dial-row-${idx}`} className="dialkit-control-row">
-            {item.controls.map(control => renderControl(control))}
-          </div>
+          <motion.div
+            key={isDialRow ? `dial-row-${idx}` : item.control.id}
+            className={`ui-enter-card ${isDialRow ? 'ui-enter-card--dial-row' : ''}`}
+            variants={{
+              skeleton: { opacity: 1 },
+              visible: { opacity: 1 },
+            }}
+          >
+            <motion.div
+              className="ui-enter-skeleton"
+              variants={{
+                skeleton: { clipPath: 'inset(0 100% 0 0)' },
+                visible: {
+                  clipPath: 'inset(0 0% 0 0)',
+                  transition: { duration: SKELETON_DURATION, ease: [0.16, 1, 0.3, 1] },
+                },
+              }}
+            />
+            <motion.div
+              className="ui-enter-content"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{
+                duration: 0.3,
+                delay: contentDelay,
+                ease: [0.16, 1, 0.3, 1],
+              }}
+            >
+              {content}
+            </motion.div>
+          </motion.div>
         );
       })}
       {hasPreview && !hasCubePreview && previewActions && previewActions.length > 0 && (
         <PreviewCanvas actions={previewActions} />
       )}
-    </div>
+    </motion.div>
   );
 }

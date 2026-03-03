@@ -51,6 +51,21 @@ function ColorRow({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [pickerOpen]);
 
+  const popoverRef = useCallback((node: HTMLDivElement | null) => {
+    if (!node || !wrapperRef.current) return;
+    const wrapperRect = wrapperRef.current.getBoundingClientRect();
+    const popoverHeight = node.offsetHeight + 8;
+    const scrollParent = wrapperRef.current.closest('.render-zone');
+    const bottomEdge = scrollParent
+      ? scrollParent.getBoundingClientRect().bottom
+      : window.innerHeight;
+    const spaceBelow = bottomEdge - wrapperRect.bottom;
+    if (spaceBelow < popoverHeight) {
+      node.classList.add('dialkit-color-picker-popover--flip');
+    }
+    node.style.visibility = 'visible';
+  }, []);
+
   function handleTextSubmit() {
     setIsEditing(false);
     if (HEX_COLOR_REGEX.test(editValue)) {
@@ -103,7 +118,7 @@ function ColorRow({
         </div>
       </div>
       {pickerOpen && (
-        <div className="dialkit-color-picker-popover">
+        <div ref={popoverRef} className="dialkit-color-picker-popover">
           <HexColorPicker color={normalizedValue} onChange={handlePickerChange} />
         </div>
       )}

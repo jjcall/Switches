@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
+import { GridLoader } from '../components/GridLoader';
 
 interface ChatInputProps {
   onSubmit: (message: string) => void;
   disabled?: boolean;
   isLoading?: boolean;
+  loadingVerb?: string | null;
   placeholder?: string;
   onFocusChange?: (isFocused: boolean) => void;
 }
@@ -12,6 +14,7 @@ export function ChatInput({
   onSubmit,
   disabled = false,
   isLoading = false,
+  loadingVerb = null,
   placeholder = 'Describe your edit',
   onFocusChange,
 }: ChatInputProps) {
@@ -27,8 +30,6 @@ export function ChatInput({
     const next = Math.min(el.scrollHeight, 240);
     el.style.height = `${next}px`;
     el.style.overflowY = next >= 240 ? 'auto' : 'hidden';
-    // The textarea width is constant (never shares row with button),
-    // so scrollHeight is a reliable multiline indicator.
     setIsMultiline(el.scrollHeight > 30);
   }, [value]);
 
@@ -52,7 +53,31 @@ export function ChatInput({
 
   const canSend = !disabled && value.trim().length > 0;
 
-  if (isLoading) return null;
+  if (isLoading) {
+    return (
+      <div className="chat-input-box chat-input-box--loading">
+        <div className="chat-input-loading-content">
+          <GridLoader state="loading" size={16} />
+          <span className="chat-input-loading-verb">{loadingVerb ?? 'Thinking'}</span>
+        </div>
+        <button
+          className="chat-input-send"
+          disabled
+          aria-label="Send"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path
+              d="M8 13V3M8 3L3.5 7.5M8 3L12.5 7.5"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className={`chat-input-box${isMultiline ? ' chat-input-box--expanded' : ''}`}>

@@ -41,9 +41,9 @@
   --icon-disabled: rgba(255, 255, 255, 0.12);
 
   /* ── Accent ────────────────────────────────────── */
-  --accent-blue: #0D99FF;
-  --accent-blue-hover: #2BA6FF;
-  --accent-blue-active: #0A7AD4;
+  --accent-blue: #6891D4;
+  --accent-blue-hover: #7DA1DE;
+  --accent-blue-active: #5A80C4;
   --accent-green: #14AE5C;
 
   /* ── Status ────────────────────────────────────── */
