@@ -41,6 +41,11 @@
   --status-on: #8C9D6D;
   --status-on-glow: rgba(140, 157, 109, 0.68);
   --status-error: #C96B6C;
+  --history-row-bg: #343434;
+  --history-error-bg: rgba(224, 62, 26, 0.4);
+  --history-error-text: #FCA397;
+  --history-system-bg: var(--dark-blue);
+  --history-system-text: var(--accent-blue);
   --badge-layer-bg: rgba(52, 87, 145, 0.28);
   --badge-layer-border: #345791;
   --badge-layer-text: #6991D4;
@@ -905,58 +910,83 @@ body {
   position: relative;
   z-index: 1;
 }
-.chat-area::before {
-  content: "";
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  right: 0;
-  height: 24px;
-  background:
-    linear-gradient(
-      to bottom,
-      rgba(44, 44, 44, 0) 0%,
-      rgba(44, 44, 44, 1) 100%);
-  pointer-events: none;
-}
-.chat-history {
+.history-panel {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 0 8px 8px;
-  overflow: hidden;
+  justify-content: flex-end;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
 }
-.chat-prompt {
+.history-panel::-webkit-scrollbar {
+  width: 4px;
+}
+.history-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+.history-panel::-webkit-scrollbar-thumb {
+  background: var(--light-overlay);
+  border-radius: 2px;
+}
+.history-empty-icon {
+  color: var(--dark-tertiary);
+  flex-shrink: 0;
+}
+.history-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
   width: 100%;
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-control);
+}
+.history-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-xs);
+  padding: 0 var(--space-sm);
+  color: var(--text-tertiary);
 }
-.chat-prompt::before {
-  content: "";
+.history-header-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-sm);
-  background: var(--badge-layer-border);
 }
-.chat-prompt--user::before {
-  background: var(--status-on);
-}
-.chat-prompt--error::before {
-  background: var(--status-error);
-}
-.chat-prompt-text {
-  display: block;
+.history-header-label {
   font-size: var(--font-size-xs);
-  line-height: 1.4;
-  color: var(--text-secondary);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-xs);
+  letter-spacing: var(--letter-spacing-label);
+  color: var(--text-tertiary);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
+}
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+}
+.history-row {
+  width: 100%;
+  padding: var(--space-md);
+  background: var(--history-row-bg);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-xs);
+  letter-spacing: var(--letter-spacing-label);
+  color: var(--text-tertiary);
+}
+.history-row--error {
+  background: var(--history-error-bg);
+  color: var(--history-error-text);
+  opacity: 0.7;
+}
+.history-row--system {
+  background: var(--history-system-bg);
+  color: var(--history-system-text);
+  opacity: 0.7;
 }
 .chat-input-box {
   position: relative;
@@ -1033,10 +1063,10 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--dark-tertiary);
+  background: var(--dark-secondary);
   border: none;
   border-radius: 50%;
-  color: var(--light-primary);
+  color: var(--icon-disabled);
   cursor: default;
   transition:
     background 0.15s,
@@ -2391,11 +2421,11 @@ body {
             var dispatcher = resolveDispatcher();
             return dispatcher.useReducer(reducer, initialArg, init);
           }
-          function useRef22(initialValue) {
+          function useRef23(initialValue) {
             var dispatcher = resolveDispatcher();
             return dispatcher.useRef(initialValue);
           }
-          function useEffect20(create, deps) {
+          function useEffect21(create, deps) {
             var dispatcher = resolveDispatcher();
             return dispatcher.useEffect(create, deps);
           }
@@ -3178,14 +3208,14 @@ body {
           exports.useContext = useContext10;
           exports.useDebugValue = useDebugValue;
           exports.useDeferredValue = useDeferredValue;
-          exports.useEffect = useEffect20;
+          exports.useEffect = useEffect21;
           exports.useId = useId4;
           exports.useImperativeHandle = useImperativeHandle;
           exports.useInsertionEffect = useInsertionEffect4;
           exports.useLayoutEffect = useLayoutEffect3;
           exports.useMemo = useMemo7;
           exports.useReducer = useReducer;
-          exports.useRef = useRef22;
+          exports.useRef = useRef23;
           exports.useState = useState18;
           exports.useSyncExternalStore = useSyncExternalStore;
           exports.useTransition = useTransition;
@@ -25763,11 +25793,11 @@ body {
               return jsxWithValidation(type, props, key, false);
             }
           }
-          var jsx27 = jsxWithValidationDynamic;
-          var jsxs19 = jsxWithValidationStatic;
+          var jsx28 = jsxWithValidationDynamic;
+          var jsxs20 = jsxWithValidationStatic;
           exports.Fragment = REACT_FRAGMENT_TYPE;
-          exports.jsx = jsx27;
-          exports.jsxs = jsxs19;
+          exports.jsx = jsx28;
+          exports.jsxs = jsxs20;
         })();
       }
     }
@@ -30011,7 +30041,7 @@ body {
 
   // src/ui/App.tsx
   var import_client = __toESM(require_client());
-  var import_react47 = __toESM(require_react());
+  var import_react48 = __toESM(require_react());
 
   // src/ui/messaging.ts
   function postToMain(message) {
@@ -30182,6 +30212,7 @@ body {
     placeholder = "Describe your edit",
     onFocusChange,
     hasSelection = false,
+    hasControls = false,
     historyOpen = false,
     onHistoryToggle
   }) {
@@ -30218,7 +30249,7 @@ body {
     const handleActionClick = () => {
       if (hasText) {
         submit();
-      } else if (hasSelection && !disabled) {
+      } else if (hasSelection && !hasControls && !disabled) {
         onSubmit("/gen");
       }
     };
@@ -30291,11 +30322,66 @@ body {
             onClick: handleActionClick,
             disabled: !canAct,
             "aria-label": hasText ? "Send" : "Generate",
-            children: !hasText && hasSelection ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(AiStarIcon, {}) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(UpArrowIcon, {})
+            children: !hasText && hasSelection && !hasControls && !disabled ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(AiStarIcon, {}) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(UpArrowIcon, {})
           }
         )
       ] })
     ] });
+  }
+
+  // src/ui/chat/ChatHistory.tsx
+  var import_react3 = __toESM(require_react());
+  var import_jsx_runtime3 = __toESM(require_jsx_runtime());
+  function HistoryIcon2({ size = 24, className }) {
+    return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("svg", { width: size, height: size, viewBox: "0 0 24.5 24.4771", fill: "none", className, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("path", { d: "M3.62496 16.8359C3.70845 16.503 4.18206 16.503 4.26559 16.8359L4.94039 19.5361L7.64059 20.2119C7.97387 20.2952 7.97387 20.7682 7.64059 20.8515L4.94039 21.5273L4.26559 24.2275C4.18204 24.5603 3.70847 24.5604 3.62496 24.2275L2.95016 21.5273L0.249963 20.8515C-0.0832152 20.7682-0.0832101 20.2952 0.249963 20.2119L2.95016 19.5361L3.62496 16.8359Z", fill: "currentColor" }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("path", { d: "M3.62496 8.54293C3.70828 8.20964 4.18227 8.20964 4.26559 8.54293L4.94039 11.2431L7.64059 11.9179C7.97387 12.0012 7.97387 12.4752 7.64059 12.5586L4.94039 13.2334L4.26559 15.9336C4.18227 16.2668 3.70828 16.2668 3.62496 15.9336L2.95016 13.2334L0.249963 12.5586C-0.0833211 12.4752-0.0833211 12.0012 0.249963 11.9179L2.95016 11.2431L3.62496 8.54293Z", fill: "currentColor" }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("path", { d: "M3.62496 0.24996C3.70828-0.0833221 4.18226-0.0833179 4.26559 0.24996L4.94039 2.95016L7.64059 3.62496C7.97387 3.70828 7.97387 4.18226 7.64059 4.26558L4.94039 4.94039L4.26559 7.64058C4.18227 7.97387 3.70828 7.97387 3.62496 7.64058L2.95016 4.94039L0.249963 4.26558C-0.0833211 4.18226-0.0833211 3.70828 0.249963 3.62496L2.95016 2.95016L3.62496 0.24996Z", fill: "currentColor" }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("path", { d: "M10.5 4C10.5 3.72386 10.7239 3.5 11 3.5H24C24.2761 3.5 24.5 3.72386 24.5 4C24.5 4.27614 24.2761 4.5 24 4.5H11C10.7239 4.5 10.5 4.27614 10.5 4Z", fill: "currentColor" }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("path", { d: "M10.5 12.5C10.5 12.2239 10.7239 12 11 12H24C24.2761 12 24.5 12.2239 24.5 12.5C24.5 12.7761 24.2761 13 24 13H11C10.7239 13 10.5 12.7761 10.5 12.5Z", fill: "currentColor" }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("path", { d: "M10.5 20.5C10.5 20.2239 10.7239 20 11 20H24C24.2761 20 24.5 20.2239 24.5 20.5C24.5 20.7761 24.2761 21 24 21H11C10.7239 21 10.5 20.7761 10.5 20.5Z", fill: "currentColor" })
+    ] });
+  }
+  function getRowType(msg) {
+    if (msg.role === "error") return "error";
+    if (msg.content.startsWith("/")) return "system";
+    return "user";
+  }
+  function HistoryPanel({ messages, onSelectPrompt }) {
+    const bottomRef = (0, import_react3.useRef)(null);
+    (0, import_react3.useEffect)(() => {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [messages.length]);
+    if (messages.length === 0) {
+      return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { className: "history-panel", children: /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "render-zone-empty", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(HistoryIcon2, { size: 24, className: "history-empty-icon" }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { className: "render-zone-empty-info", children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: "render-zone-empty-text", children: "No recent prompts." }) })
+      ] }) });
+    }
+    return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { className: "history-panel", children: /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "history-content", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "history-header", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { className: "history-header-icon", children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(HistoryIcon2, { size: 24 }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { className: "history-header-label", children: "Prompt history" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "history-list", children: [
+        messages.map((msg) => {
+          const type = getRowType(msg);
+          const className = `history-row${type !== "user" ? ` history-row--${type}` : ""}`;
+          return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+            "div",
+            {
+              className,
+              onClick: () => onSelectPrompt?.(msg.content),
+              role: onSelectPrompt ? "button" : void 0,
+              tabIndex: onSelectPrompt ? 0 : void 0,
+              children: msg.content
+            },
+            msg.id
+          );
+        }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { ref: bottomRef })
+      ] })
+    ] }) });
   }
 
   // src/ui/api/claude.ts
@@ -32107,20 +32193,20 @@ ${text.slice(0, 300)}` };
   }
 
   // src/ui/renderer/UIRenderer.tsx
-  var import_react45 = __toESM(require_react());
+  var import_react46 = __toESM(require_react());
 
   // node_modules/framer-motion/dist/es/components/AnimatePresence/index.mjs
-  var import_jsx_runtime5 = __toESM(require_jsx_runtime(), 1);
-  var import_react12 = __toESM(require_react(), 1);
+  var import_jsx_runtime6 = __toESM(require_jsx_runtime(), 1);
+  var import_react13 = __toESM(require_react(), 1);
 
   // node_modules/framer-motion/dist/es/context/LayoutGroupContext.mjs
-  var import_react3 = __toESM(require_react(), 1);
-  var LayoutGroupContext = (0, import_react3.createContext)({});
+  var import_react4 = __toESM(require_react(), 1);
+  var LayoutGroupContext = (0, import_react4.createContext)({});
 
   // node_modules/framer-motion/dist/es/utils/use-constant.mjs
-  var import_react4 = __toESM(require_react(), 1);
+  var import_react5 = __toESM(require_react(), 1);
   function useConstant(init) {
-    const ref = (0, import_react4.useRef)(null);
+    const ref = (0, import_react5.useRef)(null);
     if (ref.current === null) {
       ref.current = init();
     }
@@ -32128,25 +32214,25 @@ ${text.slice(0, 300)}` };
   }
 
   // node_modules/framer-motion/dist/es/utils/use-isomorphic-effect.mjs
-  var import_react5 = __toESM(require_react(), 1);
+  var import_react6 = __toESM(require_react(), 1);
 
   // node_modules/framer-motion/dist/es/utils/is-browser.mjs
   var isBrowser = typeof window !== "undefined";
 
   // node_modules/framer-motion/dist/es/utils/use-isomorphic-effect.mjs
-  var useIsomorphicLayoutEffect = isBrowser ? import_react5.useLayoutEffect : import_react5.useEffect;
+  var useIsomorphicLayoutEffect = isBrowser ? import_react6.useLayoutEffect : import_react6.useEffect;
 
   // node_modules/framer-motion/dist/es/components/AnimatePresence/PresenceChild.mjs
-  var import_jsx_runtime4 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime5 = __toESM(require_jsx_runtime(), 1);
   var React3 = __toESM(require_react(), 1);
-  var import_react9 = __toESM(require_react(), 1);
+  var import_react10 = __toESM(require_react(), 1);
 
   // node_modules/framer-motion/dist/es/context/PresenceContext.mjs
-  var import_react6 = __toESM(require_react(), 1);
-  var PresenceContext = /* @__PURE__ */ (0, import_react6.createContext)(null);
+  var import_react7 = __toESM(require_react(), 1);
+  var PresenceContext = /* @__PURE__ */ (0, import_react7.createContext)(null);
 
   // node_modules/framer-motion/dist/es/components/AnimatePresence/PopChild.mjs
-  var import_jsx_runtime3 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime4 = __toESM(require_jsx_runtime(), 1);
 
   // node_modules/motion-utils/dist/es/array.mjs
   function addUniqueItem(arr, item) {
@@ -38713,11 +38799,11 @@ ${text.slice(0, 300)}` };
 
   // node_modules/framer-motion/dist/es/components/AnimatePresence/PopChild.mjs
   var React2 = __toESM(require_react(), 1);
-  var import_react8 = __toESM(require_react(), 1);
+  var import_react9 = __toESM(require_react(), 1);
 
   // node_modules/framer-motion/dist/es/context/MotionConfigContext.mjs
-  var import_react7 = __toESM(require_react(), 1);
-  var MotionConfigContext = (0, import_react7.createContext)({
+  var import_react8 = __toESM(require_react(), 1);
+  var MotionConfigContext = (0, import_react8.createContext)({
     transformPagePoint: (p3) => p3,
     isStatic: false,
     reducedMotion: "never"
@@ -38788,9 +38874,9 @@ ${text.slice(0, 300)}` };
     }
   };
   function PopChild({ children, isPresent, anchorX, anchorY, root: root2, pop }) {
-    const id3 = (0, import_react8.useId)();
-    const ref = (0, import_react8.useRef)(null);
-    const size = (0, import_react8.useRef)({
+    const id3 = (0, import_react9.useId)();
+    const ref = (0, import_react9.useRef)(null);
+    const size = (0, import_react9.useRef)({
       width: 0,
       height: 0,
       top: 0,
@@ -38798,10 +38884,10 @@ ${text.slice(0, 300)}` };
       right: 0,
       bottom: 0
     });
-    const { nonce } = (0, import_react8.useContext)(MotionConfigContext);
+    const { nonce } = (0, import_react9.useContext)(MotionConfigContext);
     const childRef = children.props?.ref ?? children?.ref;
     const composedRef = useComposedRefs(ref, childRef);
-    (0, import_react8.useInsertionEffect)(() => {
+    (0, import_react9.useInsertionEffect)(() => {
       const { width, height, top, left, right, bottom } = size.current;
       if (isPresent || pop === false || !ref.current || !width || !height)
         return;
@@ -38830,15 +38916,15 @@ ${text.slice(0, 300)}` };
         }
       };
     }, [isPresent]);
-    return (0, import_jsx_runtime3.jsx)(PopChildMeasure, { isPresent, childRef: ref, sizeRef: size, pop, children: pop === false ? children : React2.cloneElement(children, { ref: composedRef }) });
+    return (0, import_jsx_runtime4.jsx)(PopChildMeasure, { isPresent, childRef: ref, sizeRef: size, pop, children: pop === false ? children : React2.cloneElement(children, { ref: composedRef }) });
   }
 
   // node_modules/framer-motion/dist/es/components/AnimatePresence/PresenceChild.mjs
   var PresenceChild = ({ children, initial, isPresent, onExitComplete, custom, presenceAffectsLayout, mode, anchorX, anchorY, root: root2 }) => {
     const presenceChildren = useConstant(newChildrenMap);
-    const id3 = (0, import_react9.useId)();
+    const id3 = (0, import_react10.useId)();
     let isReusedContext = true;
-    let context = (0, import_react9.useMemo)(() => {
+    let context = (0, import_react10.useMemo)(() => {
       isReusedContext = false;
       return {
         id: id3,
@@ -38862,43 +38948,43 @@ ${text.slice(0, 300)}` };
     if (presenceAffectsLayout && isReusedContext) {
       context = { ...context };
     }
-    (0, import_react9.useMemo)(() => {
+    (0, import_react10.useMemo)(() => {
       presenceChildren.forEach((_3, key) => presenceChildren.set(key, false));
     }, [isPresent]);
     React3.useEffect(() => {
       !isPresent && !presenceChildren.size && onExitComplete && onExitComplete();
     }, [isPresent]);
-    children = (0, import_jsx_runtime4.jsx)(PopChild, { pop: mode === "popLayout", isPresent, anchorX, anchorY, root: root2, children });
-    return (0, import_jsx_runtime4.jsx)(PresenceContext.Provider, { value: context, children });
+    children = (0, import_jsx_runtime5.jsx)(PopChild, { pop: mode === "popLayout", isPresent, anchorX, anchorY, root: root2, children });
+    return (0, import_jsx_runtime5.jsx)(PresenceContext.Provider, { value: context, children });
   };
   function newChildrenMap() {
     return /* @__PURE__ */ new Map();
   }
 
   // node_modules/framer-motion/dist/es/components/AnimatePresence/use-presence.mjs
-  var import_react10 = __toESM(require_react(), 1);
+  var import_react11 = __toESM(require_react(), 1);
   function usePresence(subscribe = true) {
-    const context = (0, import_react10.useContext)(PresenceContext);
+    const context = (0, import_react11.useContext)(PresenceContext);
     if (context === null)
       return [true, null];
     const { isPresent, onExitComplete, register } = context;
-    const id3 = (0, import_react10.useId)();
-    (0, import_react10.useEffect)(() => {
+    const id3 = (0, import_react11.useId)();
+    (0, import_react11.useEffect)(() => {
       if (subscribe) {
         return register(id3);
       }
     }, [subscribe]);
-    const safeToRemove = (0, import_react10.useCallback)(() => subscribe && onExitComplete && onExitComplete(id3), [id3, onExitComplete, subscribe]);
+    const safeToRemove = (0, import_react11.useCallback)(() => subscribe && onExitComplete && onExitComplete(id3), [id3, onExitComplete, subscribe]);
     return !isPresent && onExitComplete ? [false, safeToRemove] : [true];
   }
 
   // node_modules/framer-motion/dist/es/components/AnimatePresence/utils.mjs
-  var import_react11 = __toESM(require_react(), 1);
+  var import_react12 = __toESM(require_react(), 1);
   var getChildKey = (child) => child.key || "";
   function onlyElements(children) {
     const filtered = [];
-    import_react11.Children.forEach(children, (child) => {
-      if ((0, import_react11.isValidElement)(child))
+    import_react12.Children.forEach(children, (child) => {
+      if ((0, import_react12.isValidElement)(child))
         filtered.push(child);
     });
     return filtered;
@@ -38907,14 +38993,14 @@ ${text.slice(0, 300)}` };
   // node_modules/framer-motion/dist/es/components/AnimatePresence/index.mjs
   var AnimatePresence = ({ children, custom, initial = true, onExitComplete, presenceAffectsLayout = true, mode = "sync", propagate = false, anchorX = "left", anchorY = "top", root: root2 }) => {
     const [isParentPresent, safeToRemove] = usePresence(propagate);
-    const presentChildren = (0, import_react12.useMemo)(() => onlyElements(children), [children]);
+    const presentChildren = (0, import_react13.useMemo)(() => onlyElements(children), [children]);
     const presentKeys = propagate && !isParentPresent ? [] : presentChildren.map(getChildKey);
-    const isInitialRender = (0, import_react12.useRef)(true);
-    const pendingPresentChildren = (0, import_react12.useRef)(presentChildren);
+    const isInitialRender = (0, import_react13.useRef)(true);
+    const pendingPresentChildren = (0, import_react13.useRef)(presentChildren);
     const exitComplete = useConstant(() => /* @__PURE__ */ new Map());
-    const exitingComponents = (0, import_react12.useRef)(/* @__PURE__ */ new Set());
-    const [diffedChildren, setDiffedChildren] = (0, import_react12.useState)(presentChildren);
-    const [renderedChildren, setRenderedChildren] = (0, import_react12.useState)(presentChildren);
+    const exitingComponents = (0, import_react13.useRef)(/* @__PURE__ */ new Set());
+    const [diffedChildren, setDiffedChildren] = (0, import_react13.useState)(presentChildren);
+    const [renderedChildren, setRenderedChildren] = (0, import_react13.useState)(presentChildren);
     useIsomorphicLayoutEffect(() => {
       isInitialRender.current = false;
       pendingPresentChildren.current = presentChildren;
@@ -38951,8 +39037,8 @@ ${text.slice(0, 300)}` };
     if (mode === "wait" && renderedChildren.length > 1) {
       console.warn(`You're attempting to animate multiple children within AnimatePresence, but its mode is set to "wait". This will lead to odd visual behaviour.`);
     }
-    const { forceRender } = (0, import_react12.useContext)(LayoutGroupContext);
-    return (0, import_jsx_runtime5.jsx)(import_jsx_runtime5.Fragment, { children: renderedChildren.map((child) => {
+    const { forceRender } = (0, import_react13.useContext)(LayoutGroupContext);
+    return (0, import_jsx_runtime6.jsx)(import_jsx_runtime6.Fragment, { children: renderedChildren.map((child) => {
       const key = getChildKey(child);
       const isPresent = propagate && !isParentPresent ? false : presentChildren === renderedChildren || presentKeys.includes(key);
       const onExit = () => {
@@ -38977,13 +39063,13 @@ ${text.slice(0, 300)}` };
           onExitComplete && onExitComplete();
         }
       };
-      return (0, import_jsx_runtime5.jsx)(PresenceChild, { isPresent, initial: !isInitialRender.current || initial ? void 0 : false, custom, presenceAffectsLayout, mode, root: root2, onExitComplete: isPresent ? void 0 : onExit, anchorX, anchorY, children: child }, key);
+      return (0, import_jsx_runtime6.jsx)(PresenceChild, { isPresent, initial: !isInitialRender.current || initial ? void 0 : false, custom, presenceAffectsLayout, mode, root: root2, onExitComplete: isPresent ? void 0 : onExit, anchorX, anchorY, children: child }, key);
     }) });
   };
 
   // node_modules/framer-motion/dist/es/context/LazyContext.mjs
-  var import_react13 = __toESM(require_react(), 1);
-  var LazyContext = (0, import_react13.createContext)({ strict: false });
+  var import_react14 = __toESM(require_react(), 1);
+  var LazyContext = (0, import_react14.createContext)({ strict: false });
 
   // node_modules/framer-motion/dist/es/motion/features/definitions.mjs
   var featureProps = {
@@ -39099,15 +39185,15 @@ ${text.slice(0, 300)}` };
   }
 
   // node_modules/framer-motion/dist/es/motion/index.mjs
-  var import_jsx_runtime6 = __toESM(require_jsx_runtime(), 1);
-  var import_react23 = __toESM(require_react(), 1);
+  var import_jsx_runtime7 = __toESM(require_jsx_runtime(), 1);
+  var import_react24 = __toESM(require_react(), 1);
 
   // node_modules/framer-motion/dist/es/context/MotionContext/index.mjs
-  var import_react14 = __toESM(require_react(), 1);
-  var MotionContext = /* @__PURE__ */ (0, import_react14.createContext)({});
+  var import_react15 = __toESM(require_react(), 1);
+  var MotionContext = /* @__PURE__ */ (0, import_react15.createContext)({});
 
   // node_modules/framer-motion/dist/es/context/MotionContext/create.mjs
-  var import_react15 = __toESM(require_react(), 1);
+  var import_react16 = __toESM(require_react(), 1);
 
   // node_modules/framer-motion/dist/es/context/MotionContext/utils.mjs
   function getCurrentTreeVariants(props, context) {
@@ -39123,18 +39209,18 @@ ${text.slice(0, 300)}` };
 
   // node_modules/framer-motion/dist/es/context/MotionContext/create.mjs
   function useCreateMotionContext(props) {
-    const { initial, animate: animate3 } = getCurrentTreeVariants(props, (0, import_react15.useContext)(MotionContext));
-    return (0, import_react15.useMemo)(() => ({ initial, animate: animate3 }), [variantLabelsAsDependency(initial), variantLabelsAsDependency(animate3)]);
+    const { initial, animate: animate3 } = getCurrentTreeVariants(props, (0, import_react16.useContext)(MotionContext));
+    return (0, import_react16.useMemo)(() => ({ initial, animate: animate3 }), [variantLabelsAsDependency(initial), variantLabelsAsDependency(animate3)]);
   }
   function variantLabelsAsDependency(prop) {
     return Array.isArray(prop) ? prop.join(" ") : prop;
   }
 
   // node_modules/framer-motion/dist/es/render/dom/use-render.mjs
-  var import_react18 = __toESM(require_react(), 1);
+  var import_react19 = __toESM(require_react(), 1);
 
   // node_modules/framer-motion/dist/es/render/html/use-props.mjs
-  var import_react16 = __toESM(require_react(), 1);
+  var import_react17 = __toESM(require_react(), 1);
 
   // node_modules/framer-motion/dist/es/render/html/utils/create-render-state.mjs
   var createHtmlRenderState = () => ({
@@ -39153,7 +39239,7 @@ ${text.slice(0, 300)}` };
     }
   }
   function useInitialMotionValues({ transformTemplate }, visualState) {
-    return (0, import_react16.useMemo)(() => {
+    return (0, import_react17.useMemo)(() => {
       const state = createHtmlRenderState();
       buildHTMLStyles(state, visualState, transformTemplate);
       return Object.assign({}, state.vars, state.style);
@@ -39182,7 +39268,7 @@ ${text.slice(0, 300)}` };
   }
 
   // node_modules/framer-motion/dist/es/render/svg/use-props.mjs
-  var import_react17 = __toESM(require_react(), 1);
+  var import_react18 = __toESM(require_react(), 1);
 
   // node_modules/framer-motion/dist/es/render/svg/utils/create-render-state.mjs
   var createSvgRenderState = () => ({
@@ -39192,7 +39278,7 @@ ${text.slice(0, 300)}` };
 
   // node_modules/framer-motion/dist/es/render/svg/use-props.mjs
   function useSVGProps(props, visualState, _isStatic, Component3) {
-    const visualProps = (0, import_react17.useMemo)(() => {
+    const visualProps = (0, import_react18.useMemo)(() => {
       const state = createSvgRenderState();
       buildSVGAttrs(state, visualState, isSVGTag(Component3), props.transformTemplate, props.style);
       return {
@@ -39269,17 +39355,17 @@ ${text.slice(0, 300)}` };
     const useVisualProps = isSVG ?? isSVGComponent(Component3) ? useSVGProps : useHTMLProps;
     const visualProps = useVisualProps(props, latestValues, isStatic, Component3);
     const filteredProps = filterProps(props, typeof Component3 === "string", forwardMotionProps);
-    const elementProps = Component3 !== import_react18.Fragment ? { ...filteredProps, ...visualProps, ref } : {};
+    const elementProps = Component3 !== import_react19.Fragment ? { ...filteredProps, ...visualProps, ref } : {};
     const { children } = props;
-    const renderedChildren = (0, import_react18.useMemo)(() => isMotionValue(children) ? children.get() : children, [children]);
-    return (0, import_react18.createElement)(Component3, {
+    const renderedChildren = (0, import_react19.useMemo)(() => isMotionValue(children) ? children.get() : children, [children]);
+    return (0, import_react19.createElement)(Component3, {
       ...elementProps,
       children: renderedChildren
     });
   }
 
   // node_modules/framer-motion/dist/es/motion/utils/use-visual-state.mjs
-  var import_react19 = __toESM(require_react(), 1);
+  var import_react20 = __toESM(require_react(), 1);
   function makeState({ scrapeMotionValuesFromProps: scrapeMotionValuesFromProps3, createRenderState }, props, context, presenceContext) {
     const state = {
       latestValues: makeLatestValues(props, context, presenceContext, scrapeMotionValuesFromProps3),
@@ -39330,8 +39416,8 @@ ${text.slice(0, 300)}` };
     return values;
   }
   var makeUseVisualState = (config) => (props, isStatic) => {
-    const context = (0, import_react19.useContext)(MotionContext);
-    const presenceContext = (0, import_react19.useContext)(PresenceContext);
+    const context = (0, import_react20.useContext)(MotionContext);
+    const presenceContext = (0, import_react20.useContext)(PresenceContext);
     const make = () => makeState(config, props, context, presenceContext);
     return isStatic ? make() : useConstant(make);
   };
@@ -39352,14 +39438,14 @@ ${text.slice(0, 300)}` };
   var motionComponentSymbol = /* @__PURE__ */ Symbol.for("motionComponentSymbol");
 
   // node_modules/framer-motion/dist/es/motion/utils/use-motion-ref.mjs
-  var import_react20 = __toESM(require_react(), 1);
+  var import_react21 = __toESM(require_react(), 1);
   function useMotionRef(visualState, visualElement, externalRef) {
-    const externalRefContainer = (0, import_react20.useRef)(externalRef);
-    (0, import_react20.useInsertionEffect)(() => {
+    const externalRefContainer = (0, import_react21.useRef)(externalRef);
+    (0, import_react21.useInsertionEffect)(() => {
       externalRefContainer.current = externalRef;
     });
-    const refCleanup = (0, import_react20.useRef)(null);
-    return (0, import_react20.useCallback)((instance) => {
+    const refCleanup = (0, import_react21.useRef)(null);
+    return (0, import_react21.useCallback)((instance) => {
       if (instance) {
         visualState.onMount?.(instance);
       }
@@ -39386,11 +39472,11 @@ ${text.slice(0, 300)}` };
   }
 
   // node_modules/framer-motion/dist/es/motion/utils/use-visual-element.mjs
-  var import_react22 = __toESM(require_react(), 1);
+  var import_react23 = __toESM(require_react(), 1);
 
   // node_modules/framer-motion/dist/es/context/SwitchLayoutGroupContext.mjs
-  var import_react21 = __toESM(require_react(), 1);
-  var SwitchLayoutGroupContext = (0, import_react21.createContext)({});
+  var import_react22 = __toESM(require_react(), 1);
+  var SwitchLayoutGroupContext = (0, import_react22.createContext)({});
 
   // node_modules/framer-motion/dist/es/utils/is-ref-object.mjs
   function isRefObject(ref) {
@@ -39399,14 +39485,14 @@ ${text.slice(0, 300)}` };
 
   // node_modules/framer-motion/dist/es/motion/utils/use-visual-element.mjs
   function useVisualElement(Component3, visualState, props, createVisualElement, ProjectionNodeConstructor, isSVG) {
-    const { visualElement: parent2 } = (0, import_react22.useContext)(MotionContext);
-    const lazyContext = (0, import_react22.useContext)(LazyContext);
-    const presenceContext = (0, import_react22.useContext)(PresenceContext);
-    const motionConfig = (0, import_react22.useContext)(MotionConfigContext);
+    const { visualElement: parent2 } = (0, import_react23.useContext)(MotionContext);
+    const lazyContext = (0, import_react23.useContext)(LazyContext);
+    const presenceContext = (0, import_react23.useContext)(PresenceContext);
+    const motionConfig = (0, import_react23.useContext)(MotionConfigContext);
     const reducedMotionConfig = motionConfig.reducedMotion;
     const skipAnimations = motionConfig.skipAnimations;
-    const visualElementRef = (0, import_react22.useRef)(null);
-    const hasMountedOnce = (0, import_react22.useRef)(false);
+    const visualElementRef = (0, import_react23.useRef)(null);
+    const hasMountedOnce = (0, import_react23.useRef)(false);
     createVisualElement = createVisualElement || lazyContext.renderer;
     if (!visualElementRef.current && createVisualElement) {
       visualElementRef.current = createVisualElement(Component3, {
@@ -39424,18 +39510,18 @@ ${text.slice(0, 300)}` };
       }
     }
     const visualElement = visualElementRef.current;
-    const initialLayoutGroupConfig = (0, import_react22.useContext)(SwitchLayoutGroupContext);
+    const initialLayoutGroupConfig = (0, import_react23.useContext)(SwitchLayoutGroupContext);
     if (visualElement && !visualElement.projection && ProjectionNodeConstructor && (visualElement.type === "html" || visualElement.type === "svg")) {
       createProjectionNode2(visualElementRef.current, props, ProjectionNodeConstructor, initialLayoutGroupConfig);
     }
-    const isMounted = (0, import_react22.useRef)(false);
-    (0, import_react22.useInsertionEffect)(() => {
+    const isMounted = (0, import_react23.useRef)(false);
+    (0, import_react23.useInsertionEffect)(() => {
       if (visualElement && isMounted.current) {
         visualElement.update(props, presenceContext);
       }
     });
     const optimisedAppearId = props[optimizedAppearDataAttribute];
-    const wantsHandoff = (0, import_react22.useRef)(Boolean(optimisedAppearId) && !window.MotionHandoffIsComplete?.(optimisedAppearId) && window.MotionHasOptimisedAnimation?.(optimisedAppearId));
+    const wantsHandoff = (0, import_react23.useRef)(Boolean(optimisedAppearId) && !window.MotionHandoffIsComplete?.(optimisedAppearId) && window.MotionHasOptimisedAnimation?.(optimisedAppearId));
     useIsomorphicLayoutEffect(() => {
       hasMountedOnce.current = true;
       if (!visualElement)
@@ -39448,7 +39534,7 @@ ${text.slice(0, 300)}` };
         visualElement.animationState.animateChanges();
       }
     });
-    (0, import_react22.useEffect)(() => {
+    (0, import_react23.useEffect)(() => {
       if (!visualElement)
         return;
       if (!wantsHandoff.current && visualElement.animationState) {
@@ -39500,7 +39586,7 @@ ${text.slice(0, 300)}` };
     function MotionDOMComponent(props, externalRef) {
       let MeasureLayout2;
       const configAndProps = {
-        ...(0, import_react23.useContext)(MotionConfigContext),
+        ...(0, import_react24.useContext)(MotionConfigContext),
         ...props,
         layoutId: useLayoutId(props)
       };
@@ -39513,19 +39599,19 @@ ${text.slice(0, 300)}` };
         MeasureLayout2 = layoutProjection.MeasureLayout;
         context.visualElement = useVisualElement(Component3, visualState, configAndProps, createVisualElement, layoutProjection.ProjectionNode, isSVG);
       }
-      return (0, import_jsx_runtime6.jsxs)(MotionContext.Provider, { value: context, children: [MeasureLayout2 && context.visualElement ? (0, import_jsx_runtime6.jsx)(MeasureLayout2, { visualElement: context.visualElement, ...configAndProps }) : null, useRender(Component3, props, useMotionRef(visualState, context.visualElement, externalRef), visualState, isStatic, forwardMotionProps, isSVG)] });
+      return (0, import_jsx_runtime7.jsxs)(MotionContext.Provider, { value: context, children: [MeasureLayout2 && context.visualElement ? (0, import_jsx_runtime7.jsx)(MeasureLayout2, { visualElement: context.visualElement, ...configAndProps }) : null, useRender(Component3, props, useMotionRef(visualState, context.visualElement, externalRef), visualState, isStatic, forwardMotionProps, isSVG)] });
     }
     MotionDOMComponent.displayName = `motion.${typeof Component3 === "string" ? Component3 : `create(${Component3.displayName ?? Component3.name ?? ""})`}`;
-    const ForwardRefMotionComponent = (0, import_react23.forwardRef)(MotionDOMComponent);
+    const ForwardRefMotionComponent = (0, import_react24.forwardRef)(MotionDOMComponent);
     ForwardRefMotionComponent[motionComponentSymbol] = Component3;
     return ForwardRefMotionComponent;
   }
   function useLayoutId({ layoutId }) {
-    const layoutGroupId = (0, import_react23.useContext)(LayoutGroupContext).id;
+    const layoutGroupId = (0, import_react24.useContext)(LayoutGroupContext).id;
     return layoutGroupId && layoutId !== void 0 ? layoutGroupId + "-" + layoutId : layoutId;
   }
   function useStrictMode(configAndProps, preloadedFeatures) {
-    const isStrict = (0, import_react23.useContext)(LazyContext).strict;
+    const isStrict = (0, import_react24.useContext)(LazyContext).strict;
     if (preloadedFeatures && isStrict) {
       const strictMessage = "You have rendered a `motion` component within a `LazyMotion` component. This will break tree shaking. Import and render a `m` component instead.";
       configAndProps.ignoreStrict ? warning(false, strictMessage, "lazy-strict-mode") : invariant(false, strictMessage, "lazy-strict-mode");
@@ -39576,11 +39662,11 @@ ${text.slice(0, 300)}` };
   }
 
   // node_modules/framer-motion/dist/es/render/dom/create-visual-element.mjs
-  var import_react24 = __toESM(require_react(), 1);
+  var import_react25 = __toESM(require_react(), 1);
   var createDomVisualElement = (Component3, options) => {
     const isSVG = options.isSVG ?? isSVGComponent(Component3);
     return isSVG ? new SVGVisualElement(options) : new HTMLVisualElement(options, {
-      allowProjection: Component3 !== import_react24.Fragment
+      allowProjection: Component3 !== import_react25.Fragment
     });
   };
 
@@ -40459,10 +40545,10 @@ ${text.slice(0, 300)}` };
   };
 
   // node_modules/framer-motion/dist/es/motion/features/layout/MeasureLayout.mjs
-  var import_jsx_runtime7 = __toESM(require_jsx_runtime(), 1);
-  var import_react25 = __toESM(require_react(), 1);
+  var import_jsx_runtime8 = __toESM(require_jsx_runtime(), 1);
+  var import_react26 = __toESM(require_react(), 1);
   var hasTakenAnySnapshot = false;
-  var MeasureLayoutWithContext = class extends import_react25.Component {
+  var MeasureLayoutWithContext = class extends import_react26.Component {
     /**
      * This only mounts projection nodes for components that
      * need measuring, we might want to do it for all components
@@ -40556,8 +40642,8 @@ ${text.slice(0, 300)}` };
   };
   function MeasureLayout(props) {
     const [isPresent, safeToRemove] = usePresence();
-    const layoutGroup = (0, import_react25.useContext)(LayoutGroupContext);
-    return (0, import_jsx_runtime7.jsx)(MeasureLayoutWithContext, { ...props, layoutGroup, switchLayoutGroup: (0, import_react25.useContext)(SwitchLayoutGroupContext), isPresent, safeToRemove });
+    const layoutGroup = (0, import_react26.useContext)(LayoutGroupContext);
+    return (0, import_jsx_runtime8.jsx)(MeasureLayoutWithContext, { ...props, layoutGroup, switchLayoutGroup: (0, import_react26.useContext)(SwitchLayoutGroupContext), isPresent, safeToRemove });
   }
 
   // node_modules/framer-motion/dist/es/motion/features/drag.mjs
@@ -40788,13 +40874,13 @@ ${text.slice(0, 300)}` };
   var motion = /* @__PURE__ */ createMotionProxy(featureBundle, createDomVisualElement);
 
   // node_modules/framer-motion/dist/es/value/use-motion-value.mjs
-  var import_react26 = __toESM(require_react(), 1);
+  var import_react27 = __toESM(require_react(), 1);
   function useMotionValue(initial) {
     const value = useConstant(() => motionValue(initial));
-    const { isStatic } = (0, import_react26.useContext)(MotionConfigContext);
+    const { isStatic } = (0, import_react27.useContext)(MotionConfigContext);
     if (isStatic) {
-      const [, setLatest] = (0, import_react26.useState)(initial);
-      (0, import_react26.useEffect)(() => value.on("change", setLatest), []);
+      const [, setLatest] = (0, import_react27.useState)(initial);
+      (0, import_react27.useEffect)(() => value.on("change", setLatest), []);
     }
     return value;
   }
@@ -41239,8 +41325,8 @@ ${text.slice(0, 300)}` };
   var animate = createScopedAnimate();
 
   // src/ui/components/Slider.tsx
-  var import_react27 = __toESM(require_react());
-  var import_jsx_runtime8 = __toESM(require_jsx_runtime());
+  var import_react28 = __toESM(require_react());
+  var import_jsx_runtime9 = __toESM(require_jsx_runtime());
   var CLICK_THRESHOLD = 3;
   var DEAD_ZONE = 32;
   var MAX_CURSOR_RANGE = 200;
@@ -41269,23 +41355,23 @@ ${text.slice(0, 300)}` };
     max: max6 = 1,
     step = 0.01
   }) {
-    const wrapperRef = (0, import_react27.useRef)(null);
-    const trackRef = (0, import_react27.useRef)(null);
-    const inputRef = (0, import_react27.useRef)(null);
-    const valueSpanRef = (0, import_react27.useRef)(null);
-    const [isInteracting, setIsInteracting] = (0, import_react27.useState)(false);
-    const [isDragging2, setIsDragging] = (0, import_react27.useState)(false);
-    const [isHovered, setIsHovered] = (0, import_react27.useState)(false);
-    const [isValueHovered, setIsValueHovered] = (0, import_react27.useState)(false);
-    const [isValueEditable, setIsValueEditable] = (0, import_react27.useState)(false);
-    const [showInput, setShowInput] = (0, import_react27.useState)(false);
-    const [inputValue, setInputValue] = (0, import_react27.useState)("");
-    const hoverTimeoutRef = (0, import_react27.useRef)(null);
-    const pointerDownPos = (0, import_react27.useRef)(null);
-    const isClickRef = (0, import_react27.useRef)(true);
-    const animRef = (0, import_react27.useRef)(null);
-    const wrapperRectRef = (0, import_react27.useRef)(null);
-    const scaleRef = (0, import_react27.useRef)(1);
+    const wrapperRef = (0, import_react28.useRef)(null);
+    const trackRef = (0, import_react28.useRef)(null);
+    const inputRef = (0, import_react28.useRef)(null);
+    const valueSpanRef = (0, import_react28.useRef)(null);
+    const [isInteracting, setIsInteracting] = (0, import_react28.useState)(false);
+    const [isDragging2, setIsDragging] = (0, import_react28.useState)(false);
+    const [isHovered, setIsHovered] = (0, import_react28.useState)(false);
+    const [isValueHovered, setIsValueHovered] = (0, import_react28.useState)(false);
+    const [isValueEditable, setIsValueEditable] = (0, import_react28.useState)(false);
+    const [showInput, setShowInput] = (0, import_react28.useState)(false);
+    const [inputValue, setInputValue] = (0, import_react28.useState)("");
+    const hoverTimeoutRef = (0, import_react28.useRef)(null);
+    const pointerDownPos = (0, import_react28.useRef)(null);
+    const isClickRef = (0, import_react28.useRef)(true);
+    const animRef = (0, import_react28.useRef)(null);
+    const wrapperRectRef = (0, import_react28.useRef)(null);
+    const scaleRef = (0, import_react28.useRef)(1);
     const percentage = (value - min6) / (max6 - min6) * 100;
     const isActive = isInteracting || isHovered;
     const fillPercent = useMotionValue(percentage);
@@ -41303,12 +41389,12 @@ ${text.slice(0, 300)}` };
       rubberStretchPx,
       (stretch) => stretch < 0 ? stretch : 0
     );
-    (0, import_react27.useEffect)(() => {
+    (0, import_react28.useEffect)(() => {
       if (!isInteracting && !animRef.current) {
         fillPercent.jump(percentage);
       }
     }, [percentage, isInteracting, fillPercent]);
-    const positionToValue = (0, import_react27.useCallback)(
+    const positionToValue = (0, import_react28.useCallback)(
       (clientX) => {
         const rect = wrapperRectRef.current;
         if (!rect) return value;
@@ -41321,11 +41407,11 @@ ${text.slice(0, 300)}` };
       },
       [min6, max6, value]
     );
-    const percentFromValue = (0, import_react27.useCallback)(
+    const percentFromValue = (0, import_react28.useCallback)(
       (v4) => (v4 - min6) / (max6 - min6) * 100,
       [min6, max6]
     );
-    const computeRubberStretch = (0, import_react27.useCallback)(
+    const computeRubberStretch = (0, import_react28.useCallback)(
       (clientX, sign) => {
         const rect = wrapperRectRef.current;
         if (!rect) return 0;
@@ -41335,7 +41421,7 @@ ${text.slice(0, 300)}` };
       },
       []
     );
-    const handlePointerDown = (0, import_react27.useCallback)(
+    const handlePointerDown = (0, import_react28.useCallback)(
       (e3) => {
         if (showInput) return;
         e3.preventDefault();
@@ -41351,7 +41437,7 @@ ${text.slice(0, 300)}` };
       },
       [showInput]
     );
-    const handlePointerMove = (0, import_react27.useCallback)(
+    const handlePointerMove = (0, import_react28.useCallback)(
       (e3) => {
         if (!isInteracting || !pointerDownPos.current) return;
         const dx = e3.clientX - pointerDownPos.current.x;
@@ -41384,7 +41470,7 @@ ${text.slice(0, 300)}` };
       },
       [isInteracting, positionToValue, percentFromValue, onChange, fillPercent, rubberStretchPx, computeRubberStretch, step]
     );
-    const handlePointerUp = (0, import_react27.useCallback)(
+    const handlePointerUp = (0, import_react28.useCallback)(
       (e3) => {
         if (!isInteracting) return;
         if (isClickRef.current) {
@@ -41417,7 +41503,7 @@ ${text.slice(0, 300)}` };
       },
       [isInteracting, positionToValue, percentFromValue, onChange, min6, max6, step, fillPercent, rubberStretchPx]
     );
-    (0, import_react27.useEffect)(() => {
+    (0, import_react28.useEffect)(() => {
       if (isValueHovered && !showInput && !isValueEditable) {
         hoverTimeoutRef.current = setTimeout(() => {
           setIsValueEditable(true);
@@ -41433,7 +41519,7 @@ ${text.slice(0, 300)}` };
         if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
       };
     }, [isValueHovered, showInput, isValueEditable]);
-    (0, import_react27.useEffect)(() => {
+    (0, import_react28.useEffect)(() => {
       if (showInput && inputRef.current) {
         inputRef.current.focus();
         inputRef.current.select();
@@ -41482,13 +41568,13 @@ ${text.slice(0, 300)}` };
     const discreteSteps = (max6 - min6) / step;
     const hashMarks = discreteSteps <= 10 ? Array.from({ length: discreteSteps - 1 }, (_3, i3) => {
       const pct = (i3 + 1) * step / (max6 - min6) * 100;
-      return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "dialkit-slider-hashmark", style: { left: `${pct}%` } }, i3);
+      return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "dialkit-slider-hashmark", style: { left: `${pct}%` } }, i3);
     }) : Array.from({ length: 9 }, (_3, i3) => {
       const pct = (i3 + 1) * 10;
-      return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "dialkit-slider-hashmark", style: { left: `${pct}%` } }, i3);
+      return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "dialkit-slider-hashmark", style: { left: `${pct}%` } }, i3);
     });
     const displayValue = value.toFixed(decimalsForStep(step));
-    return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { ref: wrapperRef, className: "dialkit-slider-wrapper", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { ref: wrapperRef, className: "dialkit-slider-wrapper", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
       motion.div,
       {
         ref: trackRef,
@@ -41500,15 +41586,15 @@ ${text.slice(0, 300)}` };
         onMouseLeave: () => setIsHovered(false),
         style: { width: rubberBandWidth, x: rubberBandX },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "dialkit-slider-hashmarks", children: hashMarks }),
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "dialkit-slider-hashmarks", children: hashMarks }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
             motion.div,
             {
               className: "dialkit-slider-fill",
               style: { background: fillBackground, width: fillWidth, transition: "background 0.15s" }
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
             motion.div,
             {
               className: "dialkit-slider-handle",
@@ -41525,7 +41611,7 @@ ${text.slice(0, 300)}` };
               }
             }
           ),
-          showInput ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+          showInput ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
             "input",
             {
               ref: inputRef,
@@ -41538,7 +41624,7 @@ ${text.slice(0, 300)}` };
               onClick: (e3) => e3.stopPropagation(),
               onMouseDown: (e3) => e3.stopPropagation()
             }
-          ) : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+          ) : /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
             "span",
             {
               ref: valueSpanRef,
@@ -41557,18 +41643,18 @@ ${text.slice(0, 300)}` };
   }
 
   // src/ui/components/SegmentedControl.tsx
-  var import_react29 = __toESM(require_react());
-  var import_jsx_runtime9 = __toESM(require_jsx_runtime());
+  var import_react30 = __toESM(require_react());
+  var import_jsx_runtime10 = __toESM(require_jsx_runtime());
   function SegmentedControl({
     options,
     value,
     onChange
   }) {
-    const containerRef = (0, import_react29.useRef)(null);
-    const buttonRefs = (0, import_react29.useRef)(/* @__PURE__ */ new Map());
-    const [pillStyle, setPillStyle] = (0, import_react29.useState)(null);
-    const hasAnimated = (0, import_react29.useRef)(false);
-    (0, import_react29.useLayoutEffect)(() => {
+    const containerRef = (0, import_react30.useRef)(null);
+    const buttonRefs = (0, import_react30.useRef)(/* @__PURE__ */ new Map());
+    const [pillStyle, setPillStyle] = (0, import_react30.useState)(null);
+    const hasAnimated = (0, import_react30.useRef)(false);
+    (0, import_react30.useLayoutEffect)(() => {
       const button = buttonRefs.current.get(value);
       const container = containerRef.current;
       if (button && container) {
@@ -41580,8 +41666,8 @@ ${text.slice(0, 300)}` };
         });
       }
     }, [value]);
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { ref: containerRef, className: "dialkit-segmented", children: [
-      pillStyle && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { ref: containerRef, className: "dialkit-segmented", children: [
+      pillStyle && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
         motion.div,
         {
           className: "dialkit-segmented-pill",
@@ -41595,7 +41681,7 @@ ${text.slice(0, 300)}` };
       ),
       options.map((option) => {
         const isActive = value === option.value;
-        return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+        return /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
           "button",
           {
             ref: (el) => {
@@ -41613,9 +41699,9 @@ ${text.slice(0, 300)}` };
   }
 
   // src/ui/components/Toggle.tsx
-  var import_jsx_runtime10 = __toESM(require_jsx_runtime());
+  var import_jsx_runtime11 = __toESM(require_jsx_runtime());
   function Toggle({ checked, onChange }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
       SegmentedControl,
       {
         options: [
@@ -41629,9 +41715,9 @@ ${text.slice(0, 300)}` };
   }
 
   // src/ui/components/SelectControl.tsx
-  var import_react31 = __toESM(require_react());
+  var import_react32 = __toESM(require_react());
   var import_react_dom = __toESM(require_react_dom());
-  var import_jsx_runtime11 = __toESM(require_jsx_runtime());
+  var import_jsx_runtime12 = __toESM(require_jsx_runtime());
   function toTitleCase(s3) {
     return s3.replace(/\b\w/g, (c3) => c3.toUpperCase());
   }
@@ -41641,14 +41727,14 @@ ${text.slice(0, 300)}` };
     );
   }
   function SelectControl({ value, options, onChange }) {
-    const [isOpen, setIsOpen] = (0, import_react31.useState)(false);
-    const triggerRef = (0, import_react31.useRef)(null);
-    const dropdownRef = (0, import_react31.useRef)(null);
-    const [pos, setPos] = (0, import_react31.useState)(null);
+    const [isOpen, setIsOpen] = (0, import_react32.useState)(false);
+    const triggerRef = (0, import_react32.useRef)(null);
+    const dropdownRef = (0, import_react32.useRef)(null);
+    const [pos, setPos] = (0, import_react32.useState)(null);
     const normalized = normalizeOptions(options);
     const selectedOption = normalized.find((o3) => o3.value === value);
     const portalTarget = document.getElementById("root") ?? document.body;
-    const updatePos = (0, import_react31.useCallback)(() => {
+    const updatePos = (0, import_react32.useCallback)(() => {
       const el = triggerRef.current;
       if (!el) return;
       const rect = el.getBoundingClientRect();
@@ -41662,11 +41748,11 @@ ${text.slice(0, 300)}` };
         above
       });
     }, [normalized.length]);
-    (0, import_react31.useEffect)(() => {
+    (0, import_react32.useEffect)(() => {
       if (!isOpen) return;
       updatePos();
     }, [isOpen, updatePos]);
-    (0, import_react31.useEffect)(() => {
+    (0, import_react32.useEffect)(() => {
       if (!isOpen) return;
       const handleClick = (e3) => {
         const target = e3.target;
@@ -41677,8 +41763,8 @@ ${text.slice(0, 300)}` };
       document.addEventListener("mousedown", handleClick);
       return () => document.removeEventListener("mousedown", handleClick);
     }, [isOpen]);
-    return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "dialkit-select-row", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "dialkit-select-row", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
         "button",
         {
           ref: triggerRef,
@@ -41686,8 +41772,8 @@ ${text.slice(0, 300)}` };
           onClick: () => setIsOpen(!isOpen),
           "data-open": String(isOpen),
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "dialkit-select-value", children: selectedOption?.label ?? value }),
-            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { className: "dialkit-select-right", children: /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "dialkit-select-value", children: selectedOption?.label ?? value }),
+            /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: "dialkit-select-right", children: /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
               motion.svg,
               {
                 className: "dialkit-select-chevron",
@@ -41699,14 +41785,14 @@ ${text.slice(0, 300)}` };
                 strokeLinejoin: "round",
                 animate: { rotate: isOpen ? 180 : 0 },
                 transition: { type: "spring", visualDuration: 0.2, bounce: 0.15 },
-                children: /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("path", { d: "M6 9.5L12 15.5L18 9.5" })
+                children: /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("path", { d: "M6 9.5L12 15.5L18 9.5" })
               }
             ) })
           ]
         }
       ),
       (0, import_react_dom.createPortal)(
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(AnimatePresence, { children: isOpen && pos && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(AnimatePresence, { children: isOpen && pos && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
           motion.div,
           {
             ref: dropdownRef,
@@ -41721,7 +41807,7 @@ ${text.slice(0, 300)}` };
               width: pos.width,
               ...pos.above ? { bottom: window.innerHeight - pos.top, transformOrigin: "bottom" } : { top: pos.top, transformOrigin: "top" }
             },
-            children: normalized.map((option) => /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+            children: normalized.map((option) => /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
               "button",
               {
                 className: "dialkit-select-option",
@@ -41742,14 +41828,14 @@ ${text.slice(0, 300)}` };
   }
 
   // src/ui/components/Folder.tsx
-  var import_react33 = __toESM(require_react());
-  var import_jsx_runtime12 = __toESM(require_jsx_runtime());
+  var import_react34 = __toESM(require_react());
+  var import_jsx_runtime13 = __toESM(require_jsx_runtime());
 
   // src/ui/components/ColorControl.tsx
-  var import_react35 = __toESM(require_react());
+  var import_react36 = __toESM(require_react());
 
   // node_modules/react-colorful/dist/index.mjs
-  var import_react34 = __toESM(require_react(), 1);
+  var import_react35 = __toESM(require_react(), 1);
   function u() {
     return (u = Object.assign || function(e3) {
       for (var r3 = 1; r3 < arguments.length; r3++) {
@@ -41766,7 +41852,7 @@ ${text.slice(0, 300)}` };
     return o3;
   }
   function i(e3) {
-    var t3 = (0, import_react34.useRef)(e3), n3 = (0, import_react34.useRef)(function(e4) {
+    var t3 = (0, import_react35.useRef)(e3), n3 = (0, import_react35.useRef)(function(e4) {
       t3.current && t3.current(e4);
     });
     return t3.current = e3, n3.current;
@@ -41790,8 +41876,8 @@ ${text.slice(0, 300)}` };
   var h = function(e3) {
     !f(e3) && e3.preventDefault();
   };
-  var m2 = import_react34.default.memo(function(o3) {
-    var a3 = o3.onMove, l3 = o3.onKey, s3 = c(o3, ["onMove", "onKey"]), m4 = (0, import_react34.useRef)(null), g3 = i(a3), p3 = i(l3), b3 = (0, import_react34.useRef)(null), _3 = (0, import_react34.useRef)(false), x3 = (0, import_react34.useMemo)(function() {
+  var m2 = import_react35.default.memo(function(o3) {
+    var a3 = o3.onMove, l3 = o3.onKey, s3 = c(o3, ["onMove", "onKey"]), m4 = (0, import_react35.useRef)(null), g3 = i(a3), p3 = i(l3), b3 = (0, import_react35.useRef)(null), _3 = (0, import_react35.useRef)(false), x3 = (0, import_react35.useMemo)(function() {
       var e3 = function(e4) {
         h(e4), (f(e4) ? e4.touches.length > 0 : e4.buttons > 0) && m4.current ? g3(d(m4.current, e4, b3.current)) : t3(false);
       }, r3 = function() {
@@ -41818,16 +41904,16 @@ ${text.slice(0, 300)}` };
         r4 < 37 || r4 > 40 || (e4.preventDefault(), p3({ left: 39 === r4 ? 0.05 : 37 === r4 ? -0.05 : 0, top: 40 === r4 ? 0.05 : 38 === r4 ? -0.05 : 0 }));
       }, t3];
     }, [p3, g3]), C4 = x3[0], E2 = x3[1], H2 = x3[2];
-    return (0, import_react34.useEffect)(function() {
+    return (0, import_react35.useEffect)(function() {
       return H2;
-    }, [H2]), import_react34.default.createElement("div", u({}, s3, { onTouchStart: C4, onMouseDown: C4, className: "react-colorful__interactive", ref: m4, onKeyDown: E2, tabIndex: 0, role: "slider" }));
+    }, [H2]), import_react35.default.createElement("div", u({}, s3, { onTouchStart: C4, onMouseDown: C4, className: "react-colorful__interactive", ref: m4, onKeyDown: E2, tabIndex: 0, role: "slider" }));
   });
   var g = function(e3) {
     return e3.filter(Boolean).join(" ");
   };
   var p = function(r3) {
     var t3 = r3.color, n3 = r3.left, o3 = r3.top, a3 = void 0 === o3 ? 0.5 : o3, l3 = g(["react-colorful__pointer", r3.className]);
-    return import_react34.default.createElement("div", { className: l3, style: { top: 100 * a3 + "%", left: 100 * n3 + "%" } }, import_react34.default.createElement("div", { className: "react-colorful__pointer-fill", style: { backgroundColor: t3 } }));
+    return import_react35.default.createElement("div", { className: l3, style: { top: 100 * a3 + "%", left: 100 * n3 + "%" } }, import_react35.default.createElement("div", { className: "react-colorful__pointer-fill", style: { backgroundColor: t3 } }));
   };
   var b = function(e3, r3, t3) {
     return void 0 === r3 && (r3 = 0), void 0 === t3 && (t3 = Math.pow(10, r3)), Math.round(t3 * e3) / t3;
@@ -41868,21 +41954,21 @@ ${text.slice(0, 300)}` };
     var r3 = e3.r, t3 = e3.g, n3 = e3.b, o3 = e3.a, a3 = Math.max(r3, t3, n3), l3 = a3 - Math.min(r3, t3, n3), u6 = l3 ? a3 === r3 ? (t3 - n3) / l3 : a3 === t3 ? 2 + (n3 - r3) / l3 : 4 + (r3 - t3) / l3 : 0;
     return { h: b(60 * (u6 < 0 ? u6 + 6 : u6)), s: b(a3 ? l3 / a3 * 100 : 0), v: b(a3 / 255 * 100), a: o3 };
   };
-  var S = import_react34.default.memo(function(r3) {
+  var S = import_react35.default.memo(function(r3) {
     var t3 = r3.hue, n3 = r3.onChange, o3 = g(["react-colorful__hue", r3.className]);
-    return import_react34.default.createElement("div", { className: o3 }, import_react34.default.createElement(m2, { onMove: function(e3) {
+    return import_react35.default.createElement("div", { className: o3 }, import_react35.default.createElement(m2, { onMove: function(e3) {
       n3({ h: 360 * e3.left });
     }, onKey: function(e3) {
       n3({ h: s(t3 + 360 * e3.left, 0, 360) });
-    }, "aria-label": "Hue", "aria-valuenow": b(t3), "aria-valuemax": "360", "aria-valuemin": "0" }, import_react34.default.createElement(p, { className: "react-colorful__hue-pointer", left: t3 / 360, color: q({ h: t3, s: 100, v: 100, a: 1 }) })));
+    }, "aria-label": "Hue", "aria-valuenow": b(t3), "aria-valuemax": "360", "aria-valuemin": "0" }, import_react35.default.createElement(p, { className: "react-colorful__hue-pointer", left: t3 / 360, color: q({ h: t3, s: 100, v: 100, a: 1 }) })));
   });
-  var T = import_react34.default.memo(function(r3) {
+  var T = import_react35.default.memo(function(r3) {
     var t3 = r3.hsva, n3 = r3.onChange, o3 = { backgroundColor: q({ h: t3.h, s: 100, v: 100, a: 1 }) };
-    return import_react34.default.createElement("div", { className: "react-colorful__saturation", style: o3 }, import_react34.default.createElement(m2, { onMove: function(e3) {
+    return import_react35.default.createElement("div", { className: "react-colorful__saturation", style: o3 }, import_react35.default.createElement(m2, { onMove: function(e3) {
       n3({ s: 100 * e3.left, v: 100 - 100 * e3.top });
     }, onKey: function(e3) {
       n3({ s: s(t3.s + 100 * e3.left, 0, 100), v: s(t3.v - 100 * e3.top, 0, 100) });
-    }, "aria-label": "Color", "aria-valuetext": "Saturation " + b(t3.s) + "%, Brightness " + b(t3.v) + "%" }, import_react34.default.createElement(p, { className: "react-colorful__saturation-pointer", top: 1 - t3.v / 100, left: t3.s / 100, color: q(t3) })));
+    }, "aria-label": "Color", "aria-valuetext": "Saturation " + b(t3.s) + "%, Brightness " + b(t3.v) + "%" }, import_react35.default.createElement(p, { className: "react-colorful__saturation-pointer", top: 1 - t3.v / 100, left: t3.s / 100, color: q(t3) })));
   });
   var F = function(e3, r3) {
     if (e3 === r3) return true;
@@ -41893,19 +41979,19 @@ ${text.slice(0, 300)}` };
     return e3.toLowerCase() === r3.toLowerCase() || F(C(e3), C(r3));
   };
   function Y(e3, t3, l3) {
-    var u6 = i(l3), c3 = (0, import_react34.useState)(function() {
+    var u6 = i(l3), c3 = (0, import_react35.useState)(function() {
       return e3.toHsva(t3);
-    }), s3 = c3[0], f3 = c3[1], v4 = (0, import_react34.useRef)({ color: t3, hsva: s3 });
-    (0, import_react34.useEffect)(function() {
+    }), s3 = c3[0], f3 = c3[1], v4 = (0, import_react35.useRef)({ color: t3, hsva: s3 });
+    (0, import_react35.useEffect)(function() {
       if (!e3.equal(t3, v4.current.color)) {
         var r3 = e3.toHsva(t3);
         v4.current = { hsva: r3, color: t3 }, f3(r3);
       }
-    }, [t3, e3]), (0, import_react34.useEffect)(function() {
+    }, [t3, e3]), (0, import_react35.useEffect)(function() {
       var r3;
       F(s3, v4.current.hsva) || e3.equal(r3 = e3.fromHsva(s3), v4.current.color) || (v4.current = { hsva: s3, color: r3 }, u6(r3));
     }, [s3, e3, u6]);
-    var d3 = (0, import_react34.useCallback)(function(e4) {
+    var d3 = (0, import_react35.useCallback)(function(e4) {
       f3(function(r3) {
         return Object.assign({}, r3, e4);
       });
@@ -41913,7 +41999,7 @@ ${text.slice(0, 300)}` };
     return [s3, d3];
   }
   var R;
-  var V = "undefined" != typeof window ? import_react34.useLayoutEffect : import_react34.useEffect;
+  var V = "undefined" != typeof window ? import_react35.useLayoutEffect : import_react35.useEffect;
   var $ = function() {
     return R || ("undefined" != typeof __webpack_nonce__ ? __webpack_nonce__ : void 0);
   };
@@ -41930,20 +42016,20 @@ ${text.slice(0, 300)}` };
     }, []);
   };
   var U = function(t3) {
-    var n3 = t3.className, o3 = t3.colorModel, a3 = t3.color, l3 = void 0 === a3 ? o3.defaultColor : a3, i3 = t3.onChange, s3 = c(t3, ["className", "colorModel", "color", "onChange"]), f3 = (0, import_react34.useRef)(null);
+    var n3 = t3.className, o3 = t3.colorModel, a3 = t3.color, l3 = void 0 === a3 ? o3.defaultColor : a3, i3 = t3.onChange, s3 = c(t3, ["className", "colorModel", "color", "onChange"]), f3 = (0, import_react35.useRef)(null);
     Q(f3);
     var v4 = Y(o3, l3, i3), d3 = v4[0], h3 = v4[1], m4 = g(["react-colorful", n3]);
-    return import_react34.default.createElement("div", u({}, s3, { ref: f3, className: m4 }), import_react34.default.createElement(T, { hsva: d3, onChange: h3 }), import_react34.default.createElement(S, { hue: d3.h, onChange: h3, className: "react-colorful__last-control" }));
+    return import_react35.default.createElement("div", u({}, s3, { ref: f3, className: m4 }), import_react35.default.createElement(T, { hsva: d3, onChange: h3 }), import_react35.default.createElement(S, { hue: d3.h, onChange: h3, className: "react-colorful__last-control" }));
   };
   var W = { defaultColor: "000", toHsva: x, fromHsva: function(e3) {
     return w({ h: e3.h, s: e3.s, v: e3.v, a: 1 });
   }, equal: X };
   var Z = function(r3) {
-    return import_react34.default.createElement(U, u({}, r3, { colorModel: W }));
+    return import_react35.default.createElement(U, u({}, r3, { colorModel: W }));
   };
 
   // src/ui/components/ColorControl.tsx
-  var import_jsx_runtime13 = __toESM(require_jsx_runtime());
+  var import_jsx_runtime14 = __toESM(require_jsx_runtime());
   var HEX_COLOR_REGEX = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/;
   function expandShorthandHex(hex3) {
     if (hex3.length !== 4) return hex3;
@@ -41954,14 +42040,14 @@ ${text.slice(0, 300)}` };
     value,
     onChange
   }) {
-    const [isEditing, setIsEditing] = (0, import_react35.useState)(false);
-    const [editValue, setEditValue] = (0, import_react35.useState)(value);
-    const [pickerOpen, setPickerOpen] = (0, import_react35.useState)(false);
-    const wrapperRef = (0, import_react35.useRef)(null);
-    (0, import_react35.useEffect)(() => {
+    const [isEditing, setIsEditing] = (0, import_react36.useState)(false);
+    const [editValue, setEditValue] = (0, import_react36.useState)(value);
+    const [pickerOpen, setPickerOpen] = (0, import_react36.useState)(false);
+    const wrapperRef = (0, import_react36.useRef)(null);
+    (0, import_react36.useEffect)(() => {
       if (!isEditing) setEditValue(value);
     }, [value, isEditing]);
-    (0, import_react35.useEffect)(() => {
+    (0, import_react36.useEffect)(() => {
       if (!pickerOpen) return;
       function handleClickOutside(e3) {
         if (wrapperRef.current && !wrapperRef.current.contains(e3.target)) {
@@ -41971,7 +42057,7 @@ ${text.slice(0, 300)}` };
       document.addEventListener("mousedown", handleClickOutside);
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }, [pickerOpen]);
-    const popoverRef = (0, import_react35.useCallback)((node) => {
+    const popoverRef = (0, import_react36.useCallback)((node) => {
       if (!node || !wrapperRef.current) return;
       const wrapperRect = wrapperRef.current.getBoundingClientRect();
       const popoverHeight = node.offsetHeight + 8;
@@ -41998,15 +42084,15 @@ ${text.slice(0, 300)}` };
         setEditValue(value);
       }
     }
-    const handlePickerChange = (0, import_react35.useCallback)((color2) => {
+    const handlePickerChange = (0, import_react36.useCallback)((color2) => {
       onChange(color2);
     }, [onChange]);
     const normalizedValue = value.length === 4 ? expandShorthandHex(value) : value.slice(0, 7);
-    return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "dialkit-color-control-wrapper", ref: wrapperRef, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "dialkit-color-control", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "dialkit-color-label", children: label }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "dialkit-color-inputs", children: [
-          isEditing ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "dialkit-color-control-wrapper", ref: wrapperRef, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "dialkit-color-control", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "dialkit-color-label", children: label }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "dialkit-color-inputs", children: [
+          isEditing ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
             "input",
             {
               type: "text",
@@ -42017,8 +42103,8 @@ ${text.slice(0, 300)}` };
               onKeyDown: handleKeyDown,
               autoFocus: true
             }
-          ) : /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "dialkit-color-hex", onClick: () => setIsEditing(true), children: (value ?? "").toUpperCase() }),
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+          ) : /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "dialkit-color-hex", onClick: () => setIsEditing(true), children: (value ?? "").toUpperCase() }),
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
             "button",
             {
               className: "dialkit-color-swatch",
@@ -42029,13 +42115,13 @@ ${text.slice(0, 300)}` };
           )
         ] })
       ] }),
-      pickerOpen && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { ref: popoverRef, className: "dialkit-color-picker-popover", children: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Z, { color: normalizedValue, onChange: handlePickerChange }) })
+      pickerOpen && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { ref: popoverRef, className: "dialkit-color-picker-popover", children: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(Z, { color: normalizedValue, onChange: handlePickerChange }) })
     ] });
   }
   function ColorControl({ label, value, onChange, colors }) {
     if (colors && colors.length > 0) {
       const values = typeof value === "object" && value !== null ? value : {};
-      return /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(import_jsx_runtime13.Fragment, { children: colors.map((stop) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+      return /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(import_jsx_runtime14.Fragment, { children: colors.map((stop) => /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
         ColorRow,
         {
           label: stop.label,
@@ -42049,7 +42135,7 @@ ${text.slice(0, 300)}` };
       )) });
     }
     const singleValue = typeof value === "string" ? value : "#000000";
-    return /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
       ColorRow,
       {
         label,
@@ -42060,9 +42146,9 @@ ${text.slice(0, 300)}` };
   }
 
   // src/ui/components/TextControl.tsx
-  var import_jsx_runtime14 = __toESM(require_jsx_runtime());
+  var import_jsx_runtime15 = __toESM(require_jsx_runtime());
   function TextControl({ value, onChange, placeholder }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { className: "dialkit-text-control", children: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "dialkit-text-control", children: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
       "input",
       {
         type: "text",
@@ -42075,11 +42161,11 @@ ${text.slice(0, 300)}` };
   }
 
   // src/ui/components/ButtonGroup.tsx
-  var import_jsx_runtime15 = __toESM(require_jsx_runtime());
+  var import_jsx_runtime16 = __toESM(require_jsx_runtime());
 
   // src/ui/components/NumberInput.tsx
-  var import_react36 = __toESM(require_react());
-  var import_jsx_runtime16 = __toESM(require_jsx_runtime());
+  var import_react37 = __toESM(require_react());
+  var import_jsx_runtime17 = __toESM(require_jsx_runtime());
   function decimalsForStep2(step) {
     const s3 = step.toString();
     const dot5 = s3.indexOf(".");
@@ -42100,10 +42186,10 @@ ${text.slice(0, 300)}` };
     placeholder
   }) {
     const decimals = decimalsForStep2(step);
-    const [raw, setRaw] = (0, import_react36.useState)(value.toFixed(decimals));
-    const [isFocused, setIsFocused] = (0, import_react36.useState)(false);
-    const inputRef = (0, import_react36.useRef)(null);
-    const prevValueRef = (0, import_react36.useRef)(value);
+    const [raw, setRaw] = (0, import_react37.useState)(value.toFixed(decimals));
+    const [isFocused, setIsFocused] = (0, import_react37.useState)(false);
+    const inputRef = (0, import_react37.useRef)(null);
+    const prevValueRef = (0, import_react37.useRef)(value);
     if (!isFocused && prevValueRef.current !== value) {
       prevValueRef.current = value;
       setRaw(value.toFixed(decimals));
@@ -42137,7 +42223,7 @@ ${text.slice(0, 300)}` };
         setRaw(next.toFixed(decimals));
       }
     }
-    return /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { className: "dialkit-text-control", children: /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { className: "dialkit-text-control", children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
       "input",
       {
         ref: inputRef,
@@ -42158,8 +42244,8 @@ ${text.slice(0, 300)}` };
   }
 
   // src/ui/components/AngleWheel.tsx
-  var import_react37 = __toESM(require_react());
-  var import_jsx_runtime17 = __toESM(require_jsx_runtime());
+  var import_react38 = __toESM(require_react());
+  var import_jsx_runtime18 = __toESM(require_jsx_runtime());
   var DIAL_SIZE = 61;
   var CENTER = 30.5;
   var ARC_RADIUS = 29.5;
@@ -42221,21 +42307,21 @@ ${text.slice(0, 300)}` };
     max: max6 = 360,
     step = 1
   }) {
-    const dialRef = (0, import_react37.useRef)(null);
-    const inputRef = (0, import_react37.useRef)(null);
-    const [isDragging2, setIsDragging] = (0, import_react37.useState)(false);
-    const [showInput, setShowInput] = (0, import_react37.useState)(false);
-    const [inputValue, setInputValue] = (0, import_react37.useState)("");
-    const [isValueHovered, setIsValueHovered] = (0, import_react37.useState)(false);
-    const [showDots, setShowDots] = (0, import_react37.useState)(false);
-    const dotsFadeTimeoutRef = (0, import_react37.useRef)(null);
-    const [isScrubbing, setIsScrubbing] = (0, import_react37.useState)(false);
-    const [altHeld, setAltHeld] = (0, import_react37.useState)(false);
-    const scrubStartXRef = (0, import_react37.useRef)(0);
-    const scrubStartValueRef = (0, import_react37.useRef)(0);
+    const dialRef = (0, import_react38.useRef)(null);
+    const inputRef = (0, import_react38.useRef)(null);
+    const [isDragging2, setIsDragging] = (0, import_react38.useState)(false);
+    const [showInput, setShowInput] = (0, import_react38.useState)(false);
+    const [inputValue, setInputValue] = (0, import_react38.useState)("");
+    const [isValueHovered, setIsValueHovered] = (0, import_react38.useState)(false);
+    const [showDots, setShowDots] = (0, import_react38.useState)(false);
+    const dotsFadeTimeoutRef = (0, import_react38.useRef)(null);
+    const [isScrubbing, setIsScrubbing] = (0, import_react38.useState)(false);
+    const [altHeld, setAltHeld] = (0, import_react38.useState)(false);
+    const scrubStartXRef = (0, import_react38.useRef)(0);
+    const scrubStartValueRef = (0, import_react38.useRef)(0);
     const currentAngle = valueToAngle(value, min6, max6);
     const needleTip = polarPoint(currentAngle, NEEDLE_LENGTH);
-    (0, import_react37.useEffect)(() => {
+    (0, import_react38.useEffect)(() => {
       if (isDragging2) {
         if (dotsFadeTimeoutRef.current) {
           clearTimeout(dotsFadeTimeoutRef.current);
@@ -42251,7 +42337,7 @@ ${text.slice(0, 300)}` };
         if (dotsFadeTimeoutRef.current) clearTimeout(dotsFadeTimeoutRef.current);
       };
     }, [isDragging2]);
-    (0, import_react37.useEffect)(() => {
+    (0, import_react38.useEffect)(() => {
       const handleKeyDown = (e3) => {
         if (e3.key === "Alt") setAltHeld(true);
       };
@@ -42265,7 +42351,7 @@ ${text.slice(0, 300)}` };
         window.removeEventListener("keyup", handleKeyUp);
       };
     }, []);
-    const angleFromPointer = (0, import_react37.useCallback)(
+    const angleFromPointer = (0, import_react38.useCallback)(
       (clientX, clientY) => {
         const el = dialRef.current;
         if (!el) return value;
@@ -42283,7 +42369,7 @@ ${text.slice(0, 300)}` };
       },
       [value, min6, max6, step]
     );
-    const handlePointerDown = (0, import_react37.useCallback)(
+    const handlePointerDown = (0, import_react38.useCallback)(
       (e3) => {
         e3.preventDefault();
         e3.target.setPointerCapture(e3.pointerId);
@@ -42292,17 +42378,17 @@ ${text.slice(0, 300)}` };
       },
       [onChange, angleFromPointer]
     );
-    const handlePointerMove = (0, import_react37.useCallback)(
+    const handlePointerMove = (0, import_react38.useCallback)(
       (e3) => {
         if (!isDragging2) return;
         onChange(angleFromPointer(e3.clientX, e3.clientY));
       },
       [isDragging2, onChange, angleFromPointer]
     );
-    const handlePointerUp = (0, import_react37.useCallback)(() => {
+    const handlePointerUp = (0, import_react38.useCallback)(() => {
       setIsDragging(false);
     }, []);
-    (0, import_react37.useEffect)(() => {
+    (0, import_react38.useEffect)(() => {
       if (showInput && inputRef.current) {
         inputRef.current.focus();
         inputRef.current.select();
@@ -42329,7 +42415,7 @@ ${text.slice(0, 300)}` };
         setIsValueHovered(false);
       }
     };
-    const handleValuePointerDown = (0, import_react37.useCallback)(
+    const handleValuePointerDown = (0, import_react38.useCallback)(
       (e3) => {
         if (!e3.altKey || showInput) return;
         e3.preventDefault();
@@ -42341,7 +42427,7 @@ ${text.slice(0, 300)}` };
       },
       [value, showInput]
     );
-    const handleValuePointerMove = (0, import_react37.useCallback)(
+    const handleValuePointerMove = (0, import_react38.useCallback)(
       (e3) => {
         if (!isScrubbing) return;
         const dx = e3.clientX - scrubStartXRef.current;
@@ -42355,7 +42441,7 @@ ${text.slice(0, 300)}` };
       },
       [isScrubbing, onChange, min6, max6, step]
     );
-    const handleValuePointerUp = (0, import_react37.useCallback)(() => {
+    const handleValuePointerUp = (0, import_react38.useCallback)(() => {
       if (isScrubbing) {
         setIsScrubbing(false);
       }
@@ -42372,8 +42458,8 @@ ${text.slice(0, 300)}` };
       showValueBg ? "dialkit-dial-value-container--active" : ""
     ].filter(Boolean).join(" ");
     const valueCursor = altHeld && !showInput ? SCRUB_CURSOR : showInput ? "text" : "default";
-    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: "dialkit-angle-control", style: { margin: "0 auto" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { className: "dialkit-angle-control", style: { margin: "0 auto" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
         "div",
         {
           ref: dialRef,
@@ -42381,7 +42467,7 @@ ${text.slice(0, 300)}` };
           onPointerDown: handlePointerDown,
           onPointerMove: handlePointerMove,
           onPointerUp: handlePointerUp,
-          children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(
+          children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(
             "svg",
             {
               viewBox: `0 0 ${DIAL_SIZE} ${DIAL_SIZE}`,
@@ -42389,7 +42475,7 @@ ${text.slice(0, 300)}` };
               height: DIAL_SIZE,
               className: "dialkit-angle-svg",
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
                   "path",
                   {
                     d: arcPath,
@@ -42399,17 +42485,17 @@ ${text.slice(0, 300)}` };
                     strokeLinecap: "round"
                   }
                 ),
-                /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
                   "g",
                   {
                     style: {
                       opacity: showDots ? 0.5 : 0,
                       transition: showDots ? "opacity 0.5s ease" : "opacity 0.2s ease"
                     },
-                    children: dots.map((pt, i3) => /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("circle", { cx: pt.x, cy: pt.y, r: 1, fill: "var(--dark-tertiary)" }, i3))
+                    children: dots.map((pt, i3) => /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("circle", { cx: pt.x, cy: pt.y, r: 1, fill: "var(--dark-tertiary)" }, i3))
                   }
                 ),
-                /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
                   "line",
                   {
                     x1: CENTER,
@@ -42426,7 +42512,7 @@ ${text.slice(0, 300)}` };
           )
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
         "div",
         {
           className: valueContainerClass,
@@ -42439,7 +42525,7 @@ ${text.slice(0, 300)}` };
             setIsValueHovered(false);
             if (!isScrubbing) setAltHeld(false);
           },
-          children: showInput ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+          children: showInput ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
             "input",
             {
               ref: inputRef,
@@ -42452,7 +42538,7 @@ ${text.slice(0, 300)}` };
               onClick: (e3) => e3.stopPropagation(),
               onMouseDown: (e3) => e3.stopPropagation()
             }
-          ) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+          ) : /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
             "span",
             {
               className: "dialkit-angle-value",
@@ -42466,7 +42552,7 @@ ${text.slice(0, 300)}` };
   }
 
   // src/ui/components/CubePreview.tsx
-  var import_react38 = __toESM(require_react());
+  var import_react39 = __toESM(require_react());
 
   // node_modules/ogl/src/math/functions/Vec3Func.js
   function length(a3) {
@@ -45908,7 +45994,7 @@ ${addLineNumbers(fragment)}`);
   }
 
   // src/ui/components/CubePreview.tsx
-  var import_jsx_runtime18 = __toESM(require_jsx_runtime());
+  var import_jsx_runtime19 = __toESM(require_jsx_runtime());
   var WIRE_VERTEX = (
     /* glsl */
     `
@@ -45950,13 +46036,13 @@ void main() {
     camera.position.z = ORBIT_RADIUS * sinPhi * Math.cos(theta);
   }
   function CubePreview({ rx, ry, rz = 0, onRotate }) {
-    const containerRef = (0, import_react38.useRef)(null);
-    const stateRef = (0, import_react38.useRef)(null);
-    const onRotateRef = (0, import_react38.useRef)(onRotate);
+    const containerRef = (0, import_react39.useRef)(null);
+    const stateRef = (0, import_react39.useRef)(null);
+    const onRotateRef = (0, import_react39.useRef)(onRotate);
     onRotateRef.current = onRotate;
-    const propsRef = (0, import_react38.useRef)({ rx, ry });
+    const propsRef = (0, import_react39.useRef)({ rx, ry });
     propsRef.current = { rx, ry };
-    (0, import_react38.useEffect)(() => {
+    (0, import_react39.useEffect)(() => {
       const container = containerRef.current;
       if (!container) return;
       const renderer = new Renderer({
@@ -46057,7 +46143,7 @@ void main() {
         stateRef.current = null;
       };
     }, []);
-    (0, import_react38.useEffect)(() => {
+    (0, import_react39.useEffect)(() => {
       const state = stateRef.current;
       if (!state) return;
       const { rx: emRx, ry: emRy } = { rx: state.lastEmittedRx, ry: state.lastEmittedRy };
@@ -46068,12 +46154,12 @@ void main() {
       state.lastEmittedRx = rx;
       state.lastEmittedRy = ry;
     }, [rx, ry]);
-    return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { className: "dialkit-control-card", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { className: "dialkit-control-header", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { className: "dialkit-control-label", children: "3D Preview" }),
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { className: "dialkit-control-status dialkit-control-status--on" })
+    return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { className: "dialkit-control-card", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { className: "dialkit-control-header", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { className: "dialkit-control-label", children: "3D Preview" }),
+        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { className: "dialkit-control-status dialkit-control-status--on" })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { ref: containerRef, className: "dialkit-cube-preview-wrapper", children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { className: "dialkit-preview-label", children: "Drag to rotate" }) })
+      /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("div", { ref: containerRef, className: "dialkit-cube-preview-wrapper", children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { className: "dialkit-preview-label", children: "Drag to rotate" }) })
     ] });
   }
   function buildWireframeIndices(geometry) {
@@ -46105,25 +46191,25 @@ void main() {
   }
 
   // src/ui/components/ControlCard.tsx
-  var import_jsx_runtime19 = __toESM(require_jsx_runtime());
+  var import_jsx_runtime20 = __toESM(require_jsx_runtime());
   function ControlCard({ label, connected, children }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { className: "dialkit-control-card", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { className: "dialkit-control-header", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { className: "dialkit-control-label", children: label }),
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "dialkit-control-card", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "dialkit-control-header", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "dialkit-control-label", children: label }),
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
           "span",
           {
             className: `dialkit-control-status ${connected ? "dialkit-control-status--on" : "dialkit-control-status--off"}`
           }
         )
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("div", { className: "dialkit-control-slot", children })
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "dialkit-control-slot", children })
     ] });
   }
 
   // src/ui/components/XYPad.tsx
-  var import_react39 = __toESM(require_react());
-  var import_jsx_runtime20 = __toESM(require_jsx_runtime());
+  var import_react40 = __toESM(require_react());
+  var import_jsx_runtime21 = __toESM(require_jsx_runtime());
   var PAD_HEIGHT = 182;
   var INSET = 16;
   function snap(val, step) {
@@ -46142,9 +46228,9 @@ void main() {
     stepX = 1,
     stepY = 1
   }) {
-    const padRef = (0, import_react39.useRef)(null);
-    const [isDragging2, setIsDragging] = (0, import_react39.useState)(false);
-    const valueToPixel = (0, import_react39.useCallback)(
+    const padRef = (0, import_react40.useRef)(null);
+    const [isDragging2, setIsDragging] = (0, import_react40.useState)(false);
+    const valueToPixel = (0, import_react40.useCallback)(
       (vx, vy, rect) => {
         const tx = (vx - minX) / (maxX - minX);
         const ty = (vy - minY) / (maxY - minY);
@@ -46155,7 +46241,7 @@ void main() {
       },
       [minX, maxX, minY, maxY]
     );
-    const pixelToValue = (0, import_react39.useCallback)(
+    const pixelToValue = (0, import_react40.useCallback)(
       (px2, py, rect) => {
         const tx = clamp3((px2 - rect.left) / rect.width, 0, 1);
         const ty = clamp3(1 - (py - rect.top) / rect.height, 0, 1);
@@ -46168,7 +46254,7 @@ void main() {
       },
       [minX, maxX, minY, maxY, stepX, stepY]
     );
-    const handlePointerDown = (0, import_react39.useCallback)(
+    const handlePointerDown = (0, import_react40.useCallback)(
       (e3) => {
         e3.preventDefault();
         e3.target.setPointerCapture(e3.pointerId);
@@ -46178,7 +46264,7 @@ void main() {
       },
       [onChange, pixelToValue]
     );
-    const handlePointerMove = (0, import_react39.useCallback)(
+    const handlePointerMove = (0, import_react40.useCallback)(
       (e3) => {
         if (!isDragging2) return;
         const rect = padRef.current?.getBoundingClientRect();
@@ -46186,7 +46272,7 @@ void main() {
       },
       [isDragging2, onChange, pixelToValue]
     );
-    const handlePointerUp = (0, import_react39.useCallback)(() => {
+    const handlePointerUp = (0, import_react40.useCallback)(() => {
       setIsDragging(false);
     }, []);
     const padWidth = padRef.current?.offsetWidth ?? 236;
@@ -46204,11 +46290,11 @@ void main() {
     const axisRight = padWidth - INSET;
     const axisTop = INSET;
     const axisBottom = PAD_HEIGHT - INSET;
-    const [mounted, setMounted] = (0, import_react39.useState)(false);
-    (0, import_react39.useEffect)(() => {
+    const [mounted, setMounted] = (0, import_react40.useState)(false);
+    (0, import_react40.useEffect)(() => {
       setMounted(true);
     }, []);
-    return /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "dialkit-xypad-control", children: /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("div", { className: "dialkit-xypad-control", children: /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)(
       "div",
       {
         ref: padRef,
@@ -46217,7 +46303,7 @@ void main() {
         onPointerMove: handlePointerMove,
         onPointerUp: handlePointerUp,
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(
+          /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)(
             "svg",
             {
               className: "dialkit-xypad-svg",
@@ -46226,13 +46312,13 @@ void main() {
               height: PAD_HEIGHT,
               preserveAspectRatio: "none",
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("line", { x1: gridLines25X, y1: 0, x2: gridLines25X, y2: PAD_HEIGHT, stroke: "rgba(255,255,255,0.06)", strokeWidth: 1 }),
-                /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("line", { x1: gridLines75X, y1: 0, x2: gridLines75X, y2: PAD_HEIGHT, stroke: "rgba(255,255,255,0.06)", strokeWidth: 1 }),
-                /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("line", { x1: 0, y1: gridLines25Y, x2: padWidth, y2: gridLines25Y, stroke: "rgba(255,255,255,0.06)", strokeWidth: 1 }),
-                /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("line", { x1: 0, y1: gridLines75Y, x2: padWidth, y2: gridLines75Y, stroke: "rgba(255,255,255,0.06)", strokeWidth: 1 }),
-                /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("line", { x1: centerX, y1: axisTop, x2: centerX, y2: axisBottom, stroke: "rgba(255,255,255,0.3)", strokeWidth: 1 }),
-                /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("line", { x1: axisLeft, y1: centerY, x2: axisRight, y2: centerY, stroke: "rgba(255,255,255,0.3)", strokeWidth: 1 }),
-                /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("line", { x1: gridLines25X, y1: 0, x2: gridLines25X, y2: PAD_HEIGHT, stroke: "rgba(255,255,255,0.06)", strokeWidth: 1 }),
+                /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("line", { x1: gridLines75X, y1: 0, x2: gridLines75X, y2: PAD_HEIGHT, stroke: "rgba(255,255,255,0.06)", strokeWidth: 1 }),
+                /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("line", { x1: 0, y1: gridLines25Y, x2: padWidth, y2: gridLines25Y, stroke: "rgba(255,255,255,0.06)", strokeWidth: 1 }),
+                /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("line", { x1: 0, y1: gridLines75Y, x2: padWidth, y2: gridLines75Y, stroke: "rgba(255,255,255,0.06)", strokeWidth: 1 }),
+                /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("line", { x1: centerX, y1: axisTop, x2: centerX, y2: axisBottom, stroke: "rgba(255,255,255,0.3)", strokeWidth: 1 }),
+                /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("line", { x1: axisLeft, y1: centerY, x2: axisRight, y2: centerY, stroke: "rgba(255,255,255,0.3)", strokeWidth: 1 }),
+                /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
                   "circle",
                   {
                     cx: cursorX,
@@ -46243,7 +46329,7 @@ void main() {
                     strokeWidth: 1.5
                   }
                 ),
-                /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
                   "circle",
                   {
                     cx: cursorX,
@@ -46257,18 +46343,18 @@ void main() {
               ]
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "dialkit-xypad-label dialkit-xypad-label--top", children: "+Y" }),
-          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "dialkit-xypad-label dialkit-xypad-label--bottom", children: "-" }),
-          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "dialkit-xypad-label dialkit-xypad-label--left", children: "-" }),
-          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "dialkit-xypad-label dialkit-xypad-label--right", children: "+X" })
+          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { className: "dialkit-xypad-label dialkit-xypad-label--top", children: "+Y" }),
+          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { className: "dialkit-xypad-label dialkit-xypad-label--bottom", children: "-" }),
+          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { className: "dialkit-xypad-label dialkit-xypad-label--left", children: "-" }),
+          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { className: "dialkit-xypad-label dialkit-xypad-label--right", children: "+X" })
         ]
       }
     ) });
   }
 
   // src/ui/components/RangeSlider.tsx
-  var import_react40 = __toESM(require_react());
-  var import_jsx_runtime21 = __toESM(require_jsx_runtime());
+  var import_react41 = __toESM(require_react());
+  var import_jsx_runtime22 = __toESM(require_jsx_runtime());
   function decimalsForStep4(step) {
     const s3 = step.toString();
     const dot5 = s3.indexOf(".");
@@ -46285,10 +46371,10 @@ void main() {
     max: max6 = 1,
     step = 0.01
   }) {
-    const wrapperRef = (0, import_react40.useRef)(null);
-    const [isHovered, setIsHovered] = (0, import_react40.useState)(false);
-    const [dragTarget, setDragTarget] = (0, import_react40.useState)(null);
-    const wrapperRectRef = (0, import_react40.useRef)(null);
+    const wrapperRef = (0, import_react41.useRef)(null);
+    const [isHovered, setIsHovered] = (0, import_react41.useState)(false);
+    const [dragTarget, setDragTarget] = (0, import_react41.useState)(null);
+    const wrapperRectRef = (0, import_react41.useRef)(null);
     const lowPct = (value.low - min6) / (max6 - min6) * 100;
     const highPct = (value.high - min6) / (max6 - min6) * 100;
     const lowMotion = useMotionValue(lowPct);
@@ -46298,13 +46384,13 @@ void main() {
     const lowHandleLeft = useTransform(lowMotion, (pct) => `max(0px, calc(${pct}% - 1.5px))`);
     const highHandleLeft = useTransform(highMotion, (pct) => `max(0px, calc(${pct}% - 1.5px))`);
     const isActive = isHovered || dragTarget !== null;
-    (0, import_react40.useEffect)(() => {
+    (0, import_react41.useEffect)(() => {
       if (!dragTarget) {
         lowMotion.jump(lowPct);
         highMotion.jump(highPct);
       }
     }, [lowPct, highPct, dragTarget, lowMotion, highMotion]);
-    const positionToValue = (0, import_react40.useCallback)(
+    const positionToValue = (0, import_react41.useCallback)(
       (clientX) => {
         const rect = wrapperRectRef.current;
         if (!rect) return min6;
@@ -46313,7 +46399,7 @@ void main() {
       },
       [min6, max6]
     );
-    const handlePointerDown = (0, import_react40.useCallback)(
+    const handlePointerDown = (0, import_react41.useCallback)(
       (e3) => {
         e3.preventDefault();
         e3.target.setPointerCapture(e3.pointerId);
@@ -46338,7 +46424,7 @@ void main() {
       },
       [positionToValue, value, min6, max6, step, onChange, lowMotion, highMotion]
     );
-    const handlePointerMove = (0, import_react40.useCallback)(
+    const handlePointerMove = (0, import_react41.useCallback)(
       (e3) => {
         if (!dragTarget) return;
         const rawVal = positionToValue(e3.clientX);
@@ -46355,7 +46441,7 @@ void main() {
       },
       [dragTarget, positionToValue, value, min6, max6, step, onChange, lowMotion, highMotion]
     );
-    const handlePointerUp = (0, import_react40.useCallback)(() => {
+    const handlePointerUp = (0, import_react41.useCallback)(() => {
       setDragTarget(null);
     }, []);
     const fillBackground = isActive ? "var(--light-overlay)" : "var(--light-overlay-hover)";
@@ -46366,12 +46452,12 @@ void main() {
     const discreteSteps = (max6 - min6) / step;
     const hashMarks = discreteSteps <= 10 ? Array.from({ length: discreteSteps - 1 }, (_3, i3) => {
       const pct = (i3 + 1) * step / (max6 - min6) * 100;
-      return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("div", { className: "dialkit-slider-hashmark", style: { left: `${pct}%` } }, i3);
+      return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { className: "dialkit-slider-hashmark", style: { left: `${pct}%` } }, i3);
     }) : Array.from({ length: 9 }, (_3, i3) => {
       const pct = (i3 + 1) * 10;
-      return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("div", { className: "dialkit-slider-hashmark", style: { left: `${pct}%` } }, i3);
+      return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { className: "dialkit-slider-hashmark", style: { left: `${pct}%` } }, i3);
     });
-    return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("div", { ref: wrapperRef, className: "dialkit-range-wrapper", children: /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { ref: wrapperRef, className: "dialkit-range-wrapper", children: /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(
       "div",
       {
         className: `dialkit-range ${isActive ? "dialkit-slider-active" : ""}`,
@@ -46381,15 +46467,15 @@ void main() {
         onMouseEnter: () => setIsHovered(true),
         onMouseLeave: () => setIsHovered(false),
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("div", { className: "dialkit-slider-hashmarks", children: hashMarks }),
-          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { className: "dialkit-slider-hashmarks", children: hashMarks }),
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
             motion.div,
             {
               className: "dialkit-range-fill",
               style: { left: fillLeft, width: fillWidth, background: fillBackground, transition: "background 0.15s" }
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
             motion.div,
             {
               className: "dialkit-range-handle",
@@ -46398,7 +46484,7 @@ void main() {
               transition: { duration: 0.15 }
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
             motion.div,
             {
               className: "dialkit-range-handle",
@@ -46407,7 +46493,7 @@ void main() {
               transition: { duration: 0.15 }
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("span", { className: "dialkit-range-values", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("span", { className: "dialkit-range-values", children: [
             displayLow,
             " \u2013 ",
             displayHigh
@@ -46418,8 +46504,8 @@ void main() {
   }
 
   // src/ui/components/GradientBar.tsx
-  var import_react42 = __toESM(require_react());
-  var import_jsx_runtime22 = __toESM(require_jsx_runtime());
+  var import_react43 = __toESM(require_react());
+  var import_jsx_runtime23 = __toESM(require_jsx_runtime());
   var HANDLE_SIZE = 16;
   var REMOVE_THRESHOLD = 40;
   function sortStops(stops) {
@@ -46458,15 +46544,15 @@ void main() {
     minStops = 2,
     maxStops = 8
   }) {
-    const barRef = (0, import_react42.useRef)(null);
-    const wrapperRef = (0, import_react42.useRef)(null);
-    const [selectedId, setSelectedId] = (0, import_react42.useState)(null);
-    const [pickerOpen, setPickerOpen] = (0, import_react42.useState)(false);
-    const [draggingId, setDraggingId] = (0, import_react42.useState)(null);
-    const dragStartY = (0, import_react42.useRef)(0);
+    const barRef = (0, import_react43.useRef)(null);
+    const wrapperRef = (0, import_react43.useRef)(null);
+    const [selectedId, setSelectedId] = (0, import_react43.useState)(null);
+    const [pickerOpen, setPickerOpen] = (0, import_react43.useState)(false);
+    const [draggingId, setDraggingId] = (0, import_react43.useState)(null);
+    const dragStartY = (0, import_react43.useRef)(0);
     const sorted = sortStops(value);
     const gradientCSS = buildGradientCSS(sorted);
-    (0, import_react42.useEffect)(() => {
+    (0, import_react43.useEffect)(() => {
       if (!pickerOpen) return;
       function handleClickOutside(e3) {
         if (wrapperRef.current && !wrapperRef.current.contains(e3.target)) {
@@ -46476,7 +46562,7 @@ void main() {
       document.addEventListener("mousedown", handleClickOutside);
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }, [pickerOpen]);
-    const handleBarClick = (0, import_react42.useCallback)(
+    const handleBarClick = (0, import_react43.useCallback)(
       (e3) => {
         if (value.length >= maxStops) return;
         const rect = barRef.current?.getBoundingClientRect();
@@ -46489,7 +46575,7 @@ void main() {
       },
       [value, onChange, maxStops]
     );
-    const handleHandlePointerDown = (0, import_react42.useCallback)(
+    const handleHandlePointerDown = (0, import_react43.useCallback)(
       (e3, stopId) => {
         e3.preventDefault();
         e3.stopPropagation();
@@ -46500,7 +46586,7 @@ void main() {
       },
       []
     );
-    const handleHandlePointerMove = (0, import_react42.useCallback)(
+    const handleHandlePointerMove = (0, import_react43.useCallback)(
       (e3) => {
         if (!draggingId) return;
         const rect = barRef.current?.getBoundingClientRect();
@@ -46522,10 +46608,10 @@ void main() {
       },
       [draggingId, value, onChange, minStops, selectedId]
     );
-    const handleHandlePointerUp = (0, import_react42.useCallback)(() => {
+    const handleHandlePointerUp = (0, import_react43.useCallback)(() => {
       setDraggingId(null);
     }, []);
-    const handleHandleClick = (0, import_react42.useCallback)(
+    const handleHandleClick = (0, import_react43.useCallback)(
       (e3, stopId) => {
         e3.stopPropagation();
         if (selectedId === stopId && pickerOpen) {
@@ -46537,7 +46623,7 @@ void main() {
       },
       [selectedId, pickerOpen]
     );
-    const handlePickerChange = (0, import_react42.useCallback)(
+    const handlePickerChange = (0, import_react43.useCallback)(
       (color2) => {
         if (!selectedId) return;
         const next = value.map((s3) => s3.id === selectedId ? { ...s3, color: color2 } : s3);
@@ -46547,8 +46633,8 @@ void main() {
     );
     const selectedStop = value.find((s3) => s3.id === selectedId);
     const selectedNormalized = selectedStop?.color?.length === 4 ? `#${selectedStop.color[1]}${selectedStop.color[1]}${selectedStop.color[2]}${selectedStop.color[2]}${selectedStop.color[3]}${selectedStop.color[3]}` : selectedStop?.color?.slice(0, 7) ?? "#000000";
-    return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "dialkit-gradient-control", ref: wrapperRef, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { className: "dialkit-gradient-control", ref: wrapperRef, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
         "div",
         {
           ref: barRef,
@@ -46557,13 +46643,13 @@ void main() {
           onClick: handleBarClick
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
         "div",
         {
           className: "dialkit-gradient-handles",
           onPointerMove: handleHandlePointerMove,
           onPointerUp: handleHandlePointerUp,
-          children: sorted.map((stop) => /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+          children: sorted.map((stop) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
             "div",
             {
               className: `dialkit-gradient-handle ${selectedId === stop.id ? "dialkit-gradient-handle--selected" : ""}`,
@@ -46578,13 +46664,13 @@ void main() {
           ))
         }
       ),
-      pickerOpen && selectedStop && /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { className: "dialkit-gradient-picker-popover", children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Z, { color: selectedNormalized, onChange: handlePickerChange }) })
+      pickerOpen && selectedStop && /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { className: "dialkit-gradient-picker-popover", children: /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Z, { color: selectedNormalized, onChange: handlePickerChange }) })
     ] });
   }
 
   // src/ui/components/CurveEditor.tsx
-  var import_react43 = __toESM(require_react());
-  var import_jsx_runtime23 = __toESM(require_jsx_runtime());
+  var import_react44 = __toESM(require_react());
+  var import_jsx_runtime24 = __toESM(require_jsx_runtime());
   var SVG_SIZE = 200;
   function toSvg(nx, ny) {
     return {
@@ -46605,8 +46691,8 @@ void main() {
     return Math.round(v4 / step) * step;
   }
   function CurveEditor({ value, onChange }) {
-    const svgRef = (0, import_react43.useRef)(null);
-    const [dragHandle, setDragHandle] = (0, import_react43.useState)(null);
+    const svgRef = (0, import_react44.useRef)(null);
+    const [dragHandle, setDragHandle] = (0, import_react44.useState)(null);
     const [x1, y1, x22, y22] = value;
     const start = toSvg(0, 0);
     const end = toSvg(1, 1);
@@ -46614,7 +46700,7 @@ void main() {
     const p22 = toSvg(x22, y22);
     const curvePath = `M ${start.x} ${start.y} C ${p1.x} ${p1.y}, ${p22.x} ${p22.y}, ${end.x} ${end.y}`;
     const gridValues = [0, 0.25, 0.5, 0.75, 1];
-    const pointerToValue = (0, import_react43.useCallback)(
+    const pointerToValue = (0, import_react44.useCallback)(
       (e3, shiftSnap) => {
         const svg = svgRef.current;
         if (!svg) return null;
@@ -46632,7 +46718,7 @@ void main() {
       },
       []
     );
-    const handlePointerDown = (0, import_react43.useCallback)(
+    const handlePointerDown = (0, import_react44.useCallback)(
       (e3, handle) => {
         e3.preventDefault();
         e3.stopPropagation();
@@ -46641,7 +46727,7 @@ void main() {
       },
       []
     );
-    const handlePointerMove = (0, import_react43.useCallback)(
+    const handlePointerMove = (0, import_react44.useCallback)(
       (e3) => {
         if (!dragHandle) return;
         const v4 = pointerToValue(e3, e3.shiftKey);
@@ -46654,10 +46740,10 @@ void main() {
       },
       [dragHandle, pointerToValue, x1, y1, x22, y22, onChange]
     );
-    const handlePointerUp = (0, import_react43.useCallback)(() => {
+    const handlePointerUp = (0, import_react44.useCallback)(() => {
       setDragHandle(null);
     }, []);
-    return /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { className: "dialkit-curve-control", children: /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { className: "dialkit-curve-area", children: /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { className: "dialkit-curve-control", children: /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { className: "dialkit-curve-area", children: /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(
       "svg",
       {
         ref: svgRef,
@@ -46671,12 +46757,12 @@ void main() {
             const hEnd = toSvg(1, v4);
             const vLine = toSvg(v4, 0);
             const vEnd = toSvg(v4, 1);
-            return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("g", { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("line", { x1: h3.x, y1: h3.y, x2: hEnd.x, y2: hEnd.y, stroke: "rgba(255,255,255,0.06)", strokeWidth: 1 }),
-              /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("line", { x1: vLine.x, y1: vLine.y, x2: vEnd.x, y2: vEnd.y, stroke: "rgba(255,255,255,0.06)", strokeWidth: 1 })
+            return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("g", { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("line", { x1: h3.x, y1: h3.y, x2: hEnd.x, y2: hEnd.y, stroke: "rgba(255,255,255,0.06)", strokeWidth: 1 }),
+              /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("line", { x1: vLine.x, y1: vLine.y, x2: vEnd.x, y2: vEnd.y, stroke: "rgba(255,255,255,0.06)", strokeWidth: 1 })
             ] }, v4);
           }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(
             "line",
             {
               x1: start.x,
@@ -46688,12 +46774,12 @@ void main() {
               strokeDasharray: "4 3"
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("line", { x1: start.x, y1: start.y, x2: p1.x, y2: p1.y, stroke: "rgba(255,255,255,0.3)", strokeWidth: 1 }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("line", { x1: end.x, y1: end.y, x2: p22.x, y2: p22.y, stroke: "rgba(255,255,255,0.3)", strokeWidth: 1 }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("path", { d: curvePath, fill: "none", stroke: "var(--accent-blue)", strokeWidth: 2 }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("circle", { cx: start.x, cy: start.y, r: 3, fill: "rgba(255,255,255,0.4)" }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("circle", { cx: end.x, cy: end.y, r: 3, fill: "rgba(255,255,255,0.4)" }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("line", { x1: start.x, y1: start.y, x2: p1.x, y2: p1.y, stroke: "rgba(255,255,255,0.3)", strokeWidth: 1 }),
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("line", { x1: end.x, y1: end.y, x2: p22.x, y2: p22.y, stroke: "rgba(255,255,255,0.3)", strokeWidth: 1 }),
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("path", { d: curvePath, fill: "none", stroke: "var(--accent-blue)", strokeWidth: 2 }),
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("circle", { cx: start.x, cy: start.y, r: 3, fill: "rgba(255,255,255,0.4)" }),
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("circle", { cx: end.x, cy: end.y, r: 3, fill: "rgba(255,255,255,0.4)" }),
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(
             "circle",
             {
               cx: p1.x,
@@ -46706,7 +46792,7 @@ void main() {
               onPointerDown: (e3) => handlePointerDown(e3, "p1")
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(
             "circle",
             {
               cx: p22.x,
@@ -46725,8 +46811,8 @@ void main() {
   }
 
   // src/ui/components/PreviewCanvas.tsx
-  var import_react44 = __toESM(require_react());
-  var import_jsx_runtime24 = __toESM(require_jsx_runtime());
+  var import_react45 = __toESM(require_react());
+  var import_jsx_runtime25 = __toESM(require_jsx_runtime());
   function rgbToCSS(c3, opacity = 1) {
     return `rgba(${Math.round(c3.r * 255)}, ${Math.round(c3.g * 255)}, ${Math.round(c3.b * 255)}, ${opacity})`;
   }
@@ -46747,8 +46833,8 @@ void main() {
     };
   }
   function PreviewCanvas({ actions }) {
-    const canvasRef = (0, import_react44.useRef)(null);
-    (0, import_react44.useEffect)(() => {
+    const canvasRef = (0, import_react45.useRef)(null);
+    (0, import_react45.useEffect)(() => {
       const canvas = canvasRef.current;
       if (!canvas || !actions.length) return;
       const ctx = canvas.getContext("2d");
@@ -46919,9 +47005,9 @@ void main() {
       }
       ctx.restore();
     }, [actions]);
-    return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { className: "dialkit-preview-wrapper", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("canvas", { ref: canvasRef, className: "dialkit-preview-canvas" }),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { className: "dialkit-preview-label", children: "Preview" })
+    return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "dialkit-preview-wrapper", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("canvas", { ref: canvasRef, className: "dialkit-preview-canvas" }),
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "dialkit-preview-label", children: "Preview" })
     ] });
   }
   function resolveId(nodeId, lastCreatedId) {
@@ -53875,11 +53961,11 @@ void main() {
   }
 
   // src/ui/renderer/UIRenderer.tsx
-  var import_jsx_runtime25 = __toESM(require_jsx_runtime());
+  var import_jsx_runtime26 = __toESM(require_jsx_runtime());
   function useSyncedState(externalValue) {
-    const [val, setVal] = (0, import_react45.useState)(externalValue);
-    const prevExternal = (0, import_react45.useRef)(externalValue);
-    (0, import_react45.useEffect)(() => {
+    const [val, setVal] = (0, import_react46.useState)(externalValue);
+    const prevExternal = (0, import_react46.useRef)(externalValue);
+    (0, import_react46.useEffect)(() => {
       const prev = prevExternal.current;
       const changed = typeof prev === "object" && prev !== null ? JSON.stringify(prev) !== JSON.stringify(externalValue) : prev !== externalValue;
       if (changed) {
@@ -53891,7 +53977,7 @@ void main() {
   }
   function ControlRenderer({ control, currentValue, onControlChange, onControlValueChange }) {
     const { id: id3, type, label = "", props = {}, action } = control;
-    const onChange = (0, import_react45.useCallback)(
+    const onChange = (0, import_react46.useCallback)(
       (value) => {
         onControlValueChange(id3, value);
         onControlChange(id3, value, action, control.actions);
@@ -53902,7 +53988,7 @@ void main() {
       case "slider": {
         const defaultVal = typeof props.defaultValue === "number" ? props.defaultValue : typeof props.min === "number" ? props.min : 0;
         const [val, setVal] = useSyncedState(defaultVal);
-        return /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+        return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
           Slider,
           {
             label,
@@ -53919,7 +54005,7 @@ void main() {
       }
       case "toggle": {
         const [val, setVal] = useSyncedState(props.defaultValue === true);
-        return /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+        return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
           Toggle,
           {
             label,
@@ -53934,7 +54020,7 @@ void main() {
       case "number": {
         const defaultVal = typeof props.defaultValue === "number" ? props.defaultValue : typeof props.min === "number" ? props.min : 0;
         const [val, setVal] = useSyncedState(defaultVal);
-        return /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+        return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
           NumberInput,
           {
             label,
@@ -53954,7 +54040,7 @@ void main() {
         const [val, setVal] = useSyncedState(
           typeof props.defaultValue === "string" ? props.defaultValue : options[0] ?? ""
         );
-        return /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+        return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
           SelectControl,
           {
             label,
@@ -53972,7 +54058,7 @@ void main() {
         const [val, setVal] = useSyncedState(
           typeof props.defaultValue === "string" ? props.defaultValue : options[0]?.value ?? ""
         );
-        return /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+        return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
           SegmentedControl,
           {
             options,
@@ -53992,7 +54078,7 @@ void main() {
             defaults[stop.id] = stop.defaultValue ?? "#000000";
           }
           const [val2, setVal2] = useSyncedState(defaults);
-          return /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+          return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
             ColorControl,
             {
               label,
@@ -54008,7 +54094,7 @@ void main() {
         const [val, setVal] = useSyncedState(
           typeof props.defaultValue === "string" ? props.defaultValue : "#000000"
         );
-        return /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+        return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
           ColorControl,
           {
             label,
@@ -54024,7 +54110,7 @@ void main() {
         const [val, setVal] = useSyncedState(
           typeof props.defaultValue === "string" ? props.defaultValue : ""
         );
-        return /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+        return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
           TextControl,
           {
             label,
@@ -54041,7 +54127,7 @@ void main() {
         const [val, setVal] = useSyncedState(
           typeof props.defaultValue === "number" ? props.defaultValue : 0
         );
-        return /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+        return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
           AngleWheel,
           {
             label,
@@ -54061,7 +54147,7 @@ void main() {
         const defaultXY = { x: dv.x ?? 0, y: dv.y ?? 0 };
         const cv = typeof currentValue === "object" && currentValue !== null && "x" in currentValue ? currentValue : null;
         const [val, setVal] = useSyncedState(cv ?? defaultXY);
-        return /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+        return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
           XYPad,
           {
             label,
@@ -54086,7 +54172,7 @@ void main() {
         const defaultRange = { low: lo, high: hi };
         const cv = typeof currentValue === "object" && currentValue !== null && "low" in currentValue ? currentValue : null;
         const [val, setVal] = useSyncedState(cv ?? defaultRange);
-        return /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+        return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
           RangeSlider,
           {
             label,
@@ -54105,7 +54191,7 @@ void main() {
         const defaultStops = Array.isArray(props.stops) ? props.stops : [{ id: "stop0", position: 0, color: "#000000" }, { id: "stop1", position: 1, color: "#ffffff" }];
         const initialStops = (Array.isArray(currentValue) ? currentValue : null) ?? defaultStops;
         const [val, setVal] = useSyncedState(initialStops);
-        return /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+        return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
           GradientBar,
           {
             label,
@@ -54123,7 +54209,7 @@ void main() {
         const dv = Array.isArray(props.defaultValue) ? props.defaultValue : [0.25, 0.1, 0.25, 1];
         const initialCurve = (Array.isArray(currentValue) && currentValue.length === 4 ? currentValue : null) ?? dv;
         const [val, setVal] = useSyncedState(initialCurve);
-        return /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+        return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
           CurveEditor,
           {
             label,
@@ -54136,7 +54222,7 @@ void main() {
         );
       }
       case "button":
-        return /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "dialkit-control-card", children: /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+        return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { className: "dialkit-control-card", children: /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
           "button",
           {
             className: "dialkit-button dialkit-button--secondary",
@@ -54145,7 +54231,7 @@ void main() {
           }
         ) });
       default:
-        return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { fontSize: 10, color: "rgba(255,80,80,0.7)", padding: "4px 8px" }, children: [
+        return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { fontSize: 10, color: "rgba(255,80,80,0.7)", padding: "4px 8px" }, children: [
           "Unknown control type: ",
           type
         ] });
@@ -54195,11 +54281,11 @@ void main() {
   }
   function UIRenderer({ spec, onApply, onValueChange, animateEntrance = true, disabled = false }) {
     const hasGenerator = !!spec.generate;
-    const [controlValues, setControlValues] = (0, import_react45.useState)(() => collectControlDefaults(spec.controls));
-    const [previewActions, setPreviewActions] = (0, import_react45.useState)(null);
-    const previewTimerRef = (0, import_react45.useRef)(null);
-    const applyTimerRef = (0, import_react45.useRef)(null);
-    const controlValuesRef = (0, import_react45.useRef)(controlValues);
+    const [controlValues, setControlValues] = (0, import_react46.useState)(() => collectControlDefaults(spec.controls));
+    const [previewActions, setPreviewActions] = (0, import_react46.useState)(null);
+    const previewTimerRef = (0, import_react46.useRef)(null);
+    const applyTimerRef = (0, import_react46.useRef)(null);
+    const controlValuesRef = (0, import_react46.useRef)(controlValues);
     controlValuesRef.current = controlValues;
     const AUTO_APPLY_DELAY = 400;
     const dialIds = findDialControls(spec.controls);
@@ -54207,10 +54293,10 @@ void main() {
     const hasPreview = hasCubePreview;
     const cubeDialIdSet = hasCubePreview && dialIds ? /* @__PURE__ */ new Set([dialIds.rx, dialIds.ry, ...dialIds.rz ? [dialIds.rz] : []]) : null;
     const controlStructureKey = spec.controls.map((c3) => `${c3.id}:${c3.type}`).join(",");
-    (0, import_react45.useEffect)(() => {
+    (0, import_react46.useEffect)(() => {
       setControlValues(collectControlDefaults(spec.controls));
     }, [controlStructureKey]);
-    (0, import_react45.useEffect)(() => {
+    (0, import_react46.useEffect)(() => {
       if (!hasPreview || hasCubePreview || !spec.generate) return;
       try {
         const fn = compileGenerator(spec.generate);
@@ -54220,7 +54306,7 @@ void main() {
         setPreviewActions(null);
       }
     }, [spec.generate, hasPreview, hasCubePreview]);
-    const runPreview = (0, import_react45.useCallback)(() => {
+    const runPreview = (0, import_react46.useCallback)(() => {
       if (!hasPreview || hasCubePreview || !spec.generate) return;
       try {
         const fn = compileGenerator(spec.generate);
@@ -54230,7 +54316,7 @@ void main() {
         setPreviewActions(null);
       }
     }, [hasPreview, hasCubePreview, spec.generate]);
-    const handleControlChange = (0, import_react45.useCallback)(
+    const handleControlChange = (0, import_react46.useCallback)(
       (controlId, value, action, actions) => {
         if (disabled) return;
         if (hasGenerator) return;
@@ -54242,7 +54328,7 @@ void main() {
       },
       [hasGenerator, disabled]
     );
-    const scheduleAutoApply = (0, import_react45.useCallback)(() => {
+    const scheduleAutoApply = (0, import_react46.useCallback)(() => {
       if (disabled) return;
       if (!hasGenerator || !onApply) return;
       if (applyTimerRef.current) clearTimeout(applyTimerRef.current);
@@ -54250,7 +54336,7 @@ void main() {
         onApply(controlValuesRef.current);
       }, AUTO_APPLY_DELAY);
     }, [hasGenerator, onApply, AUTO_APPLY_DELAY, disabled]);
-    const handleControlValueChange = (0, import_react45.useCallback)((controlId, value) => {
+    const handleControlValueChange = (0, import_react46.useCallback)((controlId, value) => {
       setControlValues((prev) => {
         const next = { ...prev, [controlId]: value };
         controlValuesRef.current = next;
@@ -54263,7 +54349,7 @@ void main() {
       }
       scheduleAutoApply();
     }, [onValueChange, hasPreview, hasCubePreview, runPreview, scheduleAutoApply]);
-    const handleCubeRotate = (0, import_react45.useCallback)((newRx, newRy) => {
+    const handleCubeRotate = (0, import_react46.useCallback)((newRx, newRy) => {
       if (!dialIds) return;
       setControlValues((prev) => {
         const next = { ...prev, [dialIds.rx]: newRx, [dialIds.ry]: newRy };
@@ -54279,7 +54365,7 @@ void main() {
     const renderItems = groupControls(spec.controls, cubeDialIdSet);
     const renderControl = (control) => {
       if (control.type === "button") {
-        return /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+        return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
           ControlRenderer,
           {
             control,
@@ -54290,7 +54376,7 @@ void main() {
           control.id
         );
       }
-      return /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(ControlCard, { label: control.label ?? "", connected: isConnected(control), children: /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+      return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(ControlCard, { label: control.label ?? "", connected: isConnected(control), children: /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
         ControlRenderer,
         {
           control,
@@ -54306,13 +54392,13 @@ void main() {
     const CONTENT_DELAY = skeletonTotal + 0.05;
     const CONTENT_STAGGER = 0.04;
     if (!animateEntrance) {
-      return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(
+      return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(
         "div",
         {
           className: `ui-renderer${disabled ? " ui-renderer--disabled" : ""}`,
           style: { display: "flex", flexDirection: "column" },
           children: [
-            hasCubePreview && dialIds && /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+            hasCubePreview && dialIds && /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
               CubePreview,
               {
                 rx: controlValues[dialIds.rx] ?? 0,
@@ -54322,15 +54408,15 @@ void main() {
               }
             ),
             renderItems.map((item, idx) => {
-              const content = item.kind === "single" ? renderControl(item.control) : /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "dialkit-control-row", children: item.controls.map((control) => renderControl(control)) }, `dial-row-${idx}`);
-              return /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { children: content }, item.kind === "single" ? item.control.id : `dial-row-${idx}`);
+              const content = item.kind === "single" ? renderControl(item.control) : /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { className: "dialkit-control-row", children: item.controls.map((control) => renderControl(control)) }, `dial-row-${idx}`);
+              return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { children: content }, item.kind === "single" ? item.control.id : `dial-row-${idx}`);
             }),
-            hasPreview && !hasCubePreview && previewActions && previewActions.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(PreviewCanvas, { actions: previewActions })
+            hasPreview && !hasCubePreview && previewActions && previewActions.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(PreviewCanvas, { actions: previewActions })
           ]
         }
       );
     }
-    return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(
       motion.div,
       {
         className: `ui-renderer${disabled ? " ui-renderer--disabled" : ""}`,
@@ -54346,7 +54432,7 @@ void main() {
           }
         },
         children: [
-          hasCubePreview && dialIds && /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+          hasCubePreview && dialIds && /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
             CubePreview,
             {
               rx: controlValues[dialIds.rx] ?? 0,
@@ -54356,10 +54442,10 @@ void main() {
             }
           ),
           renderItems.map((item, idx) => {
-            const content = item.kind === "single" ? renderControl(item.control) : /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "dialkit-control-row", children: item.controls.map((control) => renderControl(control)) }, `dial-row-${idx}`);
+            const content = item.kind === "single" ? renderControl(item.control) : /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { className: "dialkit-control-row", children: item.controls.map((control) => renderControl(control)) }, `dial-row-${idx}`);
             const contentDelay = CONTENT_DELAY + idx * CONTENT_STAGGER;
             const isDialRow = item.kind === "dial-row";
-            return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(
+            return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(
               motion.div,
               {
                 className: `ui-enter-card ${isDialRow ? "ui-enter-card--dial-row" : ""}`,
@@ -54368,7 +54454,7 @@ void main() {
                   visible: { opacity: 1 }
                 },
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+                  /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
                     motion.div,
                     {
                       className: "ui-enter-skeleton",
@@ -54381,7 +54467,7 @@ void main() {
                       }
                     }
                   ),
-                  /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+                  /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
                     motion.div,
                     {
                       className: "ui-enter-content",
@@ -54400,7 +54486,7 @@ void main() {
               isDialRow ? `dial-row-${idx}` : item.control.id
             );
           }),
-          hasPreview && !hasCubePreview && previewActions && previewActions.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(PreviewCanvas, { actions: previewActions })
+          hasPreview && !hasCubePreview && previewActions && previewActions.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(PreviewCanvas, { actions: previewActions })
         ]
       }
     );
@@ -54450,7 +54536,7 @@ void main() {
   }
 
   // src/ui/App.tsx
-  var import_jsx_runtime26 = __toESM(require_jsx_runtime());
+  var import_jsx_runtime27 = __toESM(require_jsx_runtime());
   function rewriteTempIds(spec, map) {
     function rewriteAction(a3) {
       const nodeId = a3.nodeId && map[a3.nodeId] ? map[a3.nodeId] : a3.nodeId;
@@ -54521,7 +54607,7 @@ void main() {
   var PLUGIN_WIDTH = 260;
   var MAX_HEIGHT = 600;
   function useShellResize() {
-    (0, import_react47.useEffect)(() => {
+    (0, import_react48.useEffect)(() => {
       parent.postMessage(
         { pluginMessage: { type: "resize", width: PLUGIN_WIDTH, height: MAX_HEIGHT } },
         "*"
@@ -54530,13 +54616,13 @@ void main() {
   }
   function BadgeStack({ count, label }) {
     if (count <= 1) {
-      return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { className: "render-zone-layer-badge", children: label });
+      return /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { className: "render-zone-layer-badge", children: label });
     }
     const depth = Math.min(count, 3);
-    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { className: "badge-stack", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { className: "render-zone-layer-badge badge-top", children: label }),
-      depth >= 2 && /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { className: "render-zone-layer-badge badge-shadow badge-shadow-2" }),
-      depth >= 3 && /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { className: "render-zone-layer-badge badge-shadow badge-shadow-3" })
+    return /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { className: "badge-stack", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { className: "render-zone-layer-badge badge-top", children: label }),
+      depth >= 2 && /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { className: "render-zone-layer-badge badge-shadow badge-shadow-2" }),
+      depth >= 3 && /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { className: "render-zone-layer-badge badge-shadow badge-shadow-3" })
     ] });
   }
   function EmptyState({ selectionName, selectionCount, loaderState, loadingVerb }) {
@@ -54544,9 +54630,9 @@ void main() {
     const hasSelection = selectionCount > 0;
     const badgeLabel = selectionCount > 1 ? `${selectionCount} items selected` : selectionName;
     const stateKey = isLoading ? "loading" : hasSelection ? "selected" : "empty";
-    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { className: "render-zone-empty", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(GridLoader, { state: loaderState, size: 24 }),
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(AnimatePresence, { mode: "wait", initial: false, children: /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { className: "render-zone-empty", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(GridLoader, { state: loaderState, size: 24 }),
+      /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(AnimatePresence, { mode: "wait", initial: false, children: /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
         motion.div,
         {
           className: "render-zone-empty-info",
@@ -54554,16 +54640,16 @@ void main() {
           animate: { opacity: 1 },
           exit: { opacity: 0 },
           transition: { duration: 0.15 },
-          children: isLoading ? /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("p", { className: "render-zone-loading-text", children: [
+          children: isLoading ? /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("p", { className: "render-zone-loading-text", children: [
             loadingVerb,
             "..."
-          ] }) : /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(import_jsx_runtime26.Fragment, { children: [
-            badgeLabel && /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(BadgeStack, { count: selectionCount, label: badgeLabel }),
-            /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("p", { className: "render-zone-empty-text", children: hasSelection ? /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(import_jsx_runtime26.Fragment, { children: [
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)(import_jsx_runtime27.Fragment, { children: [
+            badgeLabel && /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(BadgeStack, { count: selectionCount, label: badgeLabel }),
+            /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("p", { className: "render-zone-empty-text", children: hasSelection ? /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)(import_jsx_runtime27.Fragment, { children: [
               "What do you want to create?",
-              /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("br", {}),
+              /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("br", {}),
               "Type ",
-              /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { className: "render-zone-hint-cmd", children: "/gen" }),
+              /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { className: "render-zone-hint-cmd", children: "/gen" }),
               " if you want auto controls"
             ] }) : "Select something on the canvas, then describe what you want" })
           ] })
@@ -54574,27 +54660,39 @@ void main() {
   }
   function App() {
     useShellResize();
-    const [messages, setMessages] = (0, import_react47.useState)([]);
-    const [currentUISpec, setCurrentUISpec] = (0, import_react47.useState)(null);
-    const [animateEntrance, setAnimateEntrance] = (0, import_react47.useState)(true);
-    const [isLoading, setIsLoading] = (0, import_react47.useState)(false);
-    const [loaderState, setLoaderState] = (0, import_react47.useState)("idle");
-    const [isInputFocused, setIsInputFocused] = (0, import_react47.useState)(false);
-    const [loadingVerb, setLoadingVerb] = (0, import_react47.useState)(null);
-    const [selectionContext, setSelectionContext] = (0, import_react47.useState)(null);
-    const [mockSelectionName, setMockSelectionName] = (0, import_react47.useState)(null);
-    const [historyOpen, setHistoryOpen] = (0, import_react47.useState)(false);
-    const demoTimersRef = (0, import_react47.useRef)([]);
-    const createdNodeIdsRef = (0, import_react47.useRef)([]);
-    const rootFrameIdRef = (0, import_react47.useRef)(void 0);
-    const suppressSelectionResetRef = (0, import_react47.useRef)(false);
-    const messagesRef = (0, import_react47.useRef)(messages);
+    const [messages, setMessages] = (0, import_react48.useState)([]);
+    const [currentUISpec, setCurrentUISpec] = (0, import_react48.useState)(null);
+    const [animateEntrance, setAnimateEntrance] = (0, import_react48.useState)(true);
+    const [isLoading, setIsLoading] = (0, import_react48.useState)(false);
+    const [loaderState, setLoaderState] = (0, import_react48.useState)("idle");
+    const [isInputFocused, setIsInputFocused] = (0, import_react48.useState)(false);
+    const [loadingVerb, setLoadingVerb] = (0, import_react48.useState)(null);
+    const [selectionContext, setSelectionContext] = (0, import_react48.useState)(null);
+    const [mockSelectionName, setMockSelectionName] = (0, import_react48.useState)(null);
+    const [historyOpen, setHistoryOpen] = (0, import_react48.useState)(false);
+    const demoTimersRef = (0, import_react48.useRef)([]);
+    const createdNodeIdsRef = (0, import_react48.useRef)([]);
+    const rootFrameIdRef = (0, import_react48.useRef)(void 0);
+    const suppressSelectionResetRef = (0, import_react48.useRef)(false);
+    const messagesRef = (0, import_react48.useRef)(messages);
     messagesRef.current = messages;
-    const currentUISpecRef = (0, import_react47.useRef)(currentUISpec);
+    const currentUISpecRef = (0, import_react48.useRef)(currentUISpec);
     currentUISpecRef.current = currentUISpec;
-    const selectionContextRef = (0, import_react47.useRef)(selectionContext);
+    const selectionContextRef = (0, import_react48.useRef)(selectionContext);
     selectionContextRef.current = selectionContext;
-    (0, import_react47.useEffect)(() => {
+    const persistMessagesTimerRef = (0, import_react48.useRef)(null);
+    (0, import_react48.useEffect)(() => {
+      if (persistMessagesTimerRef.current) clearTimeout(persistMessagesTimerRef.current);
+      persistMessagesTimerRef.current = setTimeout(() => {
+        const nodeId = rootFrameIdRef.current;
+        if (!nodeId) return;
+        postToMain({
+          type: "PERSIST_MESSAGES",
+          payload: { nodeId, messages: JSON.stringify(messages) }
+        });
+      }, 500);
+    }, [messages]);
+    (0, import_react48.useEffect)(() => {
       postToMain({ type: "PLUGIN_READY" });
       return onMainMessage((msg) => {
         if (msg.type === "SELECTION_CONTEXT") {
@@ -54611,15 +54709,35 @@ void main() {
               }
               setAnimateEntrance(false);
               setCurrentUISpec(restored);
-              addMessage("assistant", "Restored plugin controls from selected frame.");
+              if (msg.payload.pluginMessages) {
+                try {
+                  const restoredMsgs = JSON.parse(msg.payload.pluginMessages);
+                  setMessages(restoredMsgs);
+                } catch {
+                  setMessages([]);
+                }
+              } else {
+                setMessages([]);
+              }
             } catch {
               console.warn("[app] failed to parse stored pluginSpec");
             }
           } else {
             setCurrentUISpec(null);
-            rootFrameIdRef.current = void 0;
             createdNodeIdsRef.current = [];
-            setMessages([]);
+            if (msg.payload.pluginMessages) {
+              const nodeId = msg.payload.nodes[0]?.id;
+              if (nodeId) rootFrameIdRef.current = nodeId;
+              try {
+                const restoredMsgs = JSON.parse(msg.payload.pluginMessages);
+                setMessages(restoredMsgs);
+              } catch {
+                setMessages([]);
+              }
+            } else {
+              rootFrameIdRef.current = void 0;
+              setMessages([]);
+            }
           }
         } else if (msg.type === "EXECUTION_RESULT") {
           const { errorCount, errors, tempIdMap, createdNodeIds, rootFrameId } = msg.payload;
@@ -54656,13 +54774,13 @@ ${errors.join("\n")}`);
         }
       });
     }, []);
-    const addMessage = (0, import_react47.useCallback)((role, content) => {
+    const addMessage = (0, import_react48.useCallback)((role, content) => {
       setMessages((prev) => [
         ...prev,
         { id: `${Date.now()}-${Math.random()}`, role, content }
       ]);
     }, []);
-    const fetchImageData = (0, import_react47.useCallback)((nodeId, maxWidth = 100) => {
+    const fetchImageData = (0, import_react48.useCallback)((nodeId, maxWidth = 100) => {
       return new Promise((resolve, reject) => {
         const requestId = `img-${Date.now()}-${Math.random()}`;
         const cleanup = onMainMessage((msg) => {
@@ -54677,7 +54795,7 @@ ${errors.join("\n")}`);
         postToMain({ type: "REQUEST_IMAGE_DATA", payload: { requestId, nodeId, maxWidth } });
       });
     }, []);
-    const executeAndWait = (0, import_react47.useCallback)((payload) => {
+    const executeAndWait = (0, import_react48.useCallback)((payload) => {
       return new Promise((resolve, reject) => {
         const cleanup = onMainMessage((msg) => {
           if (msg.type === "EXECUTION_RESULT") {
@@ -54695,7 +54813,7 @@ ${errors.join("\n")}`);
         postToMain({ type: "EXECUTE_ACTIONS", payload });
       });
     }, []);
-    const awaitSelectionContext = (0, import_react47.useCallback)(() => {
+    const awaitSelectionContext = (0, import_react48.useCallback)(() => {
       return new Promise((resolve) => {
         const cleanup = onMainMessage((msg) => {
           if (msg.type === "SELECTION_CONTEXT") {
@@ -54705,7 +54823,7 @@ ${errors.join("\n")}`);
         });
       });
     }, []);
-    const handleApply = (0, import_react47.useCallback)(async (values) => {
+    const handleApply = (0, import_react48.useCallback)(async (values) => {
       const spec = currentUISpecRef.current;
       if (!spec) return;
       if (!spec.generate && !spec.actionTemplate?.length) return;
@@ -54794,7 +54912,7 @@ ${errors.join("\n")}`);
         }
       });
     }, [addMessage, fetchImageData]);
-    const handleDetach = (0, import_react47.useCallback)(() => {
+    const handleDetach = (0, import_react48.useCallback)(() => {
       const nodeId = rootFrameIdRef.current;
       if (nodeId) {
         postToMain({ type: "CLEAR_PLUGIN_DATA", payload: { nodeId } });
@@ -54804,10 +54922,10 @@ ${errors.join("\n")}`);
       createdNodeIdsRef.current = [];
       setMessages([]);
     }, []);
-    const handleFocusChange = (0, import_react47.useCallback)((focused) => {
+    const handleFocusChange = (0, import_react48.useCallback)((focused) => {
       setIsInputFocused(focused);
     }, []);
-    const finishLoading = (0, import_react47.useCallback)((success) => {
+    const finishLoading = (0, import_react48.useCallback)((success) => {
       setIsLoading(false);
       setLoadingVerb(null);
       if (success) {
@@ -54819,7 +54937,7 @@ ${errors.join("\n")}`);
         setLoaderState("idle");
       }
     }, []);
-    const handleSubmit = (0, import_react47.useCallback)(async (text) => {
+    const handleSubmit = (0, import_react48.useCallback)(async (text) => {
       const cmd = text.trim().toLowerCase();
       if (cmd === "/clear") {
         handleDetach();
@@ -55170,16 +55288,16 @@ ${errors.join("\n")}`);
       }
       if (cmd === "/history") {
         setMessages([]);
+        setHistoryOpen(true);
         const samples = [
-          { role: "user", content: 'Make the button corners more rounded and change the label to "Get Started"' },
-          { role: "assistant", content: 'Updated corner radius to 12px and changed label to "Get Started"' },
-          { role: "user", content: "Now change the background to a gradient from blue to purple" },
-          { role: "assistant", content: "Applied linear gradient from #3B82F6 to #8B5CF6 on the button fill" },
-          { role: "error", content: "Could not apply effect: selected layer is locked or hidden" },
-          { role: "user", content: "Swap the icon to a chevron-right and reduce padding to 8px on all sides" }
+          { role: "user", content: "Create a 3D wireframe sphere with dials for X and Y rotation, a segments slider, and a color picker" },
+          { role: "user", content: "Turn this into a Voronoi stained glass mosaic with controls for cell count, border width, and border color" },
+          { role: "error", content: "Turn this into a Voronoi stained glass mosaic with controls for cell count, border width, and border color" },
+          { role: "user", content: "/clear" },
+          { role: "user", content: "Add a pixelate effect with a pixel size slider and a vignette control" }
         ];
         samples.forEach((s3, i3) => {
-          setTimeout(() => addMessage(s3.role, s3.content), i3 * 400);
+          setTimeout(() => addMessage(s3.role, s3.content), i3 * 200);
         });
         return;
       }
@@ -55388,8 +55506,8 @@ ${errors.join("\n")}`);
       setCurrentUISpec(mergedUi);
       finishLoading(true);
     }, [addMessage, selectionContext, currentUISpec, fetchImageData, handleDetach, finishLoading, executeAndWait, awaitSelectionContext]);
-    const persistTimerRef = (0, import_react47.useRef)(null);
-    const handleValueChange = (0, import_react47.useCallback)((controlId, value) => {
+    const persistTimerRef = (0, import_react48.useRef)(null);
+    const handleValueChange = (0, import_react48.useCallback)((controlId, value) => {
       setCurrentUISpec((prev) => {
         if (!prev) return prev;
         const updated = specWithCurrentValues(prev, { [controlId]: value });
@@ -55407,20 +55525,20 @@ ${errors.join("\n")}`);
       });
     }, []);
     const hasSpec = currentUISpec !== null && currentUISpec.controls.length > 0;
-    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { className: "shell", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { className: "render-zone", children: animateEntrance ? /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(AnimatePresence, { mode: "wait", children: [
-        !hasSpec && /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { className: "shell", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { className: "render-zone", children: historyOpen ? /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: { flex: 1, display: "flex" }, children: /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(HistoryPanel, { messages }) }) : animateEntrance ? /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)(AnimatePresence, { mode: "wait", children: [
+        !hasSpec && /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
           motion.div,
           {
             initial: false,
             animate: { opacity: 1 },
             exit: { opacity: 0, transition: { duration: 0.15 } },
             style: { flex: 1, display: "flex" },
-            children: /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(EmptyState, { selectionName: mockSelectionName ?? (selectionContext?.nodes[0]?.name ?? null), selectionCount: selectionContext?.nodes.length ?? 0, loaderState, loadingVerb })
+            children: /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(EmptyState, { selectionName: mockSelectionName ?? (selectionContext?.nodes[0]?.name ?? null), selectionCount: selectionContext?.nodes.length ?? 0, loaderState, loadingVerb })
           },
           "empty"
         ),
-        hasSpec && /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+        hasSpec && /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
           motion.div,
           {
             initial: { opacity: 0 },
@@ -55428,15 +55546,15 @@ ${errors.join("\n")}`);
             exit: { opacity: 0, y: -4, transition: { duration: 0.12 } },
             transition: { duration: 0.2 },
             style: { display: "flex", flexDirection: "column", flex: 1 },
-            children: /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(UIRenderer, { spec: currentUISpec, onApply: handleApply, onValueChange: handleValueChange, animateEntrance: true, disabled: isLoading })
+            children: /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(UIRenderer, { spec: currentUISpec, onApply: handleApply, onValueChange: handleValueChange, animateEntrance: true, disabled: isLoading })
           },
           "ui"
         )
-      ] }) : /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(import_jsx_runtime26.Fragment, { children: [
-        !hasSpec && /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: { flex: 1, display: "flex" }, children: /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(EmptyState, { selectionName: mockSelectionName ?? (selectionContext?.nodes[0]?.name ?? null), selectionCount: selectionContext?.nodes.length ?? 0, loaderState, loadingVerb }) }),
-        hasSpec && /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: { display: "flex", flexDirection: "column", flex: 1 }, children: /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(UIRenderer, { spec: currentUISpec, onApply: handleApply, onValueChange: handleValueChange, animateEntrance: false, disabled: isLoading }) })
+      ] }) : /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)(import_jsx_runtime27.Fragment, { children: [
+        !hasSpec && /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: { flex: 1, display: "flex" }, children: /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(EmptyState, { selectionName: mockSelectionName ?? (selectionContext?.nodes[0]?.name ?? null), selectionCount: selectionContext?.nodes.length ?? 0, loaderState, loadingVerb }) }),
+        hasSpec && /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: { display: "flex", flexDirection: "column", flex: 1 }, children: /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(UIRenderer, { spec: currentUISpec, onApply: handleApply, onValueChange: handleValueChange, animateEntrance: false, disabled: isLoading }) })
       ] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { className: "chat-area", children: /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { className: "chat-area", children: /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
         ChatInput,
         {
           onSubmit: handleSubmit,
@@ -55445,6 +55563,7 @@ ${errors.join("\n")}`);
           loadingVerb,
           onFocusChange: handleFocusChange,
           hasSelection: !!selectionContext && selectionContext.nodes.length > 0,
+          hasControls: hasSpec,
           historyOpen,
           onHistoryToggle: () => setHistoryOpen((prev) => !prev)
         }
@@ -55452,7 +55571,7 @@ ${errors.join("\n")}`);
     ] });
   }
   var root = (0, import_client.createRoot)(document.getElementById("root"));
-  root.render(/* @__PURE__ */ (0, import_jsx_runtime26.jsx)(App, {}));
+  root.render(/* @__PURE__ */ (0, import_jsx_runtime27.jsx)(App, {}));
 })();
 /*! Bundled license information:
 

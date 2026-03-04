@@ -9,6 +9,7 @@ interface ChatInputProps {
   placeholder?: string;
   onFocusChange?: (isFocused: boolean) => void;
   hasSelection?: boolean;
+  hasControls?: boolean;
   historyOpen?: boolean;
   onHistoryToggle?: () => void;
 }
@@ -58,6 +59,7 @@ export function ChatInput({
   placeholder = 'Describe your edit',
   onFocusChange,
   hasSelection = false,
+  hasControls = false,
   historyOpen = false,
   onHistoryToggle,
 }: ChatInputProps) {
@@ -104,7 +106,7 @@ export function ChatInput({
   const handleActionClick = () => {
     if (hasText) {
       submit();
-    } else if (hasSelection && !disabled) {
+    } else if (hasSelection && !hasControls && !disabled) {
       onSubmit('/gen');
     }
   };
@@ -174,7 +176,7 @@ export function ChatInput({
           disabled={!canAct}
           aria-label={hasText ? 'Send' : 'Generate'}
         >
-          {!hasText && hasSelection ? <AiStarIcon /> : <UpArrowIcon />}
+          {!hasText && hasSelection && !hasControls && !disabled ? <AiStarIcon /> : <UpArrowIcon />}
         </button>
       </div>
     </div>

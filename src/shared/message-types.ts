@@ -106,6 +106,8 @@ export interface SelectionContext {
   truncated: boolean;
   /** Stored plugin spec JSON from a previously generated frame (if selected). */
   pluginSpec?: string;
+  /** Stored prompt history JSON from a previously generated frame (if selected). */
+  pluginMessages?: string;
 }
 
 // ─── Message types ────────────────────────────────────────────────────────────
@@ -239,6 +241,15 @@ export interface ClearPluginDataMessage {
   };
 }
 
+/** Iframe → main: persist prompt history on a node. */
+export interface PersistMessagesMessage {
+  type: 'PERSIST_MESSAGES';
+  payload: {
+    nodeId: string;
+    messages: string;
+  };
+}
+
 export interface ClosePluginMessage {
   type: 'CLOSE_PLUGIN';
 }
@@ -277,6 +288,7 @@ export type IframeToMainMessage =
   | ClaudeRequestMessage
   | RequestImageDataMessage
   | ClearPluginDataMessage
+  | PersistMessagesMessage
   | ClosePluginMessage
   | SetClientStorageMessage
   | DeleteClientStorageMessage;

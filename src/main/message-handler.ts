@@ -14,6 +14,7 @@ import type {
   RequestImageDataMessage,
   ImageDataMessage,
   ClearPluginDataMessage,
+  PersistMessagesMessage,
   SetClientStorageMessage,
   DeleteClientStorageMessage,
   ClientStorageValueMessage,
@@ -188,9 +189,21 @@ async function handleClearPluginData(msg: ClearPluginDataMessage): Promise<void>
     const node = await figma.getNodeByIdAsync(msg.payload.nodeId);
     if (node && 'setPluginData' in node) {
       (node as SceneNode).setPluginData('pluginSpec', '');
+      (node as SceneNode).setPluginData('pluginMessages', '');
     }
   } catch (err) {
     console.warn('[main] handleClearPluginData failed:', err);
+  }
+}
+
+async function handlePersistMessages(msg: PersistMessagesMessage): Promise<void> {
+  try {
+    const node = await figma.getNodeByIdAsync(msg.payload.nodeId);
+    if (node && 'setPluginData' in node) {
+      (node as SceneNode).setPluginData('pluginMessages', msg.payload.messages);
+    }
+  } catch (err) {
+    console.warn('[main] handlePersistMessages failed:', err);
   }
 }
 
@@ -200,15 +213,15 @@ async function handleClearPluginData(msg: ClearPluginDataMessage): Promise<void>
 export function sendSelectionContext(): void {
   const payload = serializeSelection(figma.currentPage.selection);
 
-  // Check if any selected node carries stored plugin spec data.
+  // Check if any selected node carries stored plugin data.
   const selection = figma.currentPage.selection;
   for (const node of selection) {
     try {
       const spec = node.getPluginData('pluginSpec');
-      if (spec) {
-        payload.pluginSpec = spec;
-        break;
-      }
+      if (spec) payload.pluginSpec = spec;
+      const msgs = node.getPluginData('pluginMessages');
+      if (msgs) payload.pluginMessages = msgs;
+      if (spec || msgs) break;
     } catch {
       // getPluginData not supported on this node type — skip.
     }
@@ -266,6 +279,9 @@ export function registerMessageHandler(): void {
         break;
       case 'CLEAR_PLUGIN_DATA':
         void handleClearPluginData(msg);
+        break;
+      case 'PERSIST_MESSAGES':
+        void handlePersistMessages(msg);
         break;
       case 'SET_CLIENT_STORAGE':
         void handleSetClientStorage(msg);

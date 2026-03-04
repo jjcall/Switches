@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import '../styles/plugin.css';
 import { postToMain, onMainMessage } from './messaging';
 import { ChatInput } from './chat/ChatInput';
-import { ChatHistory } from './chat/ChatHistory';
+import { HistoryPanel } from './chat/ChatHistory';
 import type { ChatMessage } from './chat/ChatHistory';
 import type { SelectionContext, UISpec, UIControl, ActionDescriptor } from '../shared/message-types';
 import { callClaude, getStoredApiKey, setStoredApiKey, clearStoredApiKey } from './api/claude';
@@ -237,6 +237,20 @@ function App() {
   const selectionContextRef = useRef<SelectionContext | null>(selectionContext);
   selectionContextRef.current = selectionContext;
 
+  // Persist prompt history to the root frame whenever messages change.
+  const persistMessagesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (persistMessagesTimerRef.current) clearTimeout(persistMessagesTimerRef.current);
+    persistMessagesTimerRef.current = setTimeout(() => {
+      const nodeId = rootFrameIdRef.current;
+      if (!nodeId) return;
+      postToMain({
+        type: 'PERSIST_MESSAGES',
+        payload: { nodeId, messages: JSON.stringify(messages) },
+      });
+    }, 500);
+  }, [messages]);
+
   // ── Messaging ──────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -254,7 +268,6 @@ function App() {
         if (msg.payload.pluginSpec) {
           try {
             let restored = JSON.parse(msg.payload.pluginSpec) as UISpec;
-            // The selected node IS the root — track it for in-place reuse.
             const nodeId = msg.payload.nodes[0]?.id;
             if (nodeId) {
               restored = fixStaleTempIds(restored, nodeId);
@@ -263,15 +276,38 @@ function App() {
             }
             setAnimateEntrance(false);
             setCurrentUISpec(restored);
-            addMessage('assistant', 'Restored plugin controls from selected frame.');
+
+            // Restore persisted prompt history if available.
+            if (msg.payload.pluginMessages) {
+              try {
+                const restoredMsgs = JSON.parse(msg.payload.pluginMessages) as ChatMessage[];
+                setMessages(restoredMsgs);
+              } catch {
+                setMessages([]);
+              }
+            } else {
+              setMessages([]);
+            }
           } catch {
             console.warn('[app] failed to parse stored pluginSpec');
           }
         } else {
           setCurrentUISpec(null);
-          rootFrameIdRef.current = undefined;
           createdNodeIdsRef.current = [];
-          setMessages([]);
+
+          if (msg.payload.pluginMessages) {
+            const nodeId = msg.payload.nodes[0]?.id;
+            if (nodeId) rootFrameIdRef.current = nodeId;
+            try {
+              const restoredMsgs = JSON.parse(msg.payload.pluginMessages) as ChatMessage[];
+              setMessages(restoredMsgs);
+            } catch {
+              setMessages([]);
+            }
+          } else {
+            rootFrameIdRef.current = undefined;
+            setMessages([]);
+          }
         }
       } else if (msg.type === 'EXECUTION_RESULT') {
         const { errorCount, errors, tempIdMap, createdNodeIds, rootFrameId } = msg.payload;
@@ -891,16 +927,16 @@ function App() {
 
     if (cmd === '/history') {
       setMessages([]);
+      setHistoryOpen(true);
       const samples: { role: ChatMessage['role']; content: string }[] = [
-        { role: 'user', content: 'Make the button corners more rounded and change the label to "Get Started"' },
-        { role: 'assistant', content: 'Updated corner radius to 12px and changed label to "Get Started"' },
-        { role: 'user', content: 'Now change the background to a gradient from blue to purple' },
-        { role: 'assistant', content: 'Applied linear gradient from #3B82F6 to #8B5CF6 on the button fill' },
-        { role: 'error', content: 'Could not apply effect: selected layer is locked or hidden' },
-        { role: 'user', content: 'Swap the icon to a chevron-right and reduce padding to 8px on all sides' },
+        { role: 'user', content: 'Create a 3D wireframe sphere with dials for X and Y rotation, a segments slider, and a color picker' },
+        { role: 'user', content: 'Turn this into a Voronoi stained glass mosaic with controls for cell count, border width, and border color' },
+        { role: 'error', content: 'Turn this into a Voronoi stained glass mosaic with controls for cell count, border width, and border color' },
+        { role: 'user', content: '/clear' },
+        { role: 'user', content: 'Add a pixelate effect with a pixel size slider and a vignette control' },
       ];
       samples.forEach((s, i) => {
-        setTimeout(() => addMessage(s.role, s.content), i * 400);
+        setTimeout(() => addMessage(s.role, s.content), i * 200);
       });
       return;
     }
@@ -1175,7 +1211,11 @@ function App() {
     <div className="shell">
       {/* Controls zone */}
       <div className="render-zone">
-        {animateEntrance ? (
+        {historyOpen ? (
+          <div style={{ flex: 1, display: 'flex' }}>
+            <HistoryPanel messages={messages} />
+          </div>
+        ) : animateEntrance ? (
           <AnimatePresence mode="wait">
             {!hasSpec && (
               <motion.div
@@ -1226,6 +1266,7 @@ function App() {
           loadingVerb={loadingVerb}
           onFocusChange={handleFocusChange}
           hasSelection={!!selectionContext && selectionContext.nodes.length > 0}
+          hasControls={hasSpec}
           historyOpen={historyOpen}
           onHistoryToggle={() => setHistoryOpen(prev => !prev)}
         />

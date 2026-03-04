@@ -54,6 +54,13 @@
   --status-on-glow: rgba(140, 157, 109, 0.68);
   --status-error:   #C96B6C;
 
+  /* ── History ─────────────────────────────────────── */
+  --history-row-bg:      #343434;
+  --history-error-bg:    rgba(224, 62, 26, 0.4);
+  --history-error-text:  #FCA397;
+  --history-system-bg:   var(--dark-blue);
+  --history-system-text: var(--accent-blue);
+
   /* ── Layer badge ─────────────────────────────────── */
   --badge-layer-bg:     rgba(52, 87, 145, 0.28);
   --badge-layer-border: #345791;

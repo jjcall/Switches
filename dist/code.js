@@ -6803,9 +6803,20 @@
       const node = await figma.getNodeByIdAsync(msg.payload.nodeId);
       if (node && "setPluginData" in node) {
         node.setPluginData("pluginSpec", "");
+        node.setPluginData("pluginMessages", "");
       }
     } catch (err) {
       console.warn("[main] handleClearPluginData failed:", err);
+    }
+  }
+  async function handlePersistMessages(msg) {
+    try {
+      const node = await figma.getNodeByIdAsync(msg.payload.nodeId);
+      if (node && "setPluginData" in node) {
+        node.setPluginData("pluginMessages", msg.payload.messages);
+      }
+    } catch (err) {
+      console.warn("[main] handlePersistMessages failed:", err);
     }
   }
   function sendSelectionContext() {
@@ -6814,10 +6825,10 @@
     for (const node of selection) {
       try {
         const spec = node.getPluginData("pluginSpec");
-        if (spec) {
-          payload.pluginSpec = spec;
-          break;
-        }
+        if (spec) payload.pluginSpec = spec;
+        const msgs = node.getPluginData("pluginMessages");
+        if (msgs) payload.pluginMessages = msgs;
+        if (spec || msgs) break;
       } catch (e) {
       }
     }
@@ -6862,6 +6873,9 @@
           break;
         case "CLEAR_PLUGIN_DATA":
           void handleClearPluginData(msg);
+          break;
+        case "PERSIST_MESSAGES":
+          void handlePersistMessages(msg);
           break;
         case "SET_CLIENT_STORAGE":
           void handleSetClientStorage(msg);
