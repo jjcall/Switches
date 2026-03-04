@@ -194,7 +194,7 @@ function EmptyState({ selectionName, selectionCount, loaderState, loadingVerb }:
                   <>
                     What do you want to create?
                     <br />
-                    Type <span className="render-zone-hint-cmd">/generate</span> if you want auto controls
+                    Type <span className="render-zone-hint-cmd">/gen</span> if you want auto controls
                   </>
                 ) : (
                   'Select something on the canvas, then describe what you want'
@@ -222,6 +222,7 @@ function App() {
   const [loadingVerb, setLoadingVerb] = useState<string | null>(null);
   const [selectionContext, setSelectionContext] = useState<SelectionContext | null>(null);
   const [mockSelectionName, setMockSelectionName] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const demoTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const createdNodeIdsRef = useRef<string[]>([]);
   const rootFrameIdRef = useRef<string | undefined>(undefined);
@@ -906,14 +907,14 @@ function App() {
     // ── End debug commands ───────────────────────────────────────────────────
 
     // ── Auto-generate controls from selection ────────────────────────────────
-    const isAutoGenerate = cmd === '/generate' || cmd === '/auto';
+    const isAutoGenerate = cmd === '/gen' || cmd === '/generate' || cmd === '/auto';
 
     if (isAutoGenerate) {
       if (!selectionContext || selectionContext.nodes.length === 0) {
-        addMessage('error', 'Select one or more layers on the canvas first, then type /generate.');
+        addMessage('error', 'Select one or more layers on the canvas first, then type /gen.');
         return;
       }
-      addMessage('user', '/generate');
+      addMessage('user', '/gen');
     } else {
       addMessage('user', text);
     }
@@ -1218,7 +1219,16 @@ function App() {
 
       {/* Chat area */}
       <div className="chat-area">
-        <ChatInput onSubmit={handleSubmit} disabled={isLoading} isLoading={isLoading && hasSpec} loadingVerb={loadingVerb} onFocusChange={handleFocusChange} />
+        <ChatInput
+          onSubmit={handleSubmit}
+          disabled={isLoading}
+          isLoading={isLoading && hasSpec}
+          loadingVerb={loadingVerb}
+          onFocusChange={handleFocusChange}
+          hasSelection={!!selectionContext && selectionContext.nodes.length > 0}
+          historyOpen={historyOpen}
+          onHistoryToggle={() => setHistoryOpen(prev => !prev)}
+        />
       </div>
     </div>
   );

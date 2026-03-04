@@ -1056,15 +1056,14 @@ body {
 /* ── Chat input box ──────────────────────────────── */
 .chat-input-box {
   position: relative;
-  border-top: 1px solid var(--border-subtle);
-  padding: var(--space-md) var(--space-sm) var(--space-md) var(--space-lg);
+  border-top: 1px solid var(--dark-secondary);
+  padding: 12px 8px;
   transition: padding 0.15s ease;
 }
 
 .chat-input-box--expanded {
-  padding-bottom: 40px;
+  padding-bottom: 12px;
 }
-
 
 .chat-input-textarea {
   display: block;
@@ -1081,10 +1080,9 @@ body {
   border: none;
   outline: none;
   padding: 0;
-  padding-right: 36px;
+  padding-right: 68px;
   scrollbar-width: none;
 }
-
 
 .chat-input-textarea::-webkit-scrollbar { display: none; }
 
@@ -1097,11 +1095,47 @@ body {
   cursor: not-allowed;
 }
 
-/* Send button — absolutely positioned bottom-right */
-.chat-input-send {
+/* ── Right icon row ──────────────────────────────── */
+.chat-input-actions {
   position: absolute;
-  right: var(--space-sm);
-  bottom: var(--space-md);
+  right: 8px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* History toggle button */
+.chat-input-history {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: 5px;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s;
+  padding: 0;
+}
+
+.chat-input-history:hover {
+  background: var(--surface-secondary);
+}
+
+.chat-input-history--open {
+  background: var(--surface-secondary);
+}
+
+.chat-input-history:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* Send / AI-star action button */
+.chat-input-send {
   width: var(--icon-size-md);
   height: var(--icon-size-md);
   display: flex;
@@ -1117,13 +1151,13 @@ body {
 }
 
 .chat-input-send--active {
-  background: var(--accent-blue);
+  background: #0D99FF;
   color: var(--light-primary);
   cursor: pointer;
 }
 
 .chat-input-send--active:hover {
-  background: var(--accent-blue-hover);
+  background: #38AEFF;
 }
 
 .chat-input-send--active:active {
@@ -1138,11 +1172,11 @@ body {
 .chat-input-box--loading {
   display: flex;
   align-items: center;
-  padding: var(--space-md) var(--space-sm) var(--space-md) var(--space-lg);
+  padding: 12px 8px;
   border-top: 1px solid var(--border-subtle);
 }
 
-.chat-input-box--loading .chat-input-send {
+.chat-input-box--loading .chat-input-actions {
   position: static;
   opacity: 0.3;
 }
