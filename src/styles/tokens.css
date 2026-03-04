@@ -4,79 +4,88 @@
    ================================================================ */
 
 :root {
-  /* ── Core palette (Dark) ─────────────────────────── */
-  --dark-primary: #2C2C2C;
+  /* ── Dark palette (backgrounds, surfaces) ───────── */
+  --dark-base:      #232323;
+  --dark-primary:   #2C2C2C;
   --dark-secondary: #414141;
-  --dark-tertiary: #757575;
+  --dark-tertiary:  #757575;
+  --dark-blue:      #2E3848;
 
-  /* ── Core palette (Light) ────────────────────────── */
-  --light-primary: #FFFFFF;
-  --light-secondary: rgba(255, 255, 255, 0.7);
-  --light-tertiary: rgba(255, 255, 255, 0.4);
-  --light-active: rgba(255, 255, 255, 0.5);
-  --light-overlay: rgba(255, 255, 255, 0.1);
-  --light-overlay-hover: rgba(255, 255, 255, 0.15);
-  --light-ghost: rgba(255, 255, 255, 0.06);
+  /* ── Light palette (foreground, text, icons) ────── */
+  --light-primary:       #FFFFFF;
+  --light-secondary:     rgba(255, 255, 255, 0.7);
+  --light-tertiary:      rgba(255, 255, 255, 0.4);
+  --light-active:        rgba(255, 255, 255, 0.5);
+  --light-overlay:       rgba(255, 255, 255, 0.2);
+  --light-overlay-hover: rgba(255, 255, 255, 0.25);
+  --light-ghost:         rgba(255, 255, 255, 0.06);
 
   /* ── Semantic: Surface ───────────────────────────── */
-  --surface-primary: var(--dark-primary);
+  --surface-primary:   var(--dark-primary);
   --surface-secondary: var(--dark-secondary);
-  --surface-control: var(--light-overlay);
-  --surface-active: var(--light-active);
-  --surface-canvas: rgba(0, 0, 0, 0.25);
+  --surface-base:      var(--dark-base);
+  --surface-control:   var(--dark-base);
+  --surface-active:    var(--light-overlay);
+  --surface-canvas:    var(--dark-base);
 
   /* ── Semantic: Border ────────────────────────────── */
-  --border-default: var(--dark-secondary);
-  --border-active: var(--light-active);
-  --border-subtle: var(--light-overlay);
+  --border-default:  var(--dark-secondary);
+  --border-active:   var(--light-active);
+  --border-subtle:   rgba(255, 255, 255, 0.2);
 
   /* ── Semantic: Text ──────────────────────────────── */
-  --text-primary: var(--light-primary);
-  --text-secondary: var(--light-secondary);
-  --text-tertiary: var(--light-tertiary);
-  --text-placeholder: rgba(255, 255, 255, 0.35);
+  --text-primary:     var(--light-primary);
+  --text-secondary:   var(--light-secondary);
+  --text-tertiary:    var(--light-tertiary);
+  --text-placeholder: var(--dark-tertiary);
 
   /* ── Semantic: Icon ──────────────────────────────── */
-  --icon-default: var(--light-tertiary);
+  --icon-default:  var(--light-tertiary);
   --icon-disabled: rgba(255, 255, 255, 0.12);
 
-  /* ── Accent ────────────────────────────────────── */
-  --accent-blue: #6891D4;
-  --accent-blue-hover: #7DA1DE;
+  /* ── Accent ──────────────────────────────────────── */
+  --accent-blue:        #6991D4;
+  --accent-blue-hover:  #7DA1DE;
   --accent-blue-active: #5A80C4;
-  --accent-green: #14AE5C;
+  --accent-green:       #14AE5C;
 
-  /* ── Status ────────────────────────────────────── */
-  --status-on: #8C9D6D;
+  /* ── Status ──────────────────────────────────────── */
+  --status-on:      #8C9D6D;
   --status-on-glow: rgba(140, 157, 109, 0.68);
-  --status-error: #C96B6C;
+  --status-error:   #C96B6C;
 
-  /* ── Layer badge ───────────────────────────────── */
-  --badge-layer-bg: rgba(52, 87, 145, 0.28);
+  /* ── Layer badge ─────────────────────────────────── */
+  --badge-layer-bg:     rgba(52, 87, 145, 0.28);
   --badge-layer-border: #345791;
-  --badge-layer-text: #6991D4;
+  --badge-layer-text:   #6991D4;
 
-  /* ── Typography ────────────────────────────────── */
-  --font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  /* ── Typography ──────────────────────────────────── */
+  --font-family:      'Inter', system-ui, -apple-system, sans-serif;
   --font-family-mono: ui-monospace, 'SF Mono', 'Courier New', monospace;
-  --font-size-xs: 11px;
-  --font-size-sm: 13px;
-  --line-height-xs: 16px;
-  --line-height-sm: 22px;
-  --font-weight-regular: 400;
-  --font-weight-medium: 500;
+
+  --font-size-2xs:  9px;
+  --font-size-xs:   11px;
+  --font-size-sm:   13px;
+
+  --line-height-2xs: 14px;
+  --line-height-xs:  16px;
+  --line-height-sm:  22px;
+
+  --font-weight-regular:  450;
+  --font-weight-medium:   550;
   --font-weight-semibold: 600;
+
   --letter-spacing-label: 0.005em;
 
-  /* ── Sizing ────────────────────────────────────── */
+  /* ── Sizing ──────────────────────────────────────── */
   --header-height: 40px;
-  --icon-size-sm: 16px;
-  --icon-size-md: 24px;
-  --radius-sm: 0px;
-  --radius-md: 0px;
-  --radius-full: 0px;
+  --icon-size-sm:  16px;
+  --icon-size-md:  24px;
+  --radius-sm:     0px;
+  --radius-md:     0px;
+  --radius-full:   0px;
 
-  /* ── Spacing ───────────────────────────────────── */
+  /* ── Spacing ─────────────────────────────────────── */
   --space-xs: 4px;
   --space-sm: 8px;
   --space-md: 12px;

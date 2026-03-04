@@ -11,3 +11,7 @@ export { AngleWheel } from './AngleWheel';
 export { AngleWheel as Dial } from './AngleWheel';
 export { CubePreview } from './CubePreview';
 export { ControlCard } from './ControlCard';
+export { XYPad } from './XYPad';
+export { RangeSlider } from './RangeSlider';
+export { GradientBar } from './GradientBar';
+export { CurveEditor } from './CurveEditor';

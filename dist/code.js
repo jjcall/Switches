@@ -5294,7 +5294,7 @@
   });
 
   // src/main/selection-serializer.ts
-  var CHAR_BUDGET = 8e3;
+  var CHAR_BUDGET = 12e3;
   function serializeFills(node) {
     if (!("fills" in node) || node.fills === figma.mixed) return [];
     const fills = node.fills;
@@ -5640,8 +5640,335 @@
     if (tempId) tempMap.set(tempId, node);
     return node;
   }
+  function arcToCubicBeziers(x1, y1, rx, ry, xAxisRotation, largeArcFlag, sweepFlag, x2, y2) {
+    if (rx === 0 || ry === 0) return [[x2, y2]];
+    const phi = xAxisRotation * Math.PI / 180;
+    const cosPhi = Math.cos(phi);
+    const sinPhi = Math.sin(phi);
+    const dx = (x1 - x2) / 2;
+    const dy = (y1 - y2) / 2;
+    const x1p = cosPhi * dx + sinPhi * dy;
+    const y1p = -sinPhi * dx + cosPhi * dy;
+    rx = Math.abs(rx);
+    ry = Math.abs(ry);
+    const lambda = x1p * x1p / (rx * rx) + y1p * y1p / (ry * ry);
+    if (lambda > 1) {
+      const sqrtLambda = Math.sqrt(lambda);
+      rx *= sqrtLambda;
+      ry *= sqrtLambda;
+    }
+    const rx2 = rx * rx;
+    const ry2 = ry * ry;
+    const x1p2 = x1p * x1p;
+    const y1p2 = y1p * y1p;
+    let sq = (rx2 * ry2 - rx2 * y1p2 - ry2 * x1p2) / (rx2 * y1p2 + ry2 * x1p2);
+    if (sq < 0) sq = 0;
+    let root = Math.sqrt(sq);
+    if (largeArcFlag === sweepFlag) root = -root;
+    const cxp = root * rx * y1p / ry;
+    const cyp = -(root * ry * x1p) / rx;
+    const cx = cosPhi * cxp - sinPhi * cyp + (x1 + x2) / 2;
+    const cy = sinPhi * cxp + cosPhi * cyp + (y1 + y2) / 2;
+    function vectorAngle(ux, uy, vx, vy) {
+      const sign = ux * vy - uy * vx < 0 ? -1 : 1;
+      const dot = ux * vx + uy * vy;
+      const len = Math.sqrt((ux * ux + uy * uy) * (vx * vx + vy * vy));
+      let cos = dot / len;
+      if (cos < -1) cos = -1;
+      if (cos > 1) cos = 1;
+      return sign * Math.acos(cos);
+    }
+    let theta1 = vectorAngle(1, 0, (x1p - cxp) / rx, (y1p - cyp) / ry);
+    let dTheta = vectorAngle(
+      (x1p - cxp) / rx,
+      (y1p - cyp) / ry,
+      (-x1p - cxp) / rx,
+      (-y1p - cyp) / ry
+    );
+    if (sweepFlag === 0 && dTheta > 0) dTheta -= 2 * Math.PI;
+    if (sweepFlag === 1 && dTheta < 0) dTheta += 2 * Math.PI;
+    const segments = Math.ceil(Math.abs(dTheta) / (Math.PI / 2));
+    const segAngle = dTheta / segments;
+    const result = [];
+    for (let i = 0; i < segments; i++) {
+      const t1 = theta1 + i * segAngle;
+      const t2 = theta1 + (i + 1) * segAngle;
+      const alpha = 4 / 3 * Math.tan(segAngle / 4);
+      const cos1 = Math.cos(t1);
+      const sin1 = Math.sin(t1);
+      const cos2 = Math.cos(t2);
+      const sin2 = Math.sin(t2);
+      const ep1x = rx * cos1;
+      const ep1y = ry * sin1;
+      const ep2x = rx * cos2;
+      const ep2y = ry * sin2;
+      const cp1x = ep1x - alpha * rx * sin1;
+      const cp1y = ep1y + alpha * ry * cos1;
+      const cp2x = ep2x + alpha * rx * sin2;
+      const cp2y = ep2y - alpha * ry * cos2;
+      result.push([
+        cosPhi * cp1x - sinPhi * cp1y + cx,
+        sinPhi * cp1x + cosPhi * cp1y + cy,
+        cosPhi * cp2x - sinPhi * cp2y + cx,
+        sinPhi * cp2x + cosPhi * cp2y + cy,
+        cosPhi * ep2x - sinPhi * ep2y + cx,
+        sinPhi * ep2x + cosPhi * ep2y + cy
+      ]);
+    }
+    return result;
+  }
+  function parsePathNumbers(str) {
+    const nums = [];
+    const re = /[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/g;
+    let m;
+    while ((m = re.exec(str)) !== null) {
+      nums.push(parseFloat(m[0]));
+    }
+    return nums;
+  }
+  function convertToFigmaPath(path) {
+    const spaced = path.replace(/,/g, " ").replace(/([A-Za-z])(\d)/g, "$1 $2").replace(/([A-Za-z])([-.])/g, "$1 $2").replace(/(\d)([A-Za-z])/g, "$1 $2");
+    const tokens = spaced.match(/[MmLlHhVvCcSsQqTtAaZz][^MmLlHhVvCcSsQqTtAaZz]*/g);
+    if (!tokens) return path;
+    let curX = 0;
+    let curY = 0;
+    let startX = 0;
+    let startY = 0;
+    let lastCp2X = 0;
+    let lastCp2Y = 0;
+    let lastCmd = "";
+    let result = "";
+    const fmt = (n) => {
+      const s = n.toFixed(4);
+      return s.replace(/\.?0+$/, "") || "0";
+    };
+    for (const token of tokens) {
+      const cmd = token[0];
+      const nums = parsePathNumbers(token.slice(1));
+      switch (cmd) {
+        case "M": {
+          for (let i = 0; i + 1 < nums.length; i += 2) {
+            curX = nums[i];
+            curY = nums[i + 1];
+            if (i === 0) {
+              startX = curX;
+              startY = curY;
+              result += `M ${fmt(curX)} ${fmt(curY)} `;
+            } else {
+              result += `L ${fmt(curX)} ${fmt(curY)} `;
+            }
+          }
+          lastCp2X = curX;
+          lastCp2Y = curY;
+          break;
+        }
+        case "m": {
+          for (let i = 0; i + 1 < nums.length; i += 2) {
+            curX += nums[i];
+            curY += nums[i + 1];
+            if (i === 0) {
+              startX = curX;
+              startY = curY;
+              result += `M ${fmt(curX)} ${fmt(curY)} `;
+            } else {
+              result += `L ${fmt(curX)} ${fmt(curY)} `;
+            }
+          }
+          lastCp2X = curX;
+          lastCp2Y = curY;
+          break;
+        }
+        case "L": {
+          for (let i = 0; i + 1 < nums.length; i += 2) {
+            curX = nums[i];
+            curY = nums[i + 1];
+            result += `L ${fmt(curX)} ${fmt(curY)} `;
+          }
+          lastCp2X = curX;
+          lastCp2Y = curY;
+          break;
+        }
+        case "l": {
+          for (let i = 0; i + 1 < nums.length; i += 2) {
+            curX += nums[i];
+            curY += nums[i + 1];
+            result += `L ${fmt(curX)} ${fmt(curY)} `;
+          }
+          lastCp2X = curX;
+          lastCp2Y = curY;
+          break;
+        }
+        case "H": {
+          for (const n of nums) {
+            curX = n;
+            result += `L ${fmt(curX)} ${fmt(curY)} `;
+          }
+          lastCp2X = curX;
+          lastCp2Y = curY;
+          break;
+        }
+        case "h": {
+          for (const n of nums) {
+            curX += n;
+            result += `L ${fmt(curX)} ${fmt(curY)} `;
+          }
+          lastCp2X = curX;
+          lastCp2Y = curY;
+          break;
+        }
+        case "V": {
+          for (const n of nums) {
+            curY = n;
+            result += `L ${fmt(curX)} ${fmt(curY)} `;
+          }
+          lastCp2X = curX;
+          lastCp2Y = curY;
+          break;
+        }
+        case "v": {
+          for (const n of nums) {
+            curY += n;
+            result += `L ${fmt(curX)} ${fmt(curY)} `;
+          }
+          lastCp2X = curX;
+          lastCp2Y = curY;
+          break;
+        }
+        case "C": {
+          for (let i = 0; i + 5 < nums.length; i += 6) {
+            lastCp2X = nums[i + 2];
+            lastCp2Y = nums[i + 3];
+            curX = nums[i + 4];
+            curY = nums[i + 5];
+            result += `C ${fmt(nums[i])} ${fmt(nums[i + 1])} ${fmt(lastCp2X)} ${fmt(lastCp2Y)} ${fmt(curX)} ${fmt(curY)} `;
+          }
+          break;
+        }
+        case "c": {
+          for (let i = 0; i + 5 < nums.length; i += 6) {
+            const cp1x = curX + nums[i], cp1y = curY + nums[i + 1];
+            const cp2x = curX + nums[i + 2], cp2y = curY + nums[i + 3];
+            const ex = curX + nums[i + 4], ey = curY + nums[i + 5];
+            lastCp2X = cp2x;
+            lastCp2Y = cp2y;
+            curX = ex;
+            curY = ey;
+            result += `C ${fmt(cp1x)} ${fmt(cp1y)} ${fmt(cp2x)} ${fmt(cp2y)} ${fmt(curX)} ${fmt(curY)} `;
+          }
+          break;
+        }
+        case "S": {
+          for (let i = 0; i + 3 < nums.length; i += 4) {
+            const cp1x = lastCmd === "C" || lastCmd === "c" || lastCmd === "S" || lastCmd === "s" ? 2 * curX - lastCp2X : curX;
+            const cp1y = lastCmd === "C" || lastCmd === "c" || lastCmd === "S" || lastCmd === "s" ? 2 * curY - lastCp2Y : curY;
+            lastCp2X = nums[i];
+            lastCp2Y = nums[i + 1];
+            curX = nums[i + 2];
+            curY = nums[i + 3];
+            result += `C ${fmt(cp1x)} ${fmt(cp1y)} ${fmt(lastCp2X)} ${fmt(lastCp2Y)} ${fmt(curX)} ${fmt(curY)} `;
+            lastCmd = "S";
+          }
+          break;
+        }
+        case "s": {
+          for (let i = 0; i + 3 < nums.length; i += 4) {
+            const cp1x = lastCmd === "C" || lastCmd === "c" || lastCmd === "S" || lastCmd === "s" ? 2 * curX - lastCp2X : curX;
+            const cp1y = lastCmd === "C" || lastCmd === "c" || lastCmd === "S" || lastCmd === "s" ? 2 * curY - lastCp2Y : curY;
+            lastCp2X = curX + nums[i];
+            lastCp2Y = curY + nums[i + 1];
+            curX += nums[i + 2];
+            curY += nums[i + 3];
+            result += `C ${fmt(cp1x)} ${fmt(cp1y)} ${fmt(lastCp2X)} ${fmt(lastCp2Y)} ${fmt(curX)} ${fmt(curY)} `;
+            lastCmd = "s";
+          }
+          break;
+        }
+        case "Q": {
+          for (let i = 0; i + 3 < nums.length; i += 4) {
+            lastCp2X = nums[i];
+            lastCp2Y = nums[i + 1];
+            curX = nums[i + 2];
+            curY = nums[i + 3];
+            result += `Q ${fmt(lastCp2X)} ${fmt(lastCp2Y)} ${fmt(curX)} ${fmt(curY)} `;
+          }
+          break;
+        }
+        case "q": {
+          for (let i = 0; i + 3 < nums.length; i += 4) {
+            lastCp2X = curX + nums[i];
+            lastCp2Y = curY + nums[i + 1];
+            curX += nums[i + 2];
+            curY += nums[i + 3];
+            result += `Q ${fmt(lastCp2X)} ${fmt(lastCp2Y)} ${fmt(curX)} ${fmt(curY)} `;
+          }
+          break;
+        }
+        case "T": {
+          for (let i = 0; i + 1 < nums.length; i += 2) {
+            lastCp2X = lastCmd === "Q" || lastCmd === "q" || lastCmd === "T" || lastCmd === "t" ? 2 * curX - lastCp2X : curX;
+            lastCp2Y = lastCmd === "Q" || lastCmd === "q" || lastCmd === "T" || lastCmd === "t" ? 2 * curY - lastCp2Y : curY;
+            curX = nums[i];
+            curY = nums[i + 1];
+            result += `Q ${fmt(lastCp2X)} ${fmt(lastCp2Y)} ${fmt(curX)} ${fmt(curY)} `;
+            lastCmd = "T";
+          }
+          break;
+        }
+        case "t": {
+          for (let i = 0; i + 1 < nums.length; i += 2) {
+            lastCp2X = lastCmd === "Q" || lastCmd === "q" || lastCmd === "T" || lastCmd === "t" ? 2 * curX - lastCp2X : curX;
+            lastCp2Y = lastCmd === "Q" || lastCmd === "q" || lastCmd === "T" || lastCmd === "t" ? 2 * curY - lastCp2Y : curY;
+            curX += nums[i];
+            curY += nums[i + 1];
+            result += `Q ${fmt(lastCp2X)} ${fmt(lastCp2Y)} ${fmt(curX)} ${fmt(curY)} `;
+            lastCmd = "t";
+          }
+          break;
+        }
+        case "A":
+        case "a": {
+          for (let j = 0; j + 6 < nums.length; j += 7) {
+            const rx = nums[j], ry = nums[j + 1], xRot = nums[j + 2];
+            const largeArc = nums[j + 3], sweep = nums[j + 4];
+            let endX = nums[j + 5], endY = nums[j + 6];
+            if (cmd === "a") {
+              endX += curX;
+              endY += curY;
+            }
+            const curves = arcToCubicBeziers(curX, curY, rx, ry, xRot, largeArc, sweep, endX, endY);
+            for (const c of curves) {
+              if (c.length === 2) {
+                result += `L ${fmt(c[0])} ${fmt(c[1])} `;
+              } else {
+                result += `C ${fmt(c[0])} ${fmt(c[1])} ${fmt(c[2])} ${fmt(c[3])} ${fmt(c[4])} ${fmt(c[5])} `;
+              }
+            }
+            curX = endX;
+            curY = endY;
+          }
+          lastCp2X = curX;
+          lastCp2Y = curY;
+          break;
+        }
+        case "Z":
+        case "z": {
+          result += "Z ";
+          curX = startX;
+          curY = startY;
+          lastCp2X = curX;
+          lastCp2Y = curY;
+          break;
+        }
+        default:
+          result += token + " ";
+          break;
+      }
+      lastCmd = cmd;
+    }
+    return result.trim();
+  }
   function normalizeSvgPath(raw) {
-    return raw.replace(/,/g, " ").replace(/([A-Za-z])(\d)/g, "$1 $2").replace(/(\d)([A-Za-z])/g, "$1 $2").replace(/([A-Za-z])(-)/g, "$1 $2").replace(/\s+/g, " ").trim();
+    return convertToFigmaPath(raw);
   }
   async function execCreateVector(args, tempMap, tempId, parentId) {
     const node = figma.createVector();
@@ -5995,8 +6322,17 @@
         }
         return clone;
       });
-      let idx = effects.findIndex((e) => e.type === effectType);
-      if (idx < 0) idx = effectIndex;
+      let idx = -1;
+      let seen = 0;
+      for (let i = 0; i < effects.length; i++) {
+        if (effects[i].type === effectType) {
+          if (seen === effectIndex) {
+            idx = i;
+            break;
+          }
+          seen++;
+        }
+      }
       if (idx < 0 || idx >= effects.length) {
         const defaultEffect = makeDefaultEffect(effectType);
         effects.push(defaultEffect);
@@ -6176,8 +6512,8 @@
         throw new Error(`Unknown action method: "${method}"`);
     }
   }
-  async function executeActions(actions, pluginSpec, persistNodeId) {
-    var _a, _b, _c, _d, _e, _f;
+  async function executeActions(actions, pluginSpec, persistNodeId, selectNodeId, skipCenter) {
+    var _a, _b, _c, _d, _e, _f, _g;
     const errors = [];
     const createdNodeIds = [];
     let executedCount = 0;
@@ -6205,14 +6541,17 @@
         console.error(`[action-executor] action[${i}] ${action.method} failed:`, msg);
       }
     }
+    const isReapply = actions.length > 0 && actions[0].method === "deleteChildren";
     if (rootFrameId) {
       try {
         const rootNode = (_a = tempMap.get(rootFrameId)) != null ? _a : await figma.getNodeByIdAsync(rootFrameId);
         if (rootNode && (rootNode.type === "FRAME" || rootNode.type === "COMPONENT")) {
           const frame = rootNode;
           if (frame.layoutMode !== "NONE") {
-            frame.primaryAxisSizingMode = "AUTO";
-            frame.counterAxisSizingMode = "AUTO";
+            if (!isReapply) {
+              frame.primaryAxisSizingMode = "AUTO";
+              frame.counterAxisSizingMode = "AUTO";
+            }
           } else if (frame.children.length > 0) {
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             for (const child of frame.children) {
@@ -6221,17 +6560,36 @@
               maxX = Math.max(maxX, child.x + child.width);
               maxY = Math.max(maxY, child.y + child.height);
             }
-            frame.resize(maxX - minX, maxY - minY);
-            if (minX !== 0 || minY !== 0) {
-              for (const child of frame.children) {
-                child.x -= minX;
-                child.y -= minY;
+            if (isReapply) {
+              const contentW = maxX - minX;
+              const contentH = maxY - minY;
+              if (contentW > 0 && contentH > 0) {
+                const scaleX = frame.width / contentW;
+                const scaleY = frame.height / contentH;
+                const scale = Math.min(scaleX, scaleY);
+                const offsetX = (frame.width - contentW * scale) / 2;
+                const offsetY = (frame.height - contentH * scale) / 2;
+                for (const child of frame.children) {
+                  child.x = (child.x - minX) * scale + offsetX;
+                  child.y = (child.y - minY) * scale + offsetY;
+                  if ("resize" in child) {
+                    child.resize(child.width * scale, child.height * scale);
+                  }
+                }
+              }
+            } else {
+              frame.resize(maxX - minX, maxY - minY);
+              if (minX !== 0 || minY !== 0) {
+                for (const child of frame.children) {
+                  child.x -= minX;
+                  child.y -= minY;
+                }
               }
             }
           }
         }
       } catch (err) {
-        console.warn("[action-executor] failed to resize root frame:", err);
+        console.warn("[action-executor] failed to post-process root frame:", err);
       }
     }
     const persistTargetId = (_c = (_b = persistNodeId != null ? persistNodeId : rootFrameId) != null ? _b : createdNodeIds.length > 0 ? createdNodeIds[0] : void 0) != null ? _c : actions.length > 0 ? actions[0].nodeId : void 0;
@@ -6246,9 +6604,8 @@
       }
     }
     figma.commitUndo();
-    const isReapply = actions.length > 0 && actions[0].method === "deleteChildren";
     const centerNodeId = rootFrameId != null ? rootFrameId : createdNodeIds.length > 0 ? createdNodeIds[0] : void 0;
-    if (!isReapply && centerNodeId) {
+    if (!isReapply && !skipCenter && centerNodeId) {
       try {
         const centerNode = (_e = tempMap.get(centerNodeId)) != null ? _e : await figma.getNodeByIdAsync(centerNodeId);
         if (centerNode && "x" in centerNode) {
@@ -6272,6 +6629,16 @@
     const tempIdMap = {};
     for (const [tempId, node] of tempMap.entries()) {
       tempIdMap[tempId] = node.id;
+    }
+    if (selectNodeId) {
+      try {
+        const selectNode = (_g = tempMap.get(selectNodeId)) != null ? _g : await figma.getNodeByIdAsync(selectNodeId);
+        if (selectNode) {
+          figma.currentPage.selection = [selectNode];
+        }
+      } catch (err) {
+        console.warn("[action-executor] failed to select node:", err);
+      }
     }
     return {
       success: errors.length === 0,
@@ -6332,8 +6699,8 @@
     });
   }
   function handleExecuteActions(msg) {
-    const { actions, pluginSpec, persistNodeId } = msg.payload;
-    executeActions(actions, pluginSpec, persistNodeId).then((result) => {
+    const { actions, pluginSpec, persistNodeId, selectNodeId, skipCenter } = msg.payload;
+    executeActions(actions, pluginSpec, persistNodeId, selectNodeId, skipCenter).then((result) => {
       const response = {
         type: "EXECUTION_RESULT",
         payload: result

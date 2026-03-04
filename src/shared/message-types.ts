@@ -143,6 +143,10 @@ export interface ExecuteActionsMessage {
     pluginSpec?: string;
     /** Explicit node ID to persist pluginSpec on (used for spec-only updates). */
     persistNodeId?: string;
+    /** After execution, select this node (real or temp ID) and fire selectionchange. */
+    selectNodeId?: string;
+    /** Skip centering/repositioning newly created nodes (used for wrapping). */
+    skipCenter?: boolean;
   };
 }
 
@@ -309,7 +313,11 @@ export interface UIControl {
     | 'button'
     | 'number'
     | 'segmented'
-    | 'dial';
+    | 'dial'
+    | 'xy-pad'
+    | 'range'
+    | 'gradient-bar'
+    | 'curve';
   label?: string;
   props?: Record<string, unknown>;
   /** Single Figma API update when this control changes (simple case). */

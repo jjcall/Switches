@@ -36,6 +36,28 @@ function getControlDefaultValue(control: UIControl): unknown {
       return typeof props.defaultValue === 'number'
         ? props.defaultValue
         : 0;
+    case 'xy-pad': {
+      const dv = props.defaultValue as { x?: number; y?: number } | undefined;
+      return { x: dv?.x ?? 0, y: dv?.y ?? 0 };
+    }
+    case 'range': {
+      const dv = props.defaultValue as { low?: number; high?: number } | undefined;
+      return {
+        low: dv?.low ?? (typeof props.min === 'number' ? props.min : 0),
+        high: dv?.high ?? (typeof props.max === 'number' ? props.max : 1),
+      };
+    }
+    case 'gradient-bar': {
+      const stops = Array.isArray(props.stops) ? props.stops as { id: string; position: number; color: string }[] : null;
+      return stops ?? [
+        { id: 'stop0', position: 0, color: '#000000' },
+        { id: 'stop1', position: 1, color: '#ffffff' },
+      ];
+    }
+    case 'curve': {
+      const dv = Array.isArray(props.defaultValue) ? props.defaultValue as number[] : null;
+      return dv ?? [0.25, 0.1, 0.25, 1.0];
+    }
     case 'button':
       return null;
     default:

@@ -270,7 +270,7 @@ body {
 }
 
 .dialkit-segmented-button[data-active="true"] {
-  color: var(--dark-primary);
+  color: var(--text-secondary);
   background: var(--surface-active);
 }
 
@@ -788,10 +788,18 @@ body {
   gap: var(--space-sm);
 }
 
+.badge-stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
 .render-zone-layer-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
   padding: 2px var(--space-sm);
-  background: var(--badge-layer-bg);
+  background: #2e3848;
   border: 1px solid var(--badge-layer-border);
   border-radius: var(--radius-sm);
   font-family: var(--font-family);
@@ -805,6 +813,36 @@ body {
   white-space: nowrap;
 }
 
+.render-zone-layer-badge.badge-top {
+  position: relative;
+  z-index: 3;
+}
+
+.render-zone-layer-badge.badge-shadow {
+  height: 20px;
+  margin-top: -14px;
+  position: relative;
+  align-self: stretch;
+  max-width: none;
+  animation: badge-fade-in 0.25s ease both;
+}
+.render-zone-layer-badge.badge-shadow-2 {
+  opacity: 0.6;
+  z-index: 2;
+  transform: scaleX(0.9);
+  animation-delay: 0.05s;
+}
+.render-zone-layer-badge.badge-shadow-3 {
+  opacity: 0.3;
+  z-index: 1;
+  transform: scaleX(0.8);
+  animation-delay: 0.1s;
+}
+
+@keyframes badge-fade-in {
+  from { opacity: 0; }
+}
+
 .render-zone-empty-text {
   margin: 0;
   font-size: var(--font-size-xs);
@@ -812,6 +850,11 @@ body {
   line-height: var(--line-height-xs);
   color: var(--text-tertiary);
   max-width: 228px;
+}
+
+.render-zone-hint-cmd {
+  color: var(--badge-layer-text);
+  font-weight: var(--font-weight-semibold);
 }
 
 .render-zone-loading-text {
@@ -862,6 +905,12 @@ body {
 /* ── UI renderer ─────────────────────────────────── */
 .ui-renderer {
   padding-bottom: 0;
+  transition: opacity 0.2s ease;
+}
+
+.ui-renderer--disabled {
+  opacity: 0.4;
+  pointer-events: none;
 }
 
 /* Wireframe-first entrance: each row has a skeleton layer
@@ -1107,8 +1156,8 @@ body {
 }
 
 .chat-input-loading-verb {
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-normal);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-regular);
   color: var(--text-placeholder);
   letter-spacing: -0.025em;
   white-space: nowrap;
@@ -1144,4 +1193,216 @@ body {
 
 @keyframes grid-line-draw {
   to { stroke-dashoffset: 0; }
+}
+
+/* ============================================================
+   XY Pad
+   ============================================================ */
+.dialkit-xypad-control {
+  width: 100%;
+}
+
+.dialkit-xypad-area {
+  position: relative;
+  width: 100%;
+  height: 182px;
+  background: var(--surface-canvas);
+  cursor: crosshair;
+  user-select: none;
+  touch-action: none;
+  overflow: hidden;
+}
+
+.dialkit-xypad-svg {
+  display: block;
+  pointer-events: none;
+}
+
+.dialkit-xypad-label {
+  position: absolute;
+  font-size: 9px;
+  font-weight: var(--font-weight-regular);
+  color: rgba(255, 255, 255, 0.5);
+  pointer-events: none;
+  line-height: 14px;
+  text-align: center;
+  width: 16px;
+}
+
+.dialkit-xypad-label--top {
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.dialkit-xypad-label--bottom {
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.dialkit-xypad-label--left {
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.dialkit-xypad-label--right {
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* ============================================================
+   Range Slider
+   ============================================================ */
+.dialkit-range-wrapper {
+  position: relative;
+  width: 100%;
+  height: var(--dial-row-height);
+}
+
+.dialkit-range {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  user-select: none;
+  overflow: hidden;
+  background: var(--dial-surface);
+  border-radius: var(--dial-radius);
+  touch-action: none;
+}
+
+.dialkit-range-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
+.dialkit-range-handle {
+  position: absolute;
+  top: 50%;
+  width: 3px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  pointer-events: none;
+  background: var(--text-secondary);
+}
+
+.dialkit-range-values {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(calc(-50% + 0.5px));
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-regular);
+  color: var(--text-secondary);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ============================================================
+   Gradient Bar
+   ============================================================ */
+.dialkit-gradient-control {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+}
+
+.dialkit-gradient-bar {
+  width: 100%;
+  height: var(--dial-row-height);
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+  cursor: copy;
+}
+
+.dialkit-gradient-handles {
+  position: relative;
+  width: 100%;
+  height: 16px;
+}
+
+.dialkit-gradient-handle {
+  position: absolute;
+  top: 0;
+  width: 16px;
+  height: 16px;
+  cursor: grab;
+  touch-action: none;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.dialkit-gradient-handle:active {
+  cursor: grabbing;
+}
+
+.dialkit-gradient-handle--selected {
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.6), 0 0 0 1.5px var(--accent-blue);
+}
+
+.dialkit-gradient-picker-popover {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 10;
+  padding: 8px;
+  margin-top: 4px;
+  background: var(--surface-primary);
+  border: 1px solid var(--border-default);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  width: 220px;
+}
+
+.dialkit-gradient-picker-popover .react-colorful {
+  width: 100% !important;
+  height: auto !important;
+}
+
+.dialkit-gradient-picker-popover .react-colorful__saturation {
+  height: 140px;
+  border-bottom: none;
+}
+
+.dialkit-gradient-picker-popover .react-colorful__hue {
+  height: 12px;
+  margin-top: 8px;
+}
+
+.dialkit-gradient-picker-popover .react-colorful__saturation-pointer,
+.dialkit-gradient-picker-popover .react-colorful__hue-pointer {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--text-primary);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+/* ============================================================
+   Curve Editor
+   ============================================================ */
+.dialkit-curve-control {
+  width: 100%;
+}
+
+.dialkit-curve-area {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: var(--surface-canvas);
+  cursor: crosshair;
+  user-select: none;
+  touch-action: none;
+  overflow: visible;
+}
+
+.dialkit-curve-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }

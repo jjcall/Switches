@@ -72,8 +72,8 @@ function handleControlChange(msg: ControlChangeMessage): void {
 }
 
 function handleExecuteActions(msg: ExecuteActionsMessage): void {
-  const { actions, pluginSpec, persistNodeId } = msg.payload;
-  executeActions(actions, pluginSpec, persistNodeId).then((result) => {
+  const { actions, pluginSpec, persistNodeId, selectNodeId, skipCenter } = msg.payload;
+  executeActions(actions, pluginSpec, persistNodeId, selectNodeId, skipCenter).then((result) => {
     const response: ExecutionResultMessage = {
       type: 'EXECUTION_RESULT',
       payload: result,

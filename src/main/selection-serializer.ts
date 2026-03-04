@@ -16,8 +16,9 @@ import type {
 } from '../shared/message-types';
 
 // Approximate character budget before we start truncating children arrays.
-// ~2000 tokens × ~4 chars/token = 8000 chars.
-const CHAR_BUDGET = 8000;
+// ~3000 tokens × ~4 chars/token = 12000 chars. Raised from 8000 to support
+// richer multi-node context for auto-generate control inference.
+const CHAR_BUDGET = 12000;
 
 // ─── Fill extraction ──────────────────────────────────────────────────────────
 

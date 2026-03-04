@@ -11,6 +11,10 @@ import {
   SegmentedControl,
   AngleWheel,
   ControlCard,
+  XYPad,
+  RangeSlider,
+  GradientBar,
+  CurveEditor,
 } from '../components';
 import { PreviewCanvas } from '../components/PreviewCanvas';
 import { CubePreview } from '../components/CubePreview';
@@ -48,11 +52,12 @@ type ControlValues = Record<string, unknown>;
 
 interface ControlProps {
   control: UIControl;
+  currentValue?: unknown;
   onControlChange: (controlId: string, value: unknown, action: ActionDescriptor | undefined, actions: ActionDescriptor[] | undefined) => void;
   onControlValueChange: (controlId: string, value: unknown) => void;
 }
 
-function ControlRenderer({ control, onControlChange, onControlValueChange }: ControlProps) {
+function ControlRenderer({ control, currentValue, onControlChange, onControlValueChange }: ControlProps) {
   const { id, type, label = '', props = {}, action } = control;
 
   const onChange = useCallback(
@@ -202,6 +207,85 @@ function ControlRenderer({ control, onControlChange, onControlValueChange }: Con
       );
     }
 
+    case 'xy-pad': {
+      const dv = (typeof props.defaultValue === 'object' && props.defaultValue !== null)
+        ? props.defaultValue as { x?: number; y?: number }
+        : {};
+      const defaultXY = { x: dv.x ?? 0, y: dv.y ?? 0 };
+      const cv = (typeof currentValue === 'object' && currentValue !== null && 'x' in (currentValue as object))
+        ? currentValue as { x: number; y: number } : null;
+      const [val, setVal] = useSyncedState<{ x: number; y: number }>(cv ?? defaultXY);
+      return (
+        <XYPad
+          label={label}
+          value={val}
+          minX={typeof props.minX === 'number' ? props.minX : -100}
+          maxX={typeof props.maxX === 'number' ? props.maxX : 100}
+          minY={typeof props.minY === 'number' ? props.minY : -100}
+          maxY={typeof props.maxY === 'number' ? props.maxY : 100}
+          stepX={typeof props.stepX === 'number' ? props.stepX : 1}
+          stepY={typeof props.stepY === 'number' ? props.stepY : 1}
+          onChange={(v) => { setVal(v); onChange(v); }}
+        />
+      );
+    }
+
+    case 'range': {
+      const dv = (typeof props.defaultValue === 'object' && props.defaultValue !== null)
+        ? props.defaultValue as { low?: number; high?: number }
+        : {};
+      const lo = dv.low ?? (typeof props.min === 'number' ? props.min : 0);
+      const hi = dv.high ?? (typeof props.max === 'number' ? props.max : 1);
+      const defaultRange = { low: lo, high: hi };
+      const cv = (typeof currentValue === 'object' && currentValue !== null && 'low' in (currentValue as object))
+        ? currentValue as { low: number; high: number } : null;
+      const [val, setVal] = useSyncedState<{ low: number; high: number }>(cv ?? defaultRange);
+      return (
+        <RangeSlider
+          label={label}
+          value={val}
+          min={typeof props.min === 'number' ? props.min : 0}
+          max={typeof props.max === 'number' ? props.max : 1}
+          step={typeof props.step === 'number' ? props.step : 0.01}
+          onChange={(v) => { setVal(v); onChange(v); }}
+        />
+      );
+    }
+
+    case 'gradient-bar': {
+      type Stop = { id: string; position: number; color: string };
+      const defaultStops: Stop[] = Array.isArray(props.stops)
+        ? (props.stops as Stop[])
+        : [{ id: 'stop0', position: 0, color: '#000000' }, { id: 'stop1', position: 1, color: '#ffffff' }];
+      const initialStops = (Array.isArray(currentValue) ? currentValue as Stop[] : null) ?? defaultStops;
+      const [val, setVal] = useSyncedState<Stop[]>(initialStops);
+      return (
+        <GradientBar
+          label={label}
+          value={val}
+          minStops={typeof props.minStops === 'number' ? props.minStops : 2}
+          maxStops={typeof props.maxStops === 'number' ? props.maxStops : 8}
+          onChange={(v) => { setVal(v); onChange(v); }}
+        />
+      );
+    }
+
+    case 'curve': {
+      const dv = Array.isArray(props.defaultValue)
+        ? props.defaultValue as [number, number, number, number]
+        : [0.25, 0.1, 0.25, 1.0] as [number, number, number, number];
+      const initialCurve = (Array.isArray(currentValue) && currentValue.length === 4
+        ? currentValue as [number, number, number, number] : null) ?? dv;
+      const [val, setVal] = useSyncedState<[number, number, number, number]>(initialCurve);
+      return (
+        <CurveEditor
+          label={label}
+          value={val}
+          onChange={(v) => { setVal(v); onChange(v); }}
+        />
+      );
+    }
+
     case 'button':
       return (
         <div className="dialkit-control-card">
@@ -303,9 +387,10 @@ interface UIRendererProps {
   onApply?: (values: Record<string, unknown>) => void;
   onValueChange?: (controlId: string, value: unknown) => void;
   animateEntrance?: boolean;
+  disabled?: boolean;
 }
 
-export function UIRenderer({ spec, onApply, onValueChange, animateEntrance = true }: UIRendererProps) {
+export function UIRenderer({ spec, onApply, onValueChange, animateEntrance = true, disabled = false }: UIRendererProps) {
   const hasGenerator = !!spec.generate;
   const [controlValues, setControlValues] = useState<ControlValues>(() => collectControlDefaults(spec.controls));
   const [previewActions, setPreviewActions] = useState<ActionDescriptor[] | null>(null);
@@ -361,6 +446,7 @@ export function UIRenderer({ spec, onApply, onValueChange, animateEntrance = tru
 
   const handleControlChange = useCallback(
     (controlId: string, value: unknown, action: ActionDescriptor | undefined, actions: ActionDescriptor[] | undefined) => {
+      if (disabled) return;
       // When a generator is present, all updates go through auto-apply
       // (generator re-execution). Skip the live CONTROL_CHANGE to avoid
       // spurious errors from actions targeting the wrong node.
@@ -371,16 +457,17 @@ export function UIRenderer({ spec, onApply, onValueChange, animateEntrance = tru
         payload: { controlId, value, action, actions },
       });
     },
-    [hasGenerator],
+    [hasGenerator, disabled],
   );
 
   const scheduleAutoApply = useCallback(() => {
+    if (disabled) return;
     if (!hasGenerator || !onApply) return;
     if (applyTimerRef.current) clearTimeout(applyTimerRef.current);
     applyTimerRef.current = setTimeout(() => {
       onApply(controlValuesRef.current);
     }, AUTO_APPLY_DELAY);
-  }, [hasGenerator, onApply, AUTO_APPLY_DELAY]);
+  }, [hasGenerator, onApply, AUTO_APPLY_DELAY, disabled]);
 
   const handleControlValueChange = useCallback((controlId: string, value: unknown) => {
     setControlValues(prev => {
@@ -422,6 +509,7 @@ export function UIRenderer({ spec, onApply, onValueChange, animateEntrance = tru
         <ControlRenderer
           key={control.id}
           control={control}
+          currentValue={controlValues[control.id]}
           onControlChange={handleControlChange}
           onControlValueChange={handleControlValueChange}
         />
@@ -432,6 +520,7 @@ export function UIRenderer({ spec, onApply, onValueChange, animateEntrance = tru
       <ControlCard key={control.id} label={control.label ?? ''} connected={isConnected(control)}>
         <ControlRenderer
           control={control}
+          currentValue={controlValues[control.id]}
           onControlChange={handleControlChange}
           onControlValueChange={handleControlValueChange}
         />
@@ -448,7 +537,7 @@ export function UIRenderer({ spec, onApply, onValueChange, animateEntrance = tru
   if (!animateEntrance) {
     return (
       <div
-        className="ui-renderer"
+        className={`ui-renderer${disabled ? ' ui-renderer--disabled' : ''}`}
         style={{ display: 'flex', flexDirection: 'column' }}
       >
         {hasCubePreview && dialIds && (
@@ -482,7 +571,7 @@ export function UIRenderer({ spec, onApply, onValueChange, animateEntrance = tru
 
   return (
     <motion.div
-      className="ui-renderer"
+      className={`ui-renderer${disabled ? ' ui-renderer--disabled' : ''}`}
       style={{ display: 'flex', flexDirection: 'column' }}
       initial="skeleton"
       animate="visible"

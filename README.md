@@ -46,8 +46,14 @@ Generators receive a `lib` object with bundled libraries:
 | bezier-easing | Cubic-bezier easing curves | ~1 kB |
 | d3-delaunay | Voronoi diagrams and Delaunay triangulations | ~18 kB |
 | upng-js | PNG decoding for image pixel processing (main thread) | ~8 kB |
+| paths-js | Charts — bar, pie, line, radar, waterfall, sankey | ~10 kB |
+| lindenmayer | L-Systems for fractal trees, Koch curves, ferns | ~5 kB |
+| qrcode-svg | Vector QR code generation from text/URLs | ~8 kB |
+| stackblur-canvas | Fast per-pixel Gaussian blur for bitmap effects | ~3 kB |
+| rgbquant | Color quantization and palette extraction from images | ~8 kB |
+| roughjs | Hand-drawn, sketchy vector graphics with hachure fills | ~9 kB |
 
-Plus hand-rolled math utilities: `vec2`, `polarToXY`, `mapRange`, `shuffle`, `distribute`.
+Plus hand-rolled utilities: `vec2`, `polarToXY`, `mapRange`, `shuffle`, `distribute`, `computeStreamlines` (flow fields), `dither` (Floyd-Steinberg, Atkinson, Burkes, Jarvis, Sierra, Stucki), 3D projection, and superformula organic shapes.
 
 ## Supported Figma actions
 

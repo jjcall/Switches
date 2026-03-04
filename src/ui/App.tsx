@@ -136,31 +136,74 @@ function useShellResize() {
 
 // ─── Empty state ──────────────────────────────────────────────────────────────
 
-function EmptyState({ selectionName, loaderState, loadingVerb }: {
+function BadgeStack({ count, label }: { count: number; label: string }) {
+  if (count <= 1) {
+    return <span className="render-zone-layer-badge">{label}</span>;
+  }
+
+  const depth = Math.min(count, 3);
+
+  return (
+    <div className="badge-stack">
+      <span className="render-zone-layer-badge badge-top">{label}</span>
+      {depth >= 2 && (
+        <span className="render-zone-layer-badge badge-shadow badge-shadow-2" />
+      )}
+      {depth >= 3 && (
+        <span className="render-zone-layer-badge badge-shadow badge-shadow-3" />
+      )}
+    </div>
+  );
+}
+
+function EmptyState({ selectionName, selectionCount, loaderState, loadingVerb }: {
   selectionName: string | null;
+  selectionCount: number;
   loaderState: 'idle' | 'loading' | 'success';
   loadingVerb: string | null;
 }) {
   const isLoading = loaderState === 'loading';
+  const hasSelection = selectionCount > 0;
+  const badgeLabel = selectionCount > 1
+    ? `${selectionCount} items selected`
+    : selectionName;
+
+  const stateKey = isLoading ? 'loading' : hasSelection ? 'selected' : 'empty';
+
   return (
     <div className="render-zone-empty">
       <GridLoader state={loaderState} size={24} />
-      <div className="render-zone-empty-info">
-        {isLoading ? (
-          <p className="render-zone-loading-text">{loadingVerb}...</p>
-        ) : (
-          <>
-            {selectionName && (
-              <span className="render-zone-layer-badge">{selectionName}</span>
-            )}
-            <p className="render-zone-empty-text">
-              {selectionName
-                ? 'What do you want to do with this layer?'
-                : 'Select something on the canvas, then describe what you want'}
-            </p>
-          </>
-        )}
-      </div>
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={stateKey}
+          className="render-zone-empty-info"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+        >
+          {isLoading ? (
+            <p className="render-zone-loading-text">{loadingVerb}...</p>
+          ) : (
+            <>
+              {badgeLabel && (
+                <BadgeStack count={selectionCount} label={badgeLabel} />
+              )}
+              <p className="render-zone-empty-text">
+                {hasSelection ? (
+                  <>
+                    What do you want to create?
+                    <br />
+                    Type <span className="render-zone-hint-cmd">/generate</span> if you want auto controls
+                  </>
+                ) : (
+                  'Select something on the canvas, then describe what you want'
+                )}
+              </p>
+            </>
+          )}
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 }
@@ -182,6 +225,7 @@ function App() {
   const demoTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const createdNodeIdsRef = useRef<string[]>([]);
   const rootFrameIdRef = useRef<string | undefined>(undefined);
+  const suppressSelectionResetRef = useRef(false);
 
   // Keep refs to the latest values so callbacks always see the current state
   // without needing to be in their dependency arrays.
@@ -200,6 +244,9 @@ function App() {
     return onMainMessage((msg) => {
       if (msg.type === 'SELECTION_CONTEXT') {
         setSelectionContext(msg.payload);
+
+        // During wrapping, suppress auto-reset so we don't wipe UI mid-flow.
+        if (suppressSelectionResetRef.current) return;
 
         // Restore plugin memory: if the selected node has stored plugin spec data,
         // parse and restore the UI controls/generator without an LLM call.
@@ -289,6 +336,42 @@ function App() {
     });
   }, []);
 
+  const executeAndWait = useCallback((payload: {
+    actions: ActionDescriptor[];
+    pluginSpec?: string;
+    persistNodeId?: string;
+    selectNodeId?: string;
+    skipCenter?: boolean;
+  }): Promise<{ tempIdMap?: Record<string, string>; rootFrameId?: string; createdNodeIds: string[] }> => {
+    return new Promise((resolve, reject) => {
+      const cleanup = onMainMessage((msg) => {
+        if (msg.type === 'EXECUTION_RESULT') {
+          cleanup();
+          if (msg.payload.errorCount > 0) {
+            reject(new Error(msg.payload.errors.join('\n')));
+          } else {
+            resolve(msg.payload);
+          }
+        } else if (msg.type === 'ERROR') {
+          cleanup();
+          reject(new Error(msg.payload.message));
+        }
+      });
+      postToMain({ type: 'EXECUTE_ACTIONS', payload });
+    });
+  }, []);
+
+  const awaitSelectionContext = useCallback((): Promise<SelectionContext> => {
+    return new Promise((resolve) => {
+      const cleanup = onMainMessage((msg) => {
+        if (msg.type === 'SELECTION_CONTEXT') {
+          cleanup();
+          resolve(msg.payload);
+        }
+      });
+    });
+  }, []);
+
   const handleApply = useCallback(async (values: Record<string, unknown>) => {
     const spec = currentUISpecRef.current;
     if (!spec) return;
@@ -343,14 +426,24 @@ function App() {
           args: {},
         }];
 
-        const rewrittenActions = resolved.slice(rootIdx + 1).map((a) => {
-          const rewritten = { ...a };
-          if (rootTempId) {
-            if (rewritten.nodeId === rootTempId) rewritten.nodeId = existingFrameId;
-            if (rewritten.parentId === rootTempId) rewritten.parentId = existingFrameId;
-          }
-          return rewritten;
-        });
+        const rootFramePropertyMethods = new Set([
+          'setFill', 'setStroke', 'setProperty', 'setEffect', 'setCornerRadius',
+        ]);
+        const rewrittenActions = resolved.slice(rootIdx + 1)
+          .filter((a) => {
+            if (rootTempId && a.nodeId === rootTempId && rootFramePropertyMethods.has(a.method)) {
+              return false;
+            }
+            return true;
+          })
+          .map((a) => {
+            const rewritten = { ...a };
+            if (rootTempId) {
+              if (rewritten.nodeId === rootTempId) rewritten.nodeId = existingFrameId;
+              if (rewritten.parentId === rootTempId) rewritten.parentId = existingFrameId;
+            }
+            return rewritten;
+          });
 
         postToMain({
           type: 'EXECUTE_ACTIONS',
@@ -418,6 +511,32 @@ function App() {
     if (cmd === '/clear') {
       handleDetach();
       setMockSelectionName(null);
+      return;
+    }
+
+    if (cmd.startsWith('/remove ')) {
+      const controlId = cmd.slice(8).trim();
+      setCurrentUISpec(prev => {
+        if (!prev) return prev;
+        const match = prev.controls.find(c => c.id === controlId);
+        if (!match) {
+          addMessage('error', `No control with id "${controlId}". Current controls: ${prev.controls.map(c => c.id).join(', ')}`);
+          return prev;
+        }
+        const updated = {
+          ...prev,
+          controls: prev.controls.filter(c => c.id !== controlId),
+        };
+        const targetId = rootFrameIdRef.current;
+        if (targetId) {
+          postToMain({
+            type: 'EXECUTE_ACTIONS',
+            payload: { actions: [], pluginSpec: JSON.stringify(updated), persistNodeId: targetId },
+          });
+        }
+        addMessage('assistant', `Removed control "${match.label || controlId}".`);
+        return updated;
+      });
       return;
     }
 
@@ -594,6 +713,10 @@ function App() {
               { id: 'color', type: 'color', label: 'Fill Color', props: { defaultValue: '#3B82F6' } },
               { id: 'text', type: 'text', label: 'Layer Name', props: { placeholder: 'Enter a name…', defaultValue: '' } },
               { id: 'button', type: 'button', label: 'Randomize' },
+              { id: 'xy-pad', type: 'xy-pad', label: 'Shadow Offset', props: { minX: -50, maxX: 50, minY: -50, maxY: 50, stepX: 1, stepY: 1, defaultValue: { x: -20, y: 15 } } },
+              { id: 'range', type: 'range', label: 'Size Range', props: { min: 4, max: 48, step: 1, defaultValue: { low: 8, high: 24 } } },
+              { id: 'gradient', type: 'gradient-bar', label: 'Gradient', props: { stops: [{ id: 's0', position: 0, color: '#af2626' }, { id: 's1', position: 1, color: '#878787' }] } },
+              { id: 'curve', type: 'curve', label: 'Falloff Curve', props: { defaultValue: [0.42, 0, 0.58, 1] } },
             ],
           },
         },
@@ -703,6 +826,46 @@ function App() {
             ],
           },
         },
+        'xy': {
+          label: 'XY Pad',
+          spec: {
+            mode: 'live',
+            controls: [
+              { id: 'xy-shadow', type: 'xy-pad', label: 'Shadow Offset', props: { minX: -50, maxX: 50, minY: -50, maxY: 50, stepX: 1, stepY: 1, defaultValue: { x: -20, y: 15 } } },
+              { id: 'xy-origin', type: 'xy-pad', label: 'Transform Origin', props: { minX: 0, maxX: 100, minY: 0, maxY: 100, stepX: 1, stepY: 1, defaultValue: { x: 50, y: 50 } } },
+            ],
+          },
+        },
+        'range': {
+          label: 'Range Slider',
+          spec: {
+            mode: 'live',
+            controls: [
+              { id: 'rng-size', type: 'range', label: 'Size Range', props: { min: 4, max: 48, step: 1, defaultValue: { low: 8, high: 24 } } },
+              { id: 'rng-opacity', type: 'range', label: 'Opacity Range', props: { min: 0, max: 1, step: 0.01, defaultValue: { low: 0.3, high: 0.9 } } },
+            ],
+          },
+        },
+        'gradient': {
+          label: 'Gradient Bar',
+          spec: {
+            mode: 'live',
+            controls: [
+              { id: 'grad-sunset', type: 'gradient-bar', label: 'Sunset Gradient', props: { stops: [{ id: 's0', position: 0, color: '#FF6B35' }, { id: 's1', position: 0.5, color: '#F7C948' }, { id: 's2', position: 1, color: '#9B5DE5' }] } },
+              { id: 'grad-simple', type: 'gradient-bar', label: 'Simple Gradient', props: { stops: [{ id: 's0', position: 0, color: '#af2626' }, { id: 's1', position: 1, color: '#878787' }] } },
+            ],
+          },
+        },
+        'curve': {
+          label: 'Curve Editor',
+          spec: {
+            mode: 'live',
+            controls: [
+              { id: 'crv-falloff', type: 'curve', label: 'Size Falloff', props: { defaultValue: [0.42, 0, 0.58, 1] } },
+              { id: 'crv-ease', type: 'curve', label: 'Distribution', props: { defaultValue: [0.25, 0.1, 0.25, 1.0] } },
+            ],
+          },
+        },
       };
 
       const entry = mockControls[sub];
@@ -742,17 +905,77 @@ function App() {
     }
     // ── End debug commands ───────────────────────────────────────────────────
 
-    addMessage('user', text);
+    // ── Auto-generate controls from selection ────────────────────────────────
+    const isAutoGenerate = cmd === '/generate' || cmd === '/auto';
+
+    if (isAutoGenerate) {
+      if (!selectionContext || selectionContext.nodes.length === 0) {
+        addMessage('error', 'Select one or more layers on the canvas first, then type /generate.');
+        return;
+      }
+      addMessage('user', '/generate');
+    } else {
+      addMessage('user', text);
+    }
+
     setIsLoading(true);
     setLoaderState('loading');
     setLoadingVerb(getRandomVerb());
 
     // Snapshot current state at submission time.
-    const selCtx = selectionContext;
+    let selCtx = selectionContext;
     const uiSpec = currentUISpec;
     const history = messagesRef.current;
 
-    const { system, messages: apiMessages } = composePrompt(selCtx, uiSpec, history, text);
+    // When auto-generating for 2+ nodes, wrap them in a frame first so we have
+    // a single owner node for the controls and the LLM sees them as a group.
+    let wrapperFrameId: string | undefined;
+    if (isAutoGenerate && selCtx && selCtx.nodes.length >= 2) {
+      try {
+        const wrapperTempId = `__wrapper_${Date.now()}`;
+        const wrapActions: ActionDescriptor[] = [
+          {
+            method: 'createFrame',
+            tempId: wrapperTempId,
+            args: { name: 'Auto-Controls Group', fills: [] },
+          },
+          ...selCtx.nodes.map(n => ({
+            method: 'appendChild' as const,
+            nodeId: n.id,
+            parentId: wrapperTempId,
+            args: {},
+          })),
+        ];
+
+        suppressSelectionResetRef.current = true;
+
+        const wrapResult = await executeAndWait({
+          actions: wrapActions,
+          selectNodeId: wrapperTempId,
+          skipCenter: true,
+        });
+
+        const realFrameId = wrapResult.tempIdMap?.[wrapperTempId] ?? wrapResult.rootFrameId;
+        if (realFrameId) {
+          wrapperFrameId = realFrameId;
+          rootFrameIdRef.current = realFrameId;
+          createdNodeIdsRef.current = [realFrameId];
+
+          // Wait for the fresh SELECTION_CONTEXT with the wrapper frame as root.
+          selCtx = await awaitSelectionContext();
+          setSelectionContext(selCtx);
+        }
+      } catch (err) {
+        console.warn('[app] wrapping failed, proceeding with original selection:', err);
+      } finally {
+        suppressSelectionResetRef.current = false;
+      }
+    }
+
+    const { system, messages: apiMessages } = composePrompt(
+      selCtx, uiSpec, history, text,
+      isAutoGenerate ? { autoGenerate: true } : undefined,
+    );
 
     const result = await callClaude(apiMessages, system);
 
@@ -782,9 +1005,10 @@ function App() {
       actionTemplate: ui.actionTemplate ?? (generate ? undefined : undefined),
     };
 
-    // Show any explanatory message the LLM included.
     if (message) {
       addMessage('assistant', message);
+    } else if (isAutoGenerate) {
+      addMessage('assistant', `Auto-generated ${normalizedUi.controls.length} control(s) from selection.`);
     } else {
       const genLabel = normalizedUi.generate ? ' + generator' : '';
       addMessage('assistant', `Done — ${actions.length} action(s), ${normalizedUi.controls.length} control(s)${genLabel} generated.`);
@@ -823,7 +1047,11 @@ function App() {
     if (actions.length > 0) {
       postToMain({
         type: 'EXECUTE_ACTIONS',
-        payload: { actions: actions as ActionDescriptor[], pluginSpec: specJson },
+        payload: {
+          actions: actions as ActionDescriptor[],
+          pluginSpec: specJson,
+          persistNodeId: wrapperFrameId,
+        },
       });
     } else if (mergedUi.generate) {
       const defaults = flattenColorStops(collectControlDefaults(mergedUi.controls));
@@ -850,14 +1078,24 @@ function App() {
               nodeId: existingFrameId,
               args: {},
             }];
-            const rewrittenActions = generated.slice(rootIdx + 1).map((a) => {
-              const rewritten = { ...a };
-              if (rootTempId) {
-                if (rewritten.nodeId === rootTempId) rewritten.nodeId = existingFrameId;
-                if (rewritten.parentId === rootTempId) rewritten.parentId = existingFrameId;
-              }
-              return rewritten;
-            });
+            const rootFramePropertyMethods = new Set([
+              'setFill', 'setStroke', 'setProperty', 'setEffect', 'setCornerRadius',
+            ]);
+            const rewrittenActions = generated.slice(rootIdx + 1)
+              .filter((a) => {
+                if (rootTempId && a.nodeId === rootTempId && rootFramePropertyMethods.has(a.method)) {
+                  return false;
+                }
+                return true;
+              })
+              .map((a) => {
+                const rewritten = { ...a };
+                if (rootTempId) {
+                  if (rewritten.nodeId === rootTempId) rewritten.nodeId = existingFrameId;
+                  if (rewritten.parentId === rootTempId) rewritten.parentId = existingFrameId;
+                }
+                return rewritten;
+              });
             postToMain({
               type: 'EXECUTE_ACTIONS',
               payload: { actions: [...cleanupActions, ...rewrittenActions], pluginSpec: specJson },
@@ -886,6 +1124,18 @@ function App() {
         type: 'EXECUTE_ACTIONS',
         payload: { actions: resolved, pluginSpec: specJson },
       });
+    } else if (mergedUi.controls.length > 0) {
+      // Controls-only spec (e.g. auto-generate with direct actions on existing nodes).
+      // Persist to the wrapper frame if we created one, else the first selected node.
+      const targetId = wrapperFrameId ?? selCtx?.nodes[0]?.id;
+      if (targetId) {
+        rootFrameIdRef.current = targetId;
+        createdNodeIdsRef.current = [targetId];
+        postToMain({
+          type: 'EXECUTE_ACTIONS',
+          payload: { actions: [], pluginSpec: specJson, persistNodeId: targetId },
+        });
+      }
     }
 
     // Update the rendered UI spec with the merged result.
@@ -893,7 +1143,7 @@ function App() {
     setCurrentUISpec(mergedUi);
 
     finishLoading(true);
-  }, [addMessage, selectionContext, currentUISpec, fetchImageData, handleDetach, finishLoading]);
+  }, [addMessage, selectionContext, currentUISpec, fetchImageData, handleDetach, finishLoading, executeAndWait, awaitSelectionContext]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -934,7 +1184,7 @@ function App() {
                 exit={{ opacity: 0, transition: { duration: 0.15 } }}
                 style={{ flex: 1, display: 'flex' }}
               >
-                <EmptyState selectionName={mockSelectionName ?? (selectionContext?.nodes[0]?.name ?? null)} loaderState={loaderState} loadingVerb={loadingVerb} />
+                <EmptyState selectionName={mockSelectionName ?? (selectionContext?.nodes[0]?.name ?? null)} selectionCount={selectionContext?.nodes.length ?? 0} loaderState={loaderState} loadingVerb={loadingVerb} />
               </motion.div>
             )}
             {hasSpec && (
@@ -946,7 +1196,7 @@ function App() {
                 transition={{ duration: 0.2 }}
                 style={{ display: 'flex', flexDirection: 'column', flex: 1 }}
               >
-                <UIRenderer spec={currentUISpec!} onApply={handleApply} onValueChange={handleValueChange} animateEntrance />
+                <UIRenderer spec={currentUISpec!} onApply={handleApply} onValueChange={handleValueChange} animateEntrance disabled={isLoading} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -954,12 +1204,12 @@ function App() {
           <>
             {!hasSpec && (
               <div style={{ flex: 1, display: 'flex' }}>
-                <EmptyState selectionName={mockSelectionName ?? (selectionContext?.nodes[0]?.name ?? null)} loaderState={loaderState} loadingVerb={loadingVerb} />
+                <EmptyState selectionName={mockSelectionName ?? (selectionContext?.nodes[0]?.name ?? null)} selectionCount={selectionContext?.nodes.length ?? 0} loaderState={loaderState} loadingVerb={loadingVerb} />
               </div>
             )}
             {hasSpec && (
               <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-                <UIRenderer spec={currentUISpec!} onApply={handleApply} onValueChange={handleValueChange} animateEntrance={false} />
+                <UIRenderer spec={currentUISpec!} onApply={handleApply} onValueChange={handleValueChange} animateEntrance={false} disabled={isLoading} />
               </div>
             )}
           </>

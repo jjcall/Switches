@@ -284,7 +284,7 @@ export function Slider({
   }
   const valueDodge = percentage > rightThreshold;
   const handleOpacity = !isActive ? 0 : valueDodge ? 0.1 : isDragging ? 0.9 : 0.5;
-  const fillBackground = isActive ? 'var(--light-active)' : 'var(--light-overlay-hover)';
+  const fillBackground = isActive ? 'var(--light-overlay)' : 'var(--light-overlay-hover)';
 
   const discreteSteps = (max - min) / step;
   const hashMarks = discreteSteps <= 10

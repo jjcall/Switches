@@ -1,4 +1,4 @@
-import { SYSTEM_PROMPT } from './system-prompt';
+import { SYSTEM_PROMPT, AUTO_GENERATE_ADDENDUM } from './system-prompt';
 import type { ApiChatMessage } from '../api/claude';
 import type { SelectionContext, UISpec } from '../../shared/message-types';
 import type { ChatMessage } from '../chat/ChatHistory';
@@ -6,6 +6,12 @@ import type { ChatMessage } from '../chat/ChatHistory';
 export interface ComposedPrompt {
   system: string;
   messages: ApiChatMessage[];
+}
+
+export interface ComposeOptions {
+  /** When true, appends the auto-generate addendum and replaces the user
+   *  message with an analysis request. */
+  autoGenerate?: boolean;
 }
 
 /**
@@ -22,7 +28,13 @@ export function composePrompt(
   currentUISpec: UISpec | null,
   chatHistory: ChatMessage[],
   userMessage: string,
+  options?: ComposeOptions,
 ): ComposedPrompt {
+  const autoGenerate = options?.autoGenerate ?? false;
+  const systemPrompt = autoGenerate
+    ? SYSTEM_PROMPT + '\n' + AUTO_GENERATE_ADDENDUM
+    : SYSTEM_PROMPT;
+
   const apiMessages: ApiChatMessage[] = [];
 
   // ── Contextual preamble ────────────────────────────────────────────────────
@@ -53,8 +65,6 @@ export function composePrompt(
 
   if (preambleParts.length > 0) {
     apiMessages.push({ role: 'user', content: preambleParts.join('\n\n') });
-    // Provide a minimal assistant acknowledgement so the history alternates
-    // correctly (Claude API requires alternating user/assistant turns).
     apiMessages.push({
       role: 'assistant',
       content: 'Understood. I have the selection context and will respond with the required JSON format.',
@@ -73,21 +83,22 @@ export function composePrompt(
   }
 
   // ── New user message ───────────────────────────────────────────────────────
-  // If the last message is already from the user (e.g. preamble was skipped and
-  // history ended on a user turn), we need to ensure we don't send two
-  // consecutive user messages.
+  const finalMessage = autoGenerate
+    ? 'Analyze the selected nodes and auto-generate the best control panel for them. ' +
+      'Follow the auto-generate mode rules.'
+    : userMessage;
+
   const last = apiMessages[apiMessages.length - 1];
   if (last && last.role === 'user') {
-    // Merge the new message into the last user turn.
     apiMessages[apiMessages.length - 1] = {
       role: 'user',
-      content: last.content + '\n\n' + userMessage,
+      content: last.content + '\n\n' + finalMessage,
     };
   } else {
-    apiMessages.push({ role: 'user', content: userMessage });
+    apiMessages.push({ role: 'user', content: finalMessage });
   }
 
-  return { system: SYSTEM_PROMPT, messages: apiMessages };
+  return { system: systemPrompt, messages: apiMessages };
 }
 
 // ─── Response parsing ─────────────────────────────────────────────────────────

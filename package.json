@@ -9,15 +9,22 @@
     "preview": "node esbuild.config.js --preview"
   },
   "dependencies": {
+    "@anvaka/streamlines": "^1.6.0",
     "bezier-easing": "^2.1.0",
     "chroma-js": "^3.2.0",
     "d3-delaunay": "^6.0.4",
+    "lindenmayer": "^1.5.4",
     "motion": "latest",
     "ogl": "^1.0.11",
+    "paths-js": "^0.4.11",
+    "qrcode-svg": "^1.1.0",
     "react": "^18.3.1",
     "react-colorful": "^5.6.1",
     "react-dom": "^18.3.1",
+    "rgbquant": "^1.1.2",
+    "roughjs": "^4.6.6",
     "simplex-noise": "^4.0.3",
+    "stackblur-canvas": "^3.0.0",
     "upng-js": "^2.1.0"
   },
   "devDependencies": {
