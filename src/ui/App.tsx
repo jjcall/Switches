@@ -733,29 +733,32 @@ function App() {
     if (cmd === '/ui' || cmd.startsWith('/ui ')) {
       const sub = cmd.slice(3).trim();
 
+      const fullControls: UISpec['controls'] = [
+        { id: 'dial-a', type: 'dial', label: 'Rotation X', props: { min: -180, max: 180, step: 1, defaultValue: 0 } },
+        { id: 'dial-b', type: 'dial', label: 'Rotation Y', props: { min: -180, max: 180, step: 1, defaultValue: 34 } },
+        { id: 'slider-opacity', type: 'slider', label: 'Opacity', props: { min: 0, max: 100, step: 1, defaultValue: 73 } },
+        { id: 'slider-blur', type: 'slider', label: 'Blur', props: { min: 0, max: 50, step: 0.5, defaultValue: 4 } },
+        { id: 'range-size', type: 'range', label: 'Size Range', props: { min: 4, max: 48, step: 1, defaultValue: { low: 8, high: 24 } } },
+        { id: 'select-blend', type: 'select', label: 'Blend Mode', props: { options: ['Off', 'Multiply', 'Screen', 'Overlay'], defaultValue: 'Off' } },
+        { id: 'toggle-visible', type: 'toggle', label: 'Visible', props: { defaultValue: true } },
+        { id: 'seg-align', type: 'segmented', label: 'Alignment', props: { options: [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Center' }, { value: 'right', label: 'Right' }], defaultValue: 'center' } },
+        { id: 'num-radius', type: 'number', label: 'Border Radius', props: { min: 0, max: 100, step: 1, defaultValue: 8 } },
+        { id: 'color-fill', type: 'color', label: 'Fill Color', props: { defaultValue: '#3B82F6' } },
+        { id: 'text-name', type: 'text', label: 'Layer Name', props: { placeholder: 'Enter a name…', defaultValue: '' } },
+        { id: 'btn-randomize', type: 'button', label: 'Randomize' },
+        { id: 'xy-shadow', type: 'xy-pad', label: 'Shadow Offset', props: { minX: -50, maxX: 50, minY: -50, maxY: 50, stepX: 1, stepY: 1, defaultValue: { x: -20, y: 15 } } },
+        { id: 'grad-sunset', type: 'gradient-bar', label: 'Gradient', props: { stops: [{ id: 's0', position: 0, color: '#FF6B35' }, { id: 's1', position: 0.5, color: '#F7C948' }, { id: 's2', position: 1, color: '#9B5DE5' }] } },
+        { id: 'crv-falloff', type: 'curve', label: 'Falloff Curve', props: { defaultValue: [0.42, 0, 0.58, 1] } },
+      ];
+
       const mockControls: Record<string, { label: string; spec: UISpec }> = {
         '': {
           label: 'All Controls',
-          spec: {
-            mode: 'live',
-            controls: [
-              { id: 'dial-a', type: 'dial', label: 'Rotation X', props: { min: -180, max: 180, step: 1, defaultValue: 0 } },
-              { id: 'dial-b', type: 'dial', label: 'Rotation Y', props: { min: -180, max: 180, step: 1, defaultValue: 34 } },
-              { id: 'dial-full', type: 'dial', label: 'Angle', props: { min: -180, max: 180, step: 1, defaultValue: 0 } },
-              { id: 'slider', type: 'slider', label: 'Opacity', props: { min: 0, max: 100, step: 1, defaultValue: 73 } },
-              { id: 'select', type: 'select', label: 'Blend Mode', props: { options: ['Off', 'Multiply', 'Screen', 'Overlay'], defaultValue: 'Off' } },
-              { id: 'toggle', type: 'toggle', label: 'Visible', props: { defaultValue: true } },
-              { id: 'segmented', type: 'segmented', label: 'Alignment', props: { options: [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Center' }, { value: 'right', label: 'Right' }], defaultValue: 'center' } },
-              { id: 'number', type: 'number', label: 'Border Radius', props: { min: 0, max: 100, step: 1, defaultValue: 8 } },
-              { id: 'color', type: 'color', label: 'Fill Color', props: { defaultValue: '#3B82F6' } },
-              { id: 'text', type: 'text', label: 'Layer Name', props: { placeholder: 'Enter a name…', defaultValue: '' } },
-              { id: 'button', type: 'button', label: 'Randomize' },
-              { id: 'xy-pad', type: 'xy-pad', label: 'Shadow Offset', props: { minX: -50, maxX: 50, minY: -50, maxY: 50, stepX: 1, stepY: 1, defaultValue: { x: -20, y: 15 } } },
-              { id: 'range', type: 'range', label: 'Size Range', props: { min: 4, max: 48, step: 1, defaultValue: { low: 8, high: 24 } } },
-              { id: 'gradient', type: 'gradient-bar', label: 'Gradient', props: { stops: [{ id: 's0', position: 0, color: '#af2626' }, { id: 's1', position: 1, color: '#878787' }] } },
-              { id: 'curve', type: 'curve', label: 'Falloff Curve', props: { defaultValue: [0.42, 0, 0.58, 1] } },
-            ],
-          },
+          spec: { mode: 'live', controls: fullControls },
+        },
+        'full': {
+          label: 'All Controls',
+          spec: { mode: 'live', controls: fullControls },
         },
         'dials': {
           label: 'Dials',

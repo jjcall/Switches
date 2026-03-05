@@ -37,7 +37,7 @@ body {
   --dial-border: var(--border-subtle);
   --dial-border-hover: var(--border-subtle);
   --dial-glass-bg: var(--surface-primary);
-  --dial-radius: 0px;
+  --dial-radius: 5px;
   --dial-row-height: 24px;
 }
 
@@ -246,7 +246,7 @@ body {
   width: 100%;
   height: var(--dial-row-height);
   background: transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--dial-radius);
 }
 
 .dialkit-segmented-pill {
@@ -266,7 +266,7 @@ body {
   border: none;
   cursor: pointer;
   transition: color 0.15s, background 0.15s;
-  border-radius: var(--radius-sm);
+  border-radius: var(--dial-radius);
 }
 
 .dialkit-segmented-button[data-active="true"] {
@@ -275,7 +275,7 @@ body {
 }
 
 .dialkit-segmented-button[data-active="false"] {
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
   background: var(--surface-control);
 }
 
@@ -323,7 +323,7 @@ body {
   color: var(--light-primary);
   background: var(--accent-blue);
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--dial-radius);
   cursor: pointer;
   transition: background 0.15s;
   text-align: center;
@@ -367,7 +367,7 @@ body {
   height: var(--dial-row-height);
   padding: 0 8px;
   background: var(--surface-control);
-  border-radius: var(--radius-sm);
+  border-radius: var(--dial-radius);
 }
 
 .dialkit-text-input {
@@ -413,7 +413,7 @@ body {
   color: var(--text-secondary);
   background: var(--surface-control);
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--dial-radius);
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -449,7 +449,7 @@ body {
 
 .dialkit-select-dropdown {
   background: var(--dial-glass-bg);
-  border: 1px solid var(--dial-border);
+  border: none;
   border-radius: var(--dial-radius);
   padding: 4px;
   z-index: 10000;
@@ -460,7 +460,7 @@ body {
   --dial-surface-active: var(--light-overlay);
   --dial-text-label: var(--text-secondary);
   --dial-text-primary: var(--text-primary);
-  --dial-radius: 0px;
+  --dial-radius: 5px;
   font-family: var(--font-family);
   font-size: var(--font-size-xs);
   -webkit-font-smoothing: antialiased;
@@ -476,7 +476,7 @@ body {
   color: var(--dial-text-label);
   background: transparent;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--dial-radius);
   cursor: pointer;
   text-align: left;
   transition: background 0.15s, color 0.15s;
@@ -487,8 +487,8 @@ body {
 }
 
 .dialkit-select-option[data-selected="true"] {
-  color: var(--dial-text-primary);
-  background: var(--dial-surface-active);
+  color: var(--dial-text-label);
+  background: transparent;
 }
 
 /* ============================================================
@@ -961,7 +961,7 @@ body {
   border-radius: var(--dial-radius);
   overflow: hidden;
   background: var(--surface-canvas);
-  border: 1px solid var(--dial-border);
+  border: 1px solid var(--border-default);
 }
 
 .dialkit-preview-canvas {
@@ -1270,7 +1270,9 @@ body {
   position: relative;
   width: 100%;
   height: 182px;
+  border-radius: var(--dial-radius);
   background: var(--surface-canvas);
+  border: 1px solid var(--border-default);
   cursor: crosshair;
   user-select: none;
   touch-action: none;
@@ -1382,6 +1384,7 @@ body {
 .dialkit-gradient-bar {
   width: 100%;
   height: var(--dial-row-height);
+  border-radius: var(--dial-radius);
   box-shadow: inset 0 0 0 1px var(--border-subtle);
   cursor: copy;
 }
@@ -1457,7 +1460,9 @@ body {
   position: relative;
   width: 100%;
   aspect-ratio: 1 / 1;
+  border-radius: var(--dial-radius);
   background: var(--surface-canvas);
+  border: 1px solid var(--border-default);
   cursor: crosshair;
   user-select: none;
   touch-action: none;
