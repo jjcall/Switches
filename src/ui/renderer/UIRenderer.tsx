@@ -331,8 +331,7 @@ function findDialControls(controls: UIControl[]): DialControlIds | null {
   const rzCtrl = dialControls.find(c => match(c.id, rzPatterns));
 
   if (!rxCtrl || !ryCtrl) {
-    // Fallback: use first two dial controls as rx/ry
-    return { rx: dialControls[0].id, ry: dialControls[1].id, rz: dialControls[2]?.id };
+    return null;
   }
 
   return { rx: rxCtrl.id, ry: ryCtrl.id, rz: rzCtrl?.id };

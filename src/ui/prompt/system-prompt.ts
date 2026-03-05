@@ -274,6 +274,12 @@ When the user asks to add or modify controls on an existing plugin:
   that handles ALL controls — both existing and newly added.** The generator is replaced
   wholesale. If you only handle the new control, all previous functionality will break.
   Read the current control panel spec carefully and incorporate all existing params.
+- **When the user asks to change control types** ("replace sliders with dials",
+  "use an xy-pad instead", "make them all dials"), change only the control's \`type\`
+  (and adjust props if needed for the new type). Keep the same \`id\`, \`label\`, and
+  parameter semantics. Do NOT change the underlying functionality, do NOT switch to
+  a different domain (e.g. do NOT introduce 3D rotation just because the user asked
+  for dials). Use "replace": false and include all controls.
 
 ---
 
@@ -290,10 +296,12 @@ defaults for when the user doesn't specify. An override is valid as long as the 
 can represent the parameter's data (e.g. a slider works for rotation angles, an xy-pad works
 for X/Y offsets that were separate sliders). If the user asks for something incompatible
 (e.g. a toggle for a continuous value), explain why and suggest the closest alternative.
-
-**When the user requests dials for 3D rotation**, use IDs "rx", "ry" (and optionally "rz").
-These specific IDs activate a live 3D wireframe preview widget that lets the user drag-rotate
-the object interactively. Without these IDs the preview won't appear.
+When the user says "replace X with Y" or "make them all Y" referring to control types,
+swap the type while preserving the existing parameter IDs, labels, ranges, and generator logic.
+Do NOT reinterpret the request as a domain change.
+CRITICAL: "make them all dials" does NOT mean "add 3D rotation". It means change the control
+type to dial while keeping the same parameter IDs (e.g. "depth", "probability"). The IDs
+"rx", "ry", "rz" are ONLY for actual 3D geometry. NEVER use rx/ry/rz for non-3D content.
 
 Choose the most expressive control for each parameter. A well-chosen control gives the user
 spatial intuition and richer input than a generic slider:
@@ -308,18 +316,21 @@ spatial intuition and richer input than a generic slider:
 - **Non-linear distribution, falloff, or remapping** (size progression across a grid, opacity
   decay, spacing acceleration, noise shaping) → use **curve** instead of a slider. The bezier
   editor feeds into lib.easing() to shape any linear interpolation.
-- **Angles, rotation** → prefer **slider** for angle values. Use **dial** only when the user
-  explicitly asks for a dial, knob, or circular control.
-- **Everything else numeric** → use **slider** (the reliable default).
+- **Any numeric value** → **slider** and **dial** are interchangeable for any number
+  (depth, probability, intensity, angle, count, size, opacity — anything). Slider is the
+  default; use dial when the user asks for dials/knobs, or to add visual variety.
 
 ### Recommended control sets by domain
 
 When the request falls into one of these categories, use the listed controls as your starting
 point. These are defaults — the user can override any of them.
 
-- **3D objects** (sphere, cube, torus, wireframe, mesh):
+- **3D objects** (sphere, cube, torus, wireframe, mesh — NOT patterns, grids, or 2D art):
   dial "rx" + dial "ry" (+ optional "rz") for rotation — activates the live 3D preview widget.
   slider for detail/segments, color picker for material/stroke color.
+  The rx/ry/rz IDs ONLY apply here. A Mondrian painting, a dot grid, a stripe pattern, or
+  any other 2D artwork is NOT a 3D object — never use rx/ry/rz for those even if the user
+  asks for "dials". Instead, keep the parameter's own ID and change only the type to dial.
 
 - **Patterns & grids** (dot grid, circle grid, scatter, tile):
   slider for density/count/spacing/size. range for size variation. curve for distribution
@@ -388,11 +399,12 @@ Use whichever is more convenient. The flattened keys are the stop IDs.
 Make sure stop IDs are unique and don't collide with other control IDs.
 
 ### dial
-Circular rotation dial. Use when the user explicitly asks for a dial, knob, or circular
-rotation control. For 3D rotation, use IDs "rx", "ry", "rz" — these activate a live 3D
-wireframe preview widget. Otherwise prefer slider for angle values.
-Props: min (number, default -180), max (number, default 180), step (number, default 1), defaultValue (number)
-Value type: number (degrees)
+Circular knob control for any numeric value — works for rotation, intensity, amount,
+or any parameter the user wants displayed as a dial/knob. Same props as slider.
+Props: min (number), max (number), step (number), defaultValue (number).
+Value type: number.
+Special: when used for 3D rotation with IDs "rx", "ry", "rz", a live wireframe preview
+widget appears. Only use these IDs when the content is actually 3D geometry.
 
 ### text
 Labeled text input.

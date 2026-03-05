@@ -54,9 +54,6 @@ export function HistoryPanel({ messages, onSelectPrompt }: HistoryPanelProps) {
     <div className="history-panel">
       <div className="history-content">
         <div className="history-header">
-          <div className="history-header-icon">
-            <HistoryIcon size={24} />
-          </div>
           <span className="history-header-label">Prompt history</span>
         </div>
         <div className="history-list">

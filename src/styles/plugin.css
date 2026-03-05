@@ -70,6 +70,10 @@ body {
   line-height: var(--line-height-xs);
   letter-spacing: var(--letter-spacing-label);
   color: var(--text-secondary);
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dialkit-control-status {
@@ -1029,14 +1033,14 @@ body {
 .history-header {
   display: flex;
   align-items: center;
-  gap: var(--space-xs);
+  gap: var(--space-sm);
   padding: 0 var(--space-sm);
   color: var(--text-tertiary);
 }
 
 .history-header-icon {
-  width: 24px;
-  height: 24px;
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1087,7 +1091,7 @@ body {
 .chat-input-box {
   position: relative;
   border-top: 1px solid var(--dark-secondary);
-  padding: 12px 8px;
+  padding: 12px 8px 12px 12px;
   transition: padding 0.15s ease;
 }
 

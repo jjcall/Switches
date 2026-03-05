@@ -140,6 +140,10 @@ body {
   line-height: var(--line-height-xs);
   letter-spacing: var(--letter-spacing-label);
   color: var(--text-secondary);
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .dialkit-control-status {
   width: 8px;
@@ -942,13 +946,13 @@ body {
 .history-header {
   display: flex;
   align-items: center;
-  gap: var(--space-xs);
+  gap: var(--space-sm);
   padding: 0 var(--space-sm);
   color: var(--text-tertiary);
 }
 .history-header-icon {
-  width: 24px;
-  height: 24px;
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -991,7 +995,7 @@ body {
 .chat-input-box {
   position: relative;
   border-top: 1px solid var(--dark-secondary);
-  padding: 12px 8px;
+  padding: 12px 8px 12px 12px;
   transition: padding 0.15s ease;
 }
 .chat-input-box--expanded {
@@ -30364,10 +30368,7 @@ body {
       ] }) });
     }
     return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { className: "history-panel", children: /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "history-content", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "history-header", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { className: "history-header-icon", children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(HistoryIcon2, { size: 24 }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { className: "history-header-label", children: "Prompt history" })
-      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { className: "history-header", children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { className: "history-header-label", children: "Prompt history" }) }),
       /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "history-list", children: [
         messages.map((msg) => {
           const type = getRowType(msg);
@@ -30730,6 +30731,12 @@ When the user asks to add or modify controls on an existing plugin:
   that handles ALL controls \u2014 both existing and newly added.** The generator is replaced
   wholesale. If you only handle the new control, all previous functionality will break.
   Read the current control panel spec carefully and incorporate all existing params.
+- **When the user asks to change control types** ("replace sliders with dials",
+  "use an xy-pad instead", "make them all dials"), change only the control's \`type\`
+  (and adjust props if needed for the new type). Keep the same \`id\`, \`label\`, and
+  parameter semantics. Do NOT change the underlying functionality, do NOT switch to
+  a different domain (e.g. do NOT introduce 3D rotation just because the user asked
+  for dials). Use "replace": false and include all controls.
 
 ---
 
@@ -30746,10 +30753,12 @@ defaults for when the user doesn't specify. An override is valid as long as the 
 can represent the parameter's data (e.g. a slider works for rotation angles, an xy-pad works
 for X/Y offsets that were separate sliders). If the user asks for something incompatible
 (e.g. a toggle for a continuous value), explain why and suggest the closest alternative.
-
-**When the user requests dials for 3D rotation**, use IDs "rx", "ry" (and optionally "rz").
-These specific IDs activate a live 3D wireframe preview widget that lets the user drag-rotate
-the object interactively. Without these IDs the preview won't appear.
+When the user says "replace X with Y" or "make them all Y" referring to control types,
+swap the type while preserving the existing parameter IDs, labels, ranges, and generator logic.
+Do NOT reinterpret the request as a domain change.
+CRITICAL: "make them all dials" does NOT mean "add 3D rotation". It means change the control
+type to dial while keeping the same parameter IDs (e.g. "depth", "probability"). The IDs
+"rx", "ry", "rz" are ONLY for actual 3D geometry. NEVER use rx/ry/rz for non-3D content.
 
 Choose the most expressive control for each parameter. A well-chosen control gives the user
 spatial intuition and richer input than a generic slider:
@@ -30764,18 +30773,21 @@ spatial intuition and richer input than a generic slider:
 - **Non-linear distribution, falloff, or remapping** (size progression across a grid, opacity
   decay, spacing acceleration, noise shaping) \u2192 use **curve** instead of a slider. The bezier
   editor feeds into lib.easing() to shape any linear interpolation.
-- **Angles, rotation** \u2192 prefer **slider** for angle values. Use **dial** only when the user
-  explicitly asks for a dial, knob, or circular control.
-- **Everything else numeric** \u2192 use **slider** (the reliable default).
+- **Any numeric value** \u2192 **slider** and **dial** are interchangeable for any number
+  (depth, probability, intensity, angle, count, size, opacity \u2014 anything). Slider is the
+  default; use dial when the user asks for dials/knobs, or to add visual variety.
 
 ### Recommended control sets by domain
 
 When the request falls into one of these categories, use the listed controls as your starting
 point. These are defaults \u2014 the user can override any of them.
 
-- **3D objects** (sphere, cube, torus, wireframe, mesh):
+- **3D objects** (sphere, cube, torus, wireframe, mesh \u2014 NOT patterns, grids, or 2D art):
   dial "rx" + dial "ry" (+ optional "rz") for rotation \u2014 activates the live 3D preview widget.
   slider for detail/segments, color picker for material/stroke color.
+  The rx/ry/rz IDs ONLY apply here. A Mondrian painting, a dot grid, a stripe pattern, or
+  any other 2D artwork is NOT a 3D object \u2014 never use rx/ry/rz for those even if the user
+  asks for "dials". Instead, keep the parameter's own ID and change only the type to dial.
 
 - **Patterns & grids** (dot grid, circle grid, scatter, tile):
   slider for density/count/spacing/size. range for size variation. curve for distribution
@@ -30844,11 +30856,12 @@ Use whichever is more convenient. The flattened keys are the stop IDs.
 Make sure stop IDs are unique and don't collide with other control IDs.
 
 ### dial
-Circular rotation dial. Use when the user explicitly asks for a dial, knob, or circular
-rotation control. For 3D rotation, use IDs "rx", "ry", "rz" \u2014 these activate a live 3D
-wireframe preview widget. Otherwise prefer slider for angle values.
-Props: min (number, default -180), max (number, default 180), step (number, default 1), defaultValue (number)
-Value type: number (degrees)
+Circular knob control for any numeric value \u2014 works for rotation, intensity, amount,
+or any parameter the user wants displayed as a dial/knob. Same props as slider.
+Props: min (number), max (number), step (number), defaultValue (number).
+Value type: number.
+Special: when used for 3D rotation with IDs "rx", "ry", "rz", a live wireframe preview
+widget appears. Only use these IDs when the content is actually 3D geometry.
 
 ### text
 Labeled text input.
@@ -46197,17 +46210,9 @@ void main() {
 
   // src/ui/components/ControlCard.tsx
   var import_jsx_runtime20 = __toESM(require_jsx_runtime());
-  function ControlCard({ label, connected, children }) {
+  function ControlCard({ label, children }) {
     return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "dialkit-control-card", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "dialkit-control-header", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "dialkit-control-label", children: label }),
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
-          "span",
-          {
-            className: `dialkit-control-status ${connected ? "dialkit-control-status--on" : "dialkit-control-status--off"}`
-          }
-        )
-      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "dialkit-control-header", children: /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "dialkit-control-label", children: label }) }),
       /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "dialkit-control-slot", children })
     ] });
   }
@@ -54253,7 +54258,7 @@ void main() {
     const ryCtrl = dialControls.find((c3) => match(c3.id, ryPatterns));
     const rzCtrl = dialControls.find((c3) => match(c3.id, rzPatterns));
     if (!rxCtrl || !ryCtrl) {
-      return { rx: dialControls[0].id, ry: dialControls[1].id, rz: dialControls[2]?.id };
+      return null;
     }
     return { rx: rxCtrl.id, ry: ryCtrl.id, rz: rzCtrl?.id };
   }
