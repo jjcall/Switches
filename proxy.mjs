@@ -5,6 +5,8 @@
  * (no Access-Control-Allow-Origin: * header). This proxy adds the required
  * CORS headers and forwards requests to api.anthropic.com.
  *
+ * Supports both regular and streaming (SSE) responses.
+ *
  * Usage:
  *   node proxy.mjs          # default port 3333
  *   PORT=4000 node proxy.mjs
@@ -58,15 +60,20 @@ const server = http.createServer((req, res) => {
   };
 
   const proxyReq = https.request(options, (proxyRes) => {
-    // Strip compression headers — we decompress here and send plain text.
-    // Node's http/https automatically decompresses gzip/br when we DON'T
-    // forward Accept-Encoding, so we just need to drop the response header
-    // so the browser doesn't try to decompress already-decoded bytes.
-    res.writeHead(proxyRes.statusCode ?? 200, {
+    const contentType = proxyRes.headers['content-type'] ?? 'application/json';
+    const isStreaming = contentType.includes('text/event-stream');
+
+    const responseHeaders = {
       ...CORS_HEADERS,
-      'Content-Type': proxyRes.headers['content-type'] ?? 'application/json',
-      // Explicitly omit content-encoding and transfer-encoding
-    });
+      'Content-Type': contentType,
+    };
+
+    if (isStreaming) {
+      responseHeaders['Cache-Control'] = 'no-cache';
+      responseHeaders['Connection'] = 'keep-alive';
+    }
+
+    res.writeHead(proxyRes.statusCode ?? 200, responseHeaders);
     proxyRes.pipe(res);
   });
 

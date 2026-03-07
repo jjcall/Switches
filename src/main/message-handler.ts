@@ -9,8 +9,6 @@ import type {
   ErrorMessage,
   SelectionContextMessage,
   ExecutionResultMessage,
-  ClaudeRequestMessage,
-  ClaudeResponseMessage,
   RequestImageDataMessage,
   ImageDataMessage,
   ClearPluginDataMessage,
@@ -92,47 +90,6 @@ function handleExecuteActions(msg: ExecuteActionsMessage): void {
 
 function handleError(msg: ErrorMessage): void {
   console.error(`[main] error from iframe (${msg.payload.source}):`, msg.payload.message);
-}
-
-async function handleClaudeRequest(msg: ClaudeRequestMessage): Promise<void> {
-  const { requestId, apiKey, body } = msg.payload;
-  let ok = false;
-  let status = 0;
-  let responseBody = '';
-
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body,
-    });
-    ok = response.ok;
-    status = response.status;
-    responseBody = await response.text();
-  } catch (err) {
-    // In Figma's sandbox, thrown errors may not be Error instances.
-    let message = 'Unknown fetch error';
-    if (err instanceof Error) {
-      message = err.message;
-    } else if (typeof err === 'string') {
-      message = err;
-    } else if (err && typeof err === 'object') {
-      const e = err as Record<string, unknown>;
-      message = typeof e.message === 'string' ? e.message : JSON.stringify(err);
-    }
-    responseBody = JSON.stringify({ error: { message } });
-    status = 0;
-  }
-
-  const reply: ClaudeResponseMessage = {
-    type: 'CLAUDE_RESPONSE',
-    payload: { requestId, ok, status, body: responseBody },
-  };
-  figma.ui.postMessage(reply);
 }
 
 async function handleRequestImageData(msg: RequestImageDataMessage): Promise<void> {
@@ -270,9 +227,6 @@ export function registerMessageHandler(): void {
         break;
       case 'ERROR':
         handleError(msg);
-        break;
-      case 'CLAUDE_REQUEST':
-        void handleClaudeRequest(msg);
         break;
       case 'REQUEST_IMAGE_DATA':
         void handleRequestImageData(msg);

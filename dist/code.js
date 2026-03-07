@@ -5295,6 +5295,16 @@
 
   // src/main/selection-serializer.ts
   var CHAR_BUDGET = 12e3;
+  function rd(n, places) {
+    const f = 10 ** places;
+    return Math.round(n * f) / f;
+  }
+  function rdColor(c) {
+    return { r: rd(c.r, 3), g: rd(c.g, 3), b: rd(c.b, 3) };
+  }
+  function rdColorA(c) {
+    return { r: rd(c.r, 3), g: rd(c.g, 3), b: rd(c.b, 3), a: rd(c.a, 2) };
+  }
   function serializeFills(node) {
     if (!("fills" in node) || node.fills === figma.mixed) return [];
     const fills = node.fills;
@@ -5304,8 +5314,8 @@
         const p2 = paint;
         const result2 = {
           type: "SOLID",
-          color: { r: p2.color.r, g: p2.color.g, b: p2.color.b },
-          opacity: (_a = p2.opacity) != null ? _a : 1
+          color: rdColor(p2.color),
+          opacity: rd((_a = p2.opacity) != null ? _a : 1, 2)
         };
         return result2;
       }
@@ -5314,10 +5324,10 @@
         const result2 = {
           type: p2.type,
           gradientStops: p2.gradientStops.map((s) => ({
-            position: s.position,
-            color: { r: s.color.r, g: s.color.g, b: s.color.b, a: s.color.a }
+            position: rd(s.position, 3),
+            color: rdColorA(s.color)
           })),
-          opacity: (_b = p2.opacity) != null ? _b : 1
+          opacity: rd((_b = p2.opacity) != null ? _b : 1, 2)
         };
         return result2;
       }
@@ -5325,7 +5335,7 @@
       const result = {
         type: "IMAGE",
         imageHash: (_c = p.imageHash) != null ? _c : null,
-        opacity: (_d = p.opacity) != null ? _d : 1
+        opacity: rd((_d = p.opacity) != null ? _d : 1, 2)
       };
       return result;
     });
@@ -5338,9 +5348,9 @@
     return strokes.filter((p) => p.type === "SOLID").map((p) => {
       var _a;
       return {
-        color: { r: p.color.r, g: p.color.g, b: p.color.b },
-        opacity: (_a = p.opacity) != null ? _a : 1,
-        weight,
+        color: rdColor(p.color),
+        opacity: rd((_a = p.opacity) != null ? _a : 1, 2),
+        weight: rd(weight, 1),
         alignment
       };
     });
@@ -5353,15 +5363,10 @@
         const shadow = e;
         const result2 = {
           type: e.type,
-          color: {
-            r: shadow.color.r,
-            g: shadow.color.g,
-            b: shadow.color.b,
-            a: shadow.color.a
-          },
-          offset: { x: shadow.offset.x, y: shadow.offset.y },
-          radius: shadow.radius,
-          spread: "spread" in shadow ? shadow.spread : void 0,
+          color: rdColorA(shadow.color),
+          offset: { x: rd(shadow.offset.x, 1), y: rd(shadow.offset.y, 1) },
+          radius: rd(shadow.radius, 1),
+          spread: "spread" in shadow ? rd(shadow.spread, 1) : void 0,
           visible: shadow.visible
         };
         return result2;
@@ -5369,7 +5374,7 @@
       const blur = e;
       const result = {
         type: blur.type,
-        radius: blur.radius,
+        radius: rd(blur.radius, 1),
         visible: blur.visible
       };
       return result;
@@ -5415,29 +5420,78 @@
       children: children.map((c) => ({ id: c.id, type: c.type, name: c.name }))
     };
   }
+  var PATH_CHAR_LIMIT = 2e3;
+  function roundPathCoords(data) {
+    return data.replace(/-?\d+\.\d{2,}/g, (m) => parseFloat(m).toFixed(1));
+  }
+  function serializeVectorPaths(node) {
+    if (!("vectorPaths" in node)) return void 0;
+    const vp = node.vectorPaths;
+    if (!vp || vp.length === 0) return void 0;
+    const paths = [];
+    for (const segment of vp) {
+      if (!segment.data || segment.data.trim() === "") continue;
+      let d = segment.data;
+      if (d.length > PATH_CHAR_LIMIT) {
+        d = roundPathCoords(d);
+      }
+      if (d.length > PATH_CHAR_LIMIT) {
+        continue;
+      }
+      paths.push(d);
+    }
+    return paths.length > 0 ? paths : void 0;
+  }
   function serializeNode(node) {
     const { childCount, children } = serializeChildren(node);
+    const x = "x" in node ? rd(node.x, 1) : 0;
+    const y = "y" in node ? rd(node.y, 1) : 0;
+    const width = "width" in node ? rd(node.width, 1) : 0;
+    const height = "height" in node ? rd(node.height, 1) : 0;
+    const rotation = "rotation" in node ? rd(node.rotation, 1) : 0;
+    const opacity = "opacity" in node ? rd(node.opacity, 2) : 1;
+    const visible = "visible" in node ? node.visible : true;
+    const fills = serializeFills(node);
+    const strokes = serializeStrokes(node);
+    const effects = serializeEffects(node);
+    const parentId = node.parent ? node.parent.id : null;
+    const parentName = node.parent ? node.parent.name : null;
     const base = {
       id: node.id,
       type: node.type,
       name: node.name,
-      x: "x" in node ? node.x : 0,
-      y: "y" in node ? node.y : 0,
-      width: "width" in node ? node.width : 0,
-      height: "height" in node ? node.height : 0,
-      rotation: "rotation" in node ? node.rotation : 0,
-      opacity: "opacity" in node ? node.opacity : 1,
-      visible: "visible" in node ? node.visible : true,
-      fills: serializeFills(node),
-      strokes: serializeStrokes(node),
-      effects: serializeEffects(node),
-      parentId: node.parent ? node.parent.id : null,
-      parentName: node.parent ? node.parent.name : null,
+      x,
+      y,
+      width,
+      height,
+      rotation,
+      opacity,
+      visible,
+      fills,
+      strokes,
+      effects,
+      parentId,
+      parentName,
       childCount,
       children
     };
+    const b = base;
+    if (rotation === 0) delete b.rotation;
+    if (opacity === 1) delete b.opacity;
+    if (visible) delete b.visible;
+    if (fills.length === 0) delete b.fills;
+    if (strokes.length === 0) delete b.strokes;
+    if (effects.length === 0) delete b.effects;
+    if (!parentId) {
+      delete b.parentId;
+      delete b.parentName;
+    }
     if (node.type === "TEXT") {
       Object.assign(base, serializeTextProps(node));
+    }
+    const vPaths = serializeVectorPaths(node);
+    if (vPaths) {
+      base.vectorPaths = vPaths;
     }
     const reactions = serializeReactions(node);
     if (reactions && reactions.length > 0) {
@@ -6718,43 +6772,6 @@
   function handleError(msg) {
     console.error(`[main] error from iframe (${msg.payload.source}):`, msg.payload.message);
   }
-  async function handleClaudeRequest(msg) {
-    const { requestId, apiKey, body } = msg.payload;
-    let ok = false;
-    let status = 0;
-    let responseBody = "";
-    try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "content-type": "application/json"
-        },
-        body
-      });
-      ok = response.ok;
-      status = response.status;
-      responseBody = await response.text();
-    } catch (err) {
-      let message = "Unknown fetch error";
-      if (err instanceof Error) {
-        message = err.message;
-      } else if (typeof err === "string") {
-        message = err;
-      } else if (err && typeof err === "object") {
-        const e = err;
-        message = typeof e.message === "string" ? e.message : JSON.stringify(err);
-      }
-      responseBody = JSON.stringify({ error: { message } });
-      status = 0;
-    }
-    const reply = {
-      type: "CLAUDE_RESPONSE",
-      payload: { requestId, ok, status, body: responseBody }
-    };
-    figma.ui.postMessage(reply);
-  }
   async function handleRequestImageData(msg) {
     const { requestId, nodeId, maxWidth } = msg.payload;
     try {
@@ -6865,9 +6882,6 @@
         case "ERROR":
           handleError(msg);
           break;
-        case "CLAUDE_REQUEST":
-          void handleClaudeRequest(msg);
-          break;
         case "REQUEST_IMAGE_DATA":
           void handleRequestImageData(msg);
           break;
@@ -6897,8 +6911,13 @@
   // src/main/code.ts
   figma.showUI(__html__, { width: 300, height: 120, title: "Switches" });
   registerMessageHandler();
+  var selectionTimer = null;
   figma.on("selectionchange", () => {
-    sendSelectionContext();
+    if (selectionTimer) clearTimeout(selectionTimer);
+    selectionTimer = setTimeout(() => {
+      selectionTimer = null;
+      sendSelectionContext();
+    }, 150);
   });
   console.log("[main] Plugin loaded");
 })();

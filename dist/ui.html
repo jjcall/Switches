@@ -25959,7 +25959,7 @@ body {
           }
         };
       })();
-      var linear = function linear2(_ref, _ref3) {
+      var linear2 = function linear3(_ref, _ref3) {
         var _ref2 = _slicedToArray(_ref, 2);
         var a3 = _ref2[0];
         var b3 = _ref2[1];
@@ -25970,11 +25970,11 @@ body {
           return c3 + (d3 - c3) * (x3 - a3) / (b3 - a3);
         };
         f3.inverse = function() {
-          return linear2([c3, d3], [a3, b3]);
+          return linear3([c3, d3], [a3, b3]);
         };
         return f3;
       };
-      exports["default"] = linear;
+      exports["default"] = linear2;
       module.exports = exports["default"];
     }
   });
@@ -30393,7 +30393,10 @@ body {
   // src/ui/api/claude.ts
   var PROXY_URL = "http://localhost:3333/v1/messages";
   var MODEL = "claude-sonnet-4-5";
-  var MAX_TOKENS = 16384;
+  var MAX_TOKENS_GENERATOR = 16384;
+  var MAX_TOKENS_SIMPLE = 4096;
+  var MAX_RETRIES = 3;
+  var BASE_DELAY_MS = 1e3;
   var cachedApiKey = null;
   function getStoredApiKey() {
     return cachedApiKey;
@@ -30404,7 +30407,59 @@ body {
   function clearStoredApiKey() {
     cachedApiKey = null;
   }
-  async function callClaude(messages, systemPrompt) {
+  function isRetryable(status) {
+    return status === 429 || status >= 500 && status < 600;
+  }
+  function getRetryDelay(attempt, response) {
+    if (response) {
+      const retryAfter = response.headers.get("retry-after");
+      if (retryAfter) {
+        const seconds = parseInt(retryAfter, 10);
+        if (!isNaN(seconds)) return seconds * 1e3;
+      }
+    }
+    return BASE_DELAY_MS * Math.pow(2, attempt);
+  }
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+  async function readStream(response, onPartial) {
+    const reader = response.body?.getReader();
+    if (!reader) {
+      return { ok: false, error: "Streaming response has no body." };
+    }
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let fullText = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const data = line.slice(6).trim();
+        if (data === "[DONE]") continue;
+        try {
+          const event = JSON.parse(data);
+          if (event.type === "error") {
+            return { ok: false, error: event.error?.message || "Stream error" };
+          }
+          if (event.type === "content_block_delta" && event.delta?.type === "text_delta" && event.delta.text) {
+            fullText += event.delta.text;
+            if (onPartial) onPartial(fullText);
+          }
+        } catch {
+        }
+      }
+    }
+    if (!fullText) {
+      return { ok: false, error: "API stream returned no text content." };
+    }
+    return { ok: true, text: fullText };
+  }
+  async function callClaude(messages, systemPrompt, options) {
     const apiKey = getStoredApiKey();
     if (!apiKey) {
       return {
@@ -30412,59 +30467,77 @@ body {
         error: "No API key configured. Type /key YOUR_KEY to set your Anthropic API key."
       };
     }
-    let response;
-    try {
-      response = await fetch(PROXY_URL, {
-        method: "POST",
-        headers: {
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-          "content-type": "application/json"
-        },
-        body: JSON.stringify({
-          model: MODEL,
-          max_tokens: MAX_TOKENS,
-          system: systemPrompt,
-          messages
-        })
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return {
-        ok: false,
-        error: `Cannot reach proxy at ${PROXY_URL}. Run \`node proxy.mjs\` in the project root. (${msg})`
-      };
-    }
-    if (!response.ok) {
-      let detail = "";
+    const maxTokens = options?.generatorLikely ? MAX_TOKENS_GENERATOR : MAX_TOKENS_SIMPLE;
+    const useStreaming = typeof options?.onPartialText === "function";
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      let response;
       try {
-        const body = await response.json();
-        const raw = body.error?.message;
-        if (typeof raw === "string") detail = raw;
-        else if (raw !== void 0) detail = JSON.stringify(raw);
-      } catch {
+        response = await fetch(PROXY_URL, {
+          method: "POST",
+          headers: {
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+            "anthropic-dangerous-direct-browser-access": "true",
+            "content-type": "application/json"
+          },
+          body: JSON.stringify({
+            model: MODEL,
+            max_tokens: maxTokens,
+            temperature: 0.5,
+            stream: useStreaming,
+            system: systemPrompt,
+            messages
+          })
+        });
+      } catch (err) {
+        if (attempt < MAX_RETRIES) {
+          await sleep(getRetryDelay(attempt, null));
+          continue;
+        }
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          ok: false,
+          error: `Cannot reach proxy at ${PROXY_URL}. Run \`node proxy.mjs\` in the project root. (${msg})`
+        };
       }
-      const prefix = response.status === 429 ? "Rate limited" : `API error ${response.status}`;
-      return { ok: false, error: detail ? `${prefix}: ${detail}` : prefix };
+      if (!response.ok) {
+        if (isRetryable(response.status) && attempt < MAX_RETRIES) {
+          await sleep(getRetryDelay(attempt, response));
+          continue;
+        }
+        let detail = "";
+        try {
+          const body = await response.json();
+          const raw = body.error?.message;
+          if (typeof raw === "string") detail = raw;
+          else if (raw !== void 0) detail = JSON.stringify(raw);
+        } catch {
+        }
+        const prefix = response.status === 429 ? "Rate limited" : `API error ${response.status}`;
+        return { ok: false, error: detail ? `${prefix}: ${detail}` : prefix };
+      }
+      if (useStreaming) {
+        return readStream(response, options.onPartialText);
+      }
+      let data;
+      let rawText = "";
+      try {
+        rawText = await response.text();
+        data = JSON.parse(rawText);
+      } catch {
+        return { ok: false, error: `Failed to parse API response as JSON. Raw: ${rawText.slice(0, 200)}` };
+      }
+      const textBlock = data.content?.find((b3) => b3.type === "text");
+      if (!textBlock?.text) {
+        return { ok: false, error: "API returned no text content." };
+      }
+      return { ok: true, text: textBlock.text };
     }
-    let data;
-    let rawText = "";
-    try {
-      rawText = await response.text();
-      data = JSON.parse(rawText);
-    } catch {
-      return { ok: false, error: `Failed to parse API response as JSON. Raw: ${rawText.slice(0, 200)}` };
-    }
-    const textBlock = data.content?.find((b3) => b3.type === "text");
-    if (!textBlock?.text) {
-      return { ok: false, error: "API returned no text content." };
-    }
-    return { ok: true, text: textBlock.text };
+    return { ok: false, error: "Max retries exceeded." };
   }
 
   // src/ui/prompt/system-prompt.ts
-  var SYSTEM_PROMPT = `You are a plugin designer embedded inside Figma. The user describes what they want, and you
+  var CORE_PROMPT = `You are a plugin designer embedded inside Figma. The user describes what they want, and you
 build them a custom plugin on the fly \u2014 both the canvas changes (actions) and the control panel
 (UI) to tweak the result live.
 
@@ -30963,42 +31036,117 @@ each plugin creatively for the user's specific request.
     ]
   }
 }
+`;
+  var AUTO_GENERATE_ADDENDUM = `
+## Auto-generate mode
 
-## Generator functions (the power feature for bespoke plugins)
+The user has triggered automatic control generation. Instead of waiting for a description,
+analyze the selected nodes and infer the most useful control panel for manipulating them.
 
-For apply-mode plugins, provide a "generate" field at the top level of the JSON response.
-This is a JavaScript function body string that receives two arguments:
-  - params: object keyed by control IDs with their current values
-  - lib: utility library (see below)
+Your job: reverse-engineer the selection into a set of controls that let the user tweak
+the design live. Think like a senior designer building a custom plugin for this exact
+selection.
 
-The function MUST return an array of ActionDescriptor objects (same format as "actions").
+### Analysis steps
 
-### Helper library (lib)
+1. **Inventory properties**: For each selected node, note its fill colors, stroke colors/weights,
+   effects (shadows, blurs), opacity, corner radius, dimensions, and text properties.
+2. **Find shared properties**: If multiple nodes share the same fill color, group them under
+   one color control. If they share the same corner radius, make one radius slider.
+3. **Find varying properties**: If nodes have different opacities (e.g. 0.5, 0.8, 1.0),
+   create a slider with a range that covers them. Use the most common value as defaultValue.
+4. **Infer spatial relationships**: Examine x/y positions and dimensions carefully.
+   - **Grid detection**: If nodes form rows and columns with consistent gaps, create
+     "Row Gap" and "Column Gap" sliders. Each slider action should use setProperty with
+     property "x" or "y" and a scale/offset transform so moving the slider repositions
+     nodes relative to each other. For a row of N items, item[i].x = firstX + i * (itemWidth + gap).
+   - **Even spacing**: If nodes are in a single row or column with equal spacing, create a
+     "Spacing" slider that repositions all items.
+   - **Alignment**: If some nodes share the same x or y, note they are aligned. Consider
+     alignment controls only if alignment varies.
+5. **Look for coordinated opportunities**: Can a single "depth" control drive shadow blur +
+   spread + offset together? Can a "scale" slider resize all selected nodes proportionally?
+   Can a "Grid Size" slider resize all items and recompute their positions?
 
-The lib object is available inside the generate function. It contains basic utilities,
-a full color science library (chroma.js), noise generators, easing functions, and
-vector/math helpers.
+### Rules
 
-#### Basic utilities
-  - lib.hslToRgb(h, s, l) \u2014 h in degrees (0-360), s and l in 0-1. Returns { r, g, b } in 0-1.
-  - lib.random() \u2014 seeded random number in [0, 1). ALWAYS use this instead of Math.random().
-    The RNG resets to the same seed before every generator run, so layouts (Voronoi cells,
-    scatter positions, etc.) stay stable when the user tweaks a control. Only the changed
-    property differs \u2014 the rest of the design is preserved.
-  - lib.randomColor() \u2014 returns a random vibrant { r, g, b } in 0-1. Uses the seeded RNG.
-  - lib.randomInt(min, max) \u2014 random integer in [min, max]. Uses the seeded RNG.
-  - lib.shuffle(array) \u2014 Fisher-Yates shuffle. Uses the seeded RNG.
-  - lib.reseed(newSeed?) \u2014 reset to a new random seed. Use for explicit "Randomize" buttons.
-  - lib.lerp(a, b, t) \u2014 linear interpolation.
-  - lib.clamp(val, min, max) \u2014 clamp to range.
-  - lib.hexToRgb(hex) \u2014 "#FF0000" to { r, g, b } in 0-1.
+1. Every control MUST use "action" or "actions" referencing real node IDs from the selection.
+   The nodes may be wrapped in a parent frame for grouping \u2014 always use the CHILD node IDs
+   (not the parent frame ID) in control actions.
+2. Use coordinated "actions" (array) when one control should drive the same property on
+   multiple nodes simultaneously. This is the key power of auto-generated controls.
+3. For **spatial controls** (spacing, gaps, grid layout), you MAY use a "generate" function
+   instead of per-control actions. The generator can read control values and compute x/y
+   positions for all child nodes. Use setProperty with "x"/"y" to reposition nodes.
+   When using a generator, provide an "actionTemplate" that maps each control change
+   to re-execution of the generator.
+4. Set "replace": true \u2014 this is a fresh control panel.
+5. Set "actions": [] at the top level \u2014 no canvas changes on initial generation. The controls
+   themselves handle all updates via their action/actions fields.
+6. Set defaultValue on every control to match the current canvas state exactly, so nothing
+   changes until the user interacts.
+7. Aim for 3\u20138 controls. Be opinionated: pick the controls that give the most design leverage.
+   Don't dump every property as a control.
+8. Prioritize visual properties (fill, opacity, corner radius, effects, stroke) AND spatial
+   properties (gaps, spacing, sizing) when a clear layout pattern exists. For a grid of
+   identical items, gap/spacing controls are MORE useful than individual property controls.
+9. Give controls clear, human-friendly labels (e.g. "Shadow Depth" not "dropShadowRadius").
+10. Use the most appropriate control type for each property:
+    - color \u2192 color control
+    - opacity, radius, numeric ranges \u2192 slider
+    - boolean (visible, clip) \u2192 toggle
+    - small set of options \u2192 segmented
+    - font weight, blend mode \u2192 select
+11. For shadow/effect controls, use the property-patch form in actions (property + effectType).
 
-  CRITICAL: Never use Math.random() in generators. Always use lib.random(), lib.randomColor(),
-  lib.randomInt(), or lib.shuffle(). These use a deterministic seed so layouts stay stable
-  across control changes. If the user wants a "Randomize" button, add a control that calls
-  lib.reseed() before the layout logic.
+### Example auto-generated output for 3 rectangles with the same blue fill and different corner radii
 
-#### Color science (lib.chroma) \u2014 chroma.js
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "controls": [
+      {
+        "id": "fillColor",
+        "type": "color",
+        "label": "Fill Color",
+        "props": { "defaultValue": "#3B82F6" },
+        "actions": [
+          { "method": "setFill", "nodeId": "1:2", "args": { "property": "color" } },
+          { "method": "setFill", "nodeId": "1:3", "args": { "property": "color" } },
+          { "method": "setFill", "nodeId": "1:4", "args": { "property": "color" } }
+        ]
+      },
+      {
+        "id": "cornerRadius",
+        "type": "slider",
+        "label": "Corner Radius",
+        "props": { "min": 0, "max": 50, "step": 1, "defaultValue": 8 },
+        "actions": [
+          { "method": "setCornerRadius", "nodeId": "1:2", "args": {} },
+          { "method": "setCornerRadius", "nodeId": "1:3", "args": {} },
+          { "method": "setCornerRadius", "nodeId": "1:4", "args": {} }
+        ]
+      },
+      {
+        "id": "opacity",
+        "type": "slider",
+        "label": "Opacity",
+        "props": { "min": 0, "max": 1, "step": 0.01, "defaultValue": 1 },
+        "actions": [
+          { "method": "setProperty", "nodeId": "1:2", "args": { "property": "opacity" } },
+          { "method": "setProperty", "nodeId": "1:3", "args": { "property": "opacity" } },
+          { "method": "setProperty", "nodeId": "1:4", "args": { "property": "opacity" } }
+        ]
+      }
+    ]
+  }
+}
+`;
+
+  // src/ui/prompt/prompt-modules.ts
+  var MODULE_GENERATOR_INTRO = '## Generator functions (the power feature for bespoke plugins)\n\nFor apply-mode plugins, provide a "generate" field at the top level of the JSON response.\nThis is a JavaScript function body string that receives two arguments:\n  - params: object keyed by control IDs with their current values\n  - lib: utility library (see below)\n\nThe function MUST return an array of ActionDescriptor objects (same format as "actions").\n\n### Helper library (lib)\n\nThe lib object is available inside the generate function. It contains basic utilities,\na full color science library (chroma.js), noise generators, easing functions, and\nvector/math helpers.\n\n#### Basic utilities\n  - lib.hslToRgb(h, s, l) \u2014 h in degrees (0-360), s and l in 0-1. Returns { r, g, b } in 0-1.\n  - lib.random() \u2014 seeded random number in [0, 1). ALWAYS use this instead of Math.random().\n    The RNG resets to the same seed before every generator run, so layouts (Voronoi cells,\n    scatter positions, etc.) stay stable when the user tweaks a control. Only the changed\n    property differs \u2014 the rest of the design is preserved.\n  - lib.randomColor() \u2014 returns a random vibrant { r, g, b } in 0-1. Uses the seeded RNG.\n  - lib.randomInt(min, max) \u2014 random integer in [min, max]. Uses the seeded RNG.\n  - lib.shuffle(array) \u2014 Fisher-Yates shuffle. Uses the seeded RNG.\n  - lib.reseed(newSeed?) \u2014 reset to a new random seed. Use for explicit "Randomize" buttons.\n  - lib.lerp(a, b, t) \u2014 linear interpolation.\n  - lib.clamp(val, min, max) \u2014 clamp to range.\n  - lib.hexToRgb(hex) \u2014 "#FF0000" to { r, g, b } in 0-1.\n\n  CRITICAL: Never use Math.random() in generators. Always use lib.random(), lib.randomColor(),\n  lib.randomInt(), or lib.shuffle(). These use a deterministic seed so layouts stay stable\n  across control changes. If the user wants a "Randomize" button, add a control that calls\n  lib.reseed() before the layout logic.';
+  var MODULE_CHROMA = `#### Color science (lib.chroma) \u2014 chroma.js
 
 Full chroma.js library for professional color manipulation. Key methods:
 
@@ -31036,73 +31184,12 @@ Full chroma.js library for professional color manipulation. Key methods:
 
   Converting to Figma { r, g, b } (0-1 range):
   - lib.chromaToFigma(chromaColor)  \u2014 e.g. lib.chromaToFigma(lib.chroma('#f00').saturate(2))
-    Returns { r, g, b } in 0-1 for direct use in setFill paint objects.
-
-#### Noise (lib.noise) \u2014 simplex-noise
-
-Deterministic noise for organic/procedural generation. Returns values in [-1, 1].
-
-  - lib.noise.noise2D(x, y)          \u2014 2D noise
-  - lib.noise.noise3D(x, y, z)       \u2014 3D noise (use z as "time" for animation)
-  - lib.noise.noise4D(x, y, z, w)    \u2014 4D noise
-
-  Custom-seeded noise (for reproducible results):
-  - lib.createNoise2D()              \u2014 new random-seeded 2D noise function
-  - lib.createNoise3D()              \u2014 new random-seeded 3D noise function
-
-  Typical usage: scale inputs to control frequency (smaller = smoother).
-  Example: lib.noise.noise2D(x * 0.02, y * 0.02) for large smooth variation.
-
-#### Easing (lib.easing / lib.easings) \u2014 bezier-easing
-
-Cubic-bezier easing identical to CSS transition-timing-function.
-
-  Custom easing:
-  - lib.easing(x1, y1, x2, y2)      \u2014 returns a function: (t: 0-1) => value: 0-1
-    Example: const ease = lib.easing(0.25, 0.1, 0.25, 1.0); ease(0.5) // 0.80
-
-  Presets (each is a function: (t: 0-1) => value):
-  - lib.easings.linear
-  - lib.easings.easeIn / easeOut / easeInOut
-  - lib.easings.easeInCubic / easeOutCubic / easeInOutCubic
-  - lib.easings.easeInBack / easeOutBack / easeInOutBack
-
-#### Vector & math utilities
-
-  - lib.vec2(x, y) \u2014 creates a 2D vector with methods:
-    .add(other), .sub(other), .scale(s), .rotate(angleDeg), .length(), .normalize()
-  - lib.polarToXY(angleDeg, radius) \u2014 returns { x, y }
-  - lib.degToRad(deg) / lib.radToDeg(rad) \u2014 angle conversion
-  - lib.mapRange(value, inMin, inMax, outMin, outMax) \u2014 remap a value between ranges
-  - lib.shuffle(array) \u2014 Fisher-Yates shuffle, returns new array
-  - lib.distribute(count, min, max) \u2014 returns array of evenly spaced values
-
-#### Geometry (lib.Delaunay) \u2014 d3-delaunay
-
-Compute Voronoi diagrams and Delaunay triangulations from 2D points. Produces SVG path
-strings that feed directly into createVector actions.
-
-  Creating a triangulation:
-  - lib.Delaunay.from(points)  \u2014 points is [[x1,y1], [x2,y2], ...]
-    Returns a Delaunay object.
-
-  Creating a Voronoi diagram:
-  - delaunay.voronoi([xmin, ymin, xmax, ymax])  \u2014 bounded Voronoi
-    Returns a Voronoi object.
-
-  Getting cell geometry (SVG path strings for createVector):
-  - voronoi.renderCell(i)      \u2014 SVG path string for cell i (use as createVector data arg)
-  - voronoi.cellPolygon(i)     \u2014 [[x,y], ...] vertex array for cell i
-  - delaunay.renderTriangle(i) \u2014 SVG path string for triangle i
-
-  Typical usage with image processing:
-  1. Generate seed points (random, grid-jittered, or brightness-weighted)
-  2. Compute Voronoi: const v = lib.Delaunay.from(points).voronoi([0,0,w,h])
-  3. For each cell i, get path: v.renderCell(i)
-  4. Create vector: { method: 'createVector', parentId: 'root', args: { data: path } }
-  5. Color by sampling image: lib.getPixel(points[i][0], points[i][1])
-
-#### Image pixel data (lib.imageData)
+    Returns { r, g, b } in 0-1 for direct use in setFill paint objects.`;
+  var MODULE_NOISE = '#### Noise (lib.noise) \u2014 simplex-noise\n\nDeterministic noise for organic/procedural generation. Returns values in [-1, 1].\n\n  - lib.noise.noise2D(x, y)          \u2014 2D noise\n  - lib.noise.noise3D(x, y, z)       \u2014 3D noise (use z as "time" for animation)\n  - lib.noise.noise4D(x, y, z, w)    \u2014 4D noise\n\n  Custom-seeded noise (for reproducible results):\n  - lib.createNoise2D()              \u2014 new random-seeded 2D noise function\n  - lib.createNoise3D()              \u2014 new random-seeded 3D noise function\n\n  Typical usage: scale inputs to control frequency (smaller = smoother).\n  Example: lib.noise.noise2D(x * 0.02, y * 0.02) for large smooth variation.';
+  var MODULE_EASING = "#### Easing (lib.easing / lib.easings) \u2014 bezier-easing\n\nCubic-bezier easing identical to CSS transition-timing-function.\n\n  Custom easing:\n  - lib.easing(x1, y1, x2, y2)      \u2014 returns a function: (t: 0-1) => value: 0-1\n    Example: const ease = lib.easing(0.25, 0.1, 0.25, 1.0); ease(0.5) // 0.80\n\n  Presets (each is a function: (t: 0-1) => value):\n  - lib.easings.linear\n  - lib.easings.easeIn / easeOut / easeInOut\n  - lib.easings.easeInCubic / easeOutCubic / easeInOutCubic\n  - lib.easings.easeInBack / easeOutBack / easeInOutBack";
+  var MODULE_VECTORS = "#### Vector & math utilities\n\n  - lib.vec2(x, y) \u2014 creates a 2D vector with methods:\n    .add(other), .sub(other), .scale(s), .rotate(angleDeg), .length(), .normalize()\n  - lib.polarToXY(angleDeg, radius) \u2014 returns { x, y }\n  - lib.degToRad(deg) / lib.radToDeg(rad) \u2014 angle conversion\n  - lib.mapRange(value, inMin, inMax, outMin, outMax) \u2014 remap a value between ranges\n  - lib.shuffle(array) \u2014 Fisher-Yates shuffle, returns new array\n  - lib.distribute(count, min, max) \u2014 returns array of evenly spaced values";
+  var MODULE_DELAUNAY = "#### Geometry (lib.Delaunay) \u2014 d3-delaunay\n\nCompute Voronoi diagrams and Delaunay triangulations from 2D points. Produces SVG path\nstrings that feed directly into createVector actions.\n\n  Creating a triangulation:\n  - lib.Delaunay.from(points)  \u2014 points is [[x1,y1], [x2,y2], ...]\n    Returns a Delaunay object.\n\n  Creating a Voronoi diagram:\n  - delaunay.voronoi([xmin, ymin, xmax, ymax])  \u2014 bounded Voronoi\n    Returns a Voronoi object.\n\n  Getting cell geometry (SVG path strings for createVector):\n  - voronoi.renderCell(i)      \u2014 SVG path string for cell i (use as createVector data arg)\n  - voronoi.cellPolygon(i)     \u2014 [[x,y], ...] vertex array for cell i\n  - delaunay.renderTriangle(i) \u2014 SVG path string for triangle i\n\n  Typical usage with image processing:\n  1. Generate seed points (random, grid-jittered, or brightness-weighted)\n  2. Compute Voronoi: const v = lib.Delaunay.from(points).voronoi([0,0,w,h])\n  3. For each cell i, get path: v.renderCell(i)\n  4. Create vector: { method: 'createVector', parentId: 'root', args: { data: path } }\n  5. Color by sampling image: lib.getPixel(points[i][0], points[i][1])";
+  var MODULE_IMAGE = `#### Image pixel data (lib.imageData)
 
 When the UISpec includes an "imageNodeId" field, the runtime pre-fetches pixel data from
 that Figma node (downscaled to ~100px wide for performance) before running the generator.
@@ -31270,9 +31357,8 @@ per-area, or chain with other pixel operations.
         }
       }
       ctx.putImageData(full, 0, 0);
-    });
-
-#### Canvas rendering from scratch (lib.renderCanvas)
+    });`;
+  var MODULE_CANVAS = `#### Canvas rendering from scratch (lib.renderCanvas)
 
 For generating pattern tiles or any canvas-drawn image without a source image, use
 lib.renderCanvas. Unlike lib.processImage, it does NOT require imageNodeId \u2014 it creates
@@ -31292,9 +31378,9 @@ a blank canvas and lets the generator draw on it freely.
       ctx.arc(32, 32, 8, 0, Math.PI * 2);
       ctx.fill();
     });
-    // then: { method: 'applyImageFill', args: { imageBytes: bytes, scaleMode: 'TILE', width: 400, height: 400 } }
-
-#### 3D projection (lib.rotate3D, lib.project3D)
+    // then: { method: 'applyImageFill', args: { imageBytes: bytes, scaleMode: 'TILE', width: 400, height: 400 } }`;
+  var MODULE_REACTION_DIFFUSION = "#### Reaction-diffusion / Turing patterns (lib.reactionDiffusion)\n\nGenerate organic biological patterns (worm labyrinths, spots, coral, fingerprints)\nusing a Gray-Scott reaction-diffusion simulation. Pure math, no external dependencies.\n\n  lib.reactionDiffusion(width, height, options?) \u2014 runs the simulation on an internal grid,\n  renders the result as a PNG, and returns number[] for applyImageFill. Synchronous.\n\n  CRITICAL \u2014 diffusion rates: ALWAYS use dA=0.21, dB=0.105 (the Pearson 1993 standard).\n  Never use dA=1.0, dB=0.5 \u2014 those values cause numerical blow-up with this Laplacian.\n\n  Options (all optional):\n  - feed: feed rate (default 0.04). Labyrinth/maze patterns: 0.03\u20130.05.\n  - kill: kill rate (default 0.06). Works with feed:\n      feed 0.04, kill 0.06  \u2192 worm labyrinth (like the reference images)\n      feed 0.03, kill 0.057 \u2192 fingerprint / dense stripes\n      feed 0.05, kill 0.065 \u2192 spots / mitosis\n      feed 0.025, kill 0.06 \u2192 sparse isolated dots\n  - iterations: simulation steps (default 3000). 1500 = partial, 5000 = fully developed.\n  - gridSize: internal grid resolution (default 200). 100 = fast/coarse, 200 = good, 300 = fine.\n    Output always scales to width\xD7height regardless of gridSize.\n  - dA: diffusion rate A (default 0.21 \u2014 do not change unless experimenting)\n  - dB: diffusion rate B (default 0.105 \u2014 do not change unless experimenting)\n  - color: foreground color hex (default '#000000')\n  - background: background color hex (default '#ffffff')\n  - threshold: 0\u20131. 0 = smooth gradient (default). 0.4\u20130.6 = sharp crisp edges.\n\n  Usage \u2014 IMPORTANT: use applyImageFill with targetNodeId pointing to the root frame\n  so the image replaces the frame fill on re-apply (not as a child rectangle):\n    const bytes = lib.reactionDiffusion(params.size, params.size, {\n      feed: params.feed,\n      kill: params.kill,\n      iterations: params.iterations,\n      color: params.color,\n      background: params.bg,\n      threshold: params.threshold\n    });\n    // Apply as a fill on the root frame itself using targetNodeId: 'root'\n    actions.push({ method: 'applyImageFill', args: {\n      targetNodeId: 'root',\n      imageBytes: bytes,\n      scaleMode: 'FILL'\n    } });\n\n  Frame sizing: the createFrame width/height should equal params.size so frame\n  grows/shrinks when the user changes the size slider.\n\n  Recommended controls:\n  - feed: slider min 0.01, max 0.08, step 0.001, default 0.04\n  - kill: slider min 0.04, max 0.075, step 0.001, default 0.06\n  - iterations: slider min 500, max 8000, step 100, default 3000\n  - gridSize: slider min 64, max 300, step 8, default 200\n  - size: slider min 200, max 800, step 50, default 400\n  - threshold: slider min 0, max 1, step 0.05, default 0\n  - color / bg: color pickers\n\n  The simulation uses lib.random() for seeding \u2014 patterns are stable across re-runs.\n  Add a Randomize button that calls lib.reseed() before the reactionDiffusion call.\n\n#### Vector Turing patterns (lib.reactionDiffusionSVG)\n\nFor crisp, scalable output use lib.reactionDiffusionSVG instead. It runs the same\nGray-Scott simulation but converts the result to SVG contour paths via marching squares,\nproducing a single editable vector node in Figma \u2014 no raster blur.\n\n  lib.reactionDiffusionSVG(width, height, options?) \u2014 returns an SVG path string.\n  Use the result as the 'data' arg for createVector with windingRule 'EVENODD'.\n\n  Options (same simulation params as reactionDiffusion, minus color/background):\n  - feed, kill, iterations, gridSize, dA, dB \u2014 same as reactionDiffusion\n  - threshold: 0\u20131 (default 0.5). The iso-contour level. 0.5 = typical Turing pattern.\n  - smoothing: number of Chaikin smoothing passes (default 2). 0 = jagged, 2\u20133 = organic.\n\n  Usage:\n    const pathData = lib.reactionDiffusionSVG(params.size, params.size, {\n      feed: params.feed, kill: params.kill,\n      iterations: params.iterations, threshold: params.threshold || 0.5\n    });\n    actions.push({ method: 'createVector', parentId: 'root',\n      args: { data: pathData, windingRule: 'EVENODD', x: 0, y: 0, name: 'Turing Pattern' } });\n    actions.push({ method: 'setFill', nodeId: '__prev',\n      args: { fills: [{ type: 'SOLID', color: lib.hexToRgb(params.color) }] } });\n\n  IMPORTANT \u2014 prefer lib.reactionDiffusionSVG over lib.reactionDiffusion when the user\n  asks for 'vector', 'crisp', 'sharp', 'scalable', or 'clean' Turing patterns.\n  Use the raster version only when the user explicitly wants a bitmap/image fill.";
+  var MODULE_3D = `#### 3D projection (lib.rotate3D, lib.project3D)
 
 Pure-math 3D rendering pipeline. Rotates and perspective-projects 3D points to 2D,
 then uses createVector to create editable Figma vectors from the projected geometry.
@@ -31314,9 +31400,15 @@ then uses createVector to create editable Figma vectors from the projected geome
   - lib.sphere(radius, segments) \u2014 UV sphere. segments controls resolution (default 12)
   - lib.torus(majorRadius, minorRadius, segments) \u2014 torus/donut (default segments 16)
 
-  Path utility:
+  Path utilities:
   - lib.pointsToSvgPath(points2D, closed) \u2014 converts [{x,y}...] to SVG path string.
     closed defaults to true. Use as the "data" arg for createVector.
+  - lib.samplePath(svgPathData, count) \u2014 samples count evenly-spaced points along an SVG path
+    string. Returns Array<{ x, y, angle }> where angle is the tangent direction in degrees
+    (0 = right, 90 = down). Use this to distribute objects along a user-drawn vector path.
+    The svgPathData comes from the selection context's vectorPaths field.
+  - lib.pathBounds(svgPathData) \u2014 returns { x, y, width, height } bounding box of an SVG path.
+    Use this to scale or position generated content relative to a reference path shape.
 
   Typical workflow:
   1. Get a mesh: const mesh = lib.cube(200)
@@ -31368,53 +31460,9 @@ One equation produces circles, stars, flowers, starfish, blobs, leaves, and ever
 
   Usage: generate the path, center it on the frame, emit one createVector action.
     const path = lib.superformulaPath({ m: params.petals, n1: params.roundness, n2: 1, n3: 1 }, 256, params.size / 2);
-    actions.push({ method: 'createVector', parentId: 'root', args: { data: path, x: cx, y: cy, name: 'Shape' } });
-
-#### L-Systems & fractals (lib.LSystem) \u2014 lindenmayer
-
-L-Systems (Lindenmayer systems) generate fractal trees, snowflakes, space-filling curves,
-branching coral, ferns, and other recursive/botanical patterns from simple grammar rules.
-
-  Creating an L-System:
-  - new lib.LSystem({ axiom, productions, iterations })
-    axiom: starting string (e.g. 'F')
-    productions: object mapping symbols to replacements (e.g. { 'F': 'F[+F]F[-F]F' })
-  - lsystem.iterate(n) \u2014 run n iterations, returns the result string
-  - lsystem.getString() \u2014 get the current string after iterations
-
-  The generator interprets the result string as turtle graphics commands:
-  - 'F' \u2014 move forward (draw a line segment)
-  - '+' \u2014 turn right by angle
-  - '-' \u2014 turn left by angle
-  - '[' \u2014 push position/angle onto stack (start branch)
-  - ']' \u2014 pop position/angle from stack (end branch)
-
-  Common presets:
-  - Fractal tree: axiom 'F', productions { 'F': 'FF+[+F-F-F]-[-F+F+F]' }
-  - Koch curve:   axiom 'F++F++F', productions { 'F': 'F-F++F-F' }
-  - Sierpinski:   axiom 'F-G-G', productions { 'F': 'F-G+F+G-F', 'G': 'GG' }
-  - Dragon curve: axiom 'FX', productions { 'X': 'X+YF+', 'Y': '-FX-Y' }
-  - Fern:         axiom 'X', productions { 'X': 'F+[[X]-X]-F[-FX]+X', 'F': 'FF' }
-
-  Turtle interpreter pattern (write this in the generator):
-    const lsys = new lib.LSystem({ axiom: 'F', productions: { 'F': 'FF+[+F-F-F]-[-F+F+F]' } });
-    const result = lsys.iterate(params.iterations);
-    let x = startX, y = startY, angle = -90;
-    const stack = [];
-    let path = 'M ' + x + ' ' + y;
-    for (const ch of result) {
-      if (ch === 'F' || ch === 'G') {
-        x += Math.cos(angle * Math.PI / 180) * params.length;
-        y += Math.sin(angle * Math.PI / 180) * params.length;
-        path += ' L ' + x.toFixed(2) + ' ' + y.toFixed(2);
-      } else if (ch === '+') { angle += params.angle; }
-      else if (ch === '-') { angle -= params.angle; }
-      else if (ch === '[') { stack.push({ x, y, angle }); }
-      else if (ch === ']') { const s = stack.pop(); x = s.x; y = s.y; angle = s.angle; path += ' M ' + x.toFixed(2) + ' ' + y.toFixed(2); }
-    }
-    actions.push({ method: 'createVector', parentId: 'root', args: { data: path, name: 'fractal' } });
-
-#### QR codes (lib.QRCode) \u2014 qrcode-svg
+    actions.push({ method: 'createVector', parentId: 'root', args: { data: path, x: cx, y: cy, name: 'Shape' } });`;
+  var MODULE_LSYSTEM = "#### L-Systems & fractals (lib.LSystem) \u2014 lindenmayer\n\nL-Systems (Lindenmayer systems) generate fractal trees, snowflakes, space-filling curves,\nbranching coral, ferns, and other recursive/botanical patterns from simple grammar rules.\n\n  Creating an L-System:\n  - new lib.LSystem({ axiom, productions, iterations })\n    axiom: starting string (e.g. 'F')\n    productions: object mapping symbols to replacements (e.g. { 'F': 'F[+F]F[-F]F' })\n  - lsystem.iterate(n) \u2014 run n iterations, returns the result string\n  - lsystem.getString() \u2014 get the current string after iterations\n\n  The generator interprets the result string as turtle graphics commands:\n  - 'F' \u2014 move forward (draw a line segment)\n  - '+' \u2014 turn right by angle\n  - '-' \u2014 turn left by angle\n  - '[' \u2014 push position/angle onto stack (start branch)\n  - ']' \u2014 pop position/angle from stack (end branch)\n\n  Common presets:\n  - Fractal tree: axiom 'F', productions { 'F': 'FF+[+F-F-F]-[-F+F+F]' }\n  - Koch curve:   axiom 'F++F++F', productions { 'F': 'F-F++F-F' }\n  - Sierpinski:   axiom 'F-G-G', productions { 'F': 'F-G+F+G-F', 'G': 'GG' }\n  - Dragon curve: axiom 'FX', productions { 'X': 'X+YF+', 'Y': '-FX-Y' }\n  - Fern:         axiom 'X', productions { 'X': 'F+[[X]-X]-F[-FX]+X', 'F': 'FF' }\n\n  Turtle interpreter pattern (write this in the generator):\n    const lsys = new lib.LSystem({ axiom: 'F', productions: { 'F': 'FF+[+F-F-F]-[-F+F+F]' } });\n    const result = lsys.iterate(params.iterations);\n    let x = startX, y = startY, angle = -90;\n    const stack = [];\n    let path = 'M ' + x + ' ' + y;\n    for (const ch of result) {\n      if (ch === 'F' || ch === 'G') {\n        x += Math.cos(angle * Math.PI / 180) * params.length;\n        y += Math.sin(angle * Math.PI / 180) * params.length;\n        path += ' L ' + x.toFixed(2) + ' ' + y.toFixed(2);\n      } else if (ch === '+') { angle += params.angle; }\n      else if (ch === '-') { angle -= params.angle; }\n      else if (ch === '[') { stack.push({ x, y, angle }); }\n      else if (ch === ']') { const s = stack.pop(); x = s.x; y = s.y; angle = s.angle; path += ' M ' + x.toFixed(2) + ' ' + y.toFixed(2); }\n    }\n    actions.push({ method: 'createVector', parentId: 'root', args: { data: path, name: 'fractal' } });";
+  var MODULE_QRCODE = `#### QR codes (lib.QRCode) \u2014 qrcode-svg
 
 Generate vector QR codes from any text or URL. The output is an SVG path string that feeds
 directly into createVector, producing a fully scalable vector QR code in Figma.
@@ -31452,9 +31500,8 @@ directly into createVector, producing a fully scalable vector QR code in Figma.
     if (pathMatch) {
       actions.push({ method: 'createVector', parentId: 'root',
         args: { data: pathMatch[1], name: 'QR Code' } });
-    }
-
-#### Flow fields & streamlines (lib.computeStreamlines)
+    }`;
+  var MODULE_FLOWFIELD = `#### Flow fields & streamlines (lib.computeStreamlines)
 
 Generates evenly-spaced flow lines through a 2D vector field. Produces beautiful
 sweeping line patterns for backgrounds, data visualization, or generative art.
@@ -31506,336 +31553,9 @@ sweeping line patterns for backgrounds, data visualization, or generative art.
   - Noise-based: angle = noise2D(x * freq, y * freq) * PI * 2
   - Circular/vortex: return { x: -(p.y - cy), y: p.x - cx }
   - Dipole/magnetic: compute from two charge positions
-  - Sink/source: return { x: p.x - cx, y: p.y - cy } (or negated)
-
-#### Charts & data visualization (lib.charts) \u2014 paths-js
-
-Pure SVG path generation for charts. Each chart function takes data and dimensions, returns
-objects with SVG paths ready for createVector. No DOM, no rendering \u2014 just geometry.
-
-Available chart types:
-  - lib.charts.Bar({ data, width, height, gutter, accessor, max })
-    data: array of arrays (groups of bars). Each inner array = one group.
-    accessor: function to extract numeric value from item (default: identity).
-    gutter: space between bar groups (default 10).
-    Returns { curves, scale }. Each curve has .line.path.print() \u2192 SVG path string,
-    plus .item, .index, .group.
-
-  - lib.charts.Pie({ data, accessor, center, r, R })
-    data: array of items. accessor: extracts numeric value. center: [x,y].
-    r: inner radius (0 for full pie, >0 for donut). R: outer radius.
-    Returns { curves }. Each curve has .sector.path.print() \u2192 SVG path, .sector.centroid.
-
-  - lib.charts.SmoothLine({ data, xaccessor, yaccessor, width, height })
-    data: array of series \u2014 e.g. [[ [0,20], [1,45], [2,35], [3,70] ]].
-    IMPORTANT: each series is an array of [x,y] pairs, and data is wrapped in an outer array.
-    You MUST provide xaccessor and yaccessor: xaccessor: d => d[0], yaccessor: d => d[1].
-    width/height: chart dimensions in pixels.
-    Returns { curves }. Each curve has .line.path.print() \u2192 smooth SVG path,
-    .area.path.print() \u2192 filled area path below the line.
-
-  - lib.charts.Radar({ data, accessor, center, r, max, rings })
-    data: array of objects with named properties. accessor: optional { key: fn } map.
-    Returns { curves, rings }. Each curve has .polygon.path.print(). rings are guide polygons.
-
-  Key patterns:
-  - Call .path.print() on any path object to get the SVG path string for createVector
-  - All coordinates are pre-computed \u2014 pass the path string directly as createVector data arg
-  - Use lib.chroma for chart colors, create one createVector per bar/slice/line
-
-  Bar chart example:
-    const chart = lib.charts.Bar({
-      data: [values.map(v => v)],  // single series
-      width: params.chartWidth, height: params.chartHeight, gutter: params.gap
-    });
-    chart.curves.forEach((curve, i) => {
-      actions.push({ method: 'createVector', parentId: 'root',
-        args: { data: curve.line.path.print(), name: 'bar-' + i } });
-      actions.push({ method: 'setFill', nodeId: '__prev',
-        args: { fills: [{ type: 'SOLID', color: lib.chromaToFigma(barColor) }] } });
-    });
-
-  Pie chart example:
-    const chart = lib.charts.Pie({
-      data: values, accessor: d => d, center: [cx, cy], r: innerR, R: outerR
-    });
-    chart.curves.forEach((curve, i) => {
-      actions.push({ method: 'createVector', parentId: 'root',
-        args: { data: curve.sector.path.print(), name: 'slice-' + i } });
-    });
-
-#### Native vector patterns (lib.selectionId, applyPatternFill)
-
-For resolution-independent tiled patterns, use the native Figma PATTERN fill type. The tile
-source is any node \u2014 one the generator creates (referenced by tempId) or the currently selected
-node. Unlike renderCanvas patterns, the output is fully vector and the tile source remains
-editable on the canvas after generation.
-
-  lib.selectionId \u2014 the currently selected node's Figma ID. Use as sourceNodeId to "patternize"
-  whatever the user has selected, with no node creation needed.
-
-  applyPatternFill action args:
-  - sourceNodeId (required) \u2014 Figma node ID or tempId of the tile source
-  - tileType \u2014 'RECTANGULAR' (default) | 'HORIZONTAL_HEXAGONAL' | 'VERTICAL_HEXAGONAL'
-  - scalingFactor \u2014 scale of the tile: 1 = 100%, 0.5 = 50% (default 1)
-  - spacingX / spacingY \u2014 gap between tiles as a ratio (0 = no gap, 0.2 = 20% gap, default 0)
-  - width, height, x, y, name \u2014 target fill rectangle dimensions and position
-  - targetNodeId \u2014 if set, applies fill to an existing node instead of creating a new rectangle
-
-  IMPORTANT: Must use setFillsAsync (not fills=) \u2014 handled automatically by the executor.
-
-  Typical workflow for generated vector tile:
-  1. Create a small frame (e.g., 40x40) to serve as the tile: { method: 'createFrame', tempId: 'tile', args: { width: 40, height: 40 } }
-  2. Add vector shapes inside it: { method: 'createEllipse', parentId: 'tile', args: { x: 5, y: 5, width: 30, height: 30 } }
-  3. Apply as pattern fill on a large rectangle:
-     { method: 'applyPatternFill', parentId: 'root', args: { sourceNodeId: 'tile', tileType: 'HORIZONTAL_HEXAGONAL', spacingX: 0.1, spacingY: 0.1, width: 600, height: 600, name: 'Pattern' } }
-
-  Patternize selection workflow (no tile creation needed):
-  1. Check lib.selectionId is not null
-  2. Emit one action: { method: 'applyPatternFill', args: { sourceNodeId: lib.selectionId, tileType: params.tileType, scalingFactor: params.scale, spacingX: params.spacing, spacingY: params.spacing, width: 600, height: 600, name: 'Pattern' } }
-
-  Prefer applyPatternFill over renderCanvas + applyImageFill whenever the tile can be drawn
-  as vector nodes \u2014 vector patterns are resolution-independent and the tile stays editable.
-
-### Supported create methods
-
-In addition to createRectangle, createFrame, and createText, generators can also use:
-  - createEllipse: creates an ellipse node. Args: x, y, width, height, name (all optional).
-    Perfect for dot patterns, halftone art, circle-based designs.
-  - createVector: creates a vector node from an SVG path string. Args: data (SVG path string,
-    e.g. "M 0 0 L 100 0 L 50 86 Z"), windingRule ("NONZERO" or "EVENODD", default "NONZERO"),
-    x, y, name. Figma auto-sizes the node to fit the path vertices.
-    Use for arbitrary shapes: Voronoi cells, triangles, polygons, organic forms.
-
-### Generator example: colorful circle grid
-
-{
-  "actions": [],
-  "ui": {
-    "replace": true,
-    "controls": [
-      { "id": "columns", "type": "slider", "label": "Columns", "props": { "min": 2, "max": 12, "step": 1, "defaultValue": 6 } },
-      { "id": "size", "type": "slider", "label": "Circle Size", "props": { "min": 8, "max": 48, "step": 1, "defaultValue": 16 } },
-      { "id": "spacing", "type": "slider", "label": "Spacing", "props": { "min": 0, "max": 24, "step": 1, "defaultValue": 8 } }
-    ]
-  },
-  "generate": "const cols = params.columns || 6;\\nconst size = params.size || 16;\\nconst spacing = params.spacing || 8;\\nconst frameW = cols * (size + spacing) - spacing;\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'grid', args: { x: 100, y: 100, width: frameW, height: frameW, name: 'Circle Grid' } });\\nfor (let row = 0; row < cols; row++) {\\n  for (let col = 0; col < cols; col++) {\\n    const x = col * (size + spacing);\\n    const y = row * (size + spacing);\\n    actions.push({ method: 'createEllipse', parentId: 'grid', args: { x: x, y: y, width: size, height: size } });\\n    const color = lib.randomColor();\\n    actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [{ type: 'SOLID', color: color }] } });\\n  }\\n}\\nreturn actions;"
-}
-
-### Generator example: color palette with saturation control
-
-{
-  "actions": [],
-  "ui": {
-    "replace": true,
-    "controls": [
-      { "id": "baseColor", "type": "color", "label": "Base Color", "props": { "defaultValue": "#3B82F6" } },
-      { "id": "count", "type": "slider", "label": "Swatches", "props": { "min": 3, "max": 12, "step": 1, "defaultValue": 5 } },
-      { "id": "saturation", "type": "slider", "label": "Saturation", "props": { "min": 0, "max": 3, "step": 0.1, "defaultValue": 1 } }
-    ]
-  },
-  "generate": "const base = lib.chroma(params.baseColor || '#3B82F6');\\nconst count = params.count || 5;\\nconst sat = params.saturation ?? 1;\\nconst size = 48;\\nconst gap = 8;\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'palette', args: { x: 100, y: 100, width: count * (size + gap) - gap, height: size, name: 'Palette' } });\\nactions.push({ method: 'setLayoutProperties', nodeId: 'palette', args: { layoutMode: 'HORIZONTAL', itemSpacing: gap } });\\nfor (let i = 0; i < count; i++) {\\n  const hueShift = (i / count) * 60 - 30;\\n  const c = base.set('hsl.h', '+' + hueShift).saturate(sat - 1);\\n  const rgb = lib.chromaToFigma(c);\\n  actions.push({ method: 'createRectangle', parentId: 'palette', args: { width: size, height: size, cornerRadius: 8 } });\\n  actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [{ type: 'SOLID', color: rgb }] } });\\n}\\nreturn actions;"
-}
-
-### Generator example: halftone dot pattern from image
-
-This example shows how to use imageNodeId and pixel data to create a halftone effect.
-The generator samples brightness from the image and creates proportionally-sized dots.
-
-{
-  "actions": [],
-  "ui": {
-    "replace": true,
-    "imageNodeId": "10:5",
-    "controls": [
-      { "id": "density", "type": "slider", "label": "Dot Density", "props": { "min": 10, "max": 60, "step": 1, "defaultValue": 30 } },
-      { "id": "maxDot", "type": "slider", "label": "Max Dot Size", "props": { "min": 2, "max": 20, "step": 1, "defaultValue": 8 } },
-      { "id": "bgColor", "type": "color", "label": "Background", "props": { "defaultValue": "#FFFFFF" } }
-    ]
-  },
-  "generate": "const cols = params.density || 30;\\nconst maxDot = params.maxDot || 8;\\nconst bg = lib.hexToRgb(params.bgColor || '#FFFFFF');\\nconst img = lib.imageData;\\nconst rows = Math.round(cols * (img.height / img.width));\\nconst cellW = maxDot + 2;\\nconst frameW = cols * cellW;\\nconst frameH = rows * cellW;\\nconst grid = lib.sampleGrid(cols, rows);\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'halftone', args: { x: 0, y: 0, width: frameW, height: frameH, name: 'Halftone' } });\\nactions.push({ method: 'setFill', nodeId: 'halftone', args: { fills: [{ type: 'SOLID', color: bg }] } });\\nfor (let r = 0; r < rows; r++) {\\n  for (let c = 0; c < cols; c++) {\\n    const b = 1 - grid[r][c].brightness;\\n    const size = Math.max(1, b * maxDot);\\n    const cx = c * cellW + cellW / 2 - size / 2;\\n    const cy = r * cellW + cellW / 2 - size / 2;\\n    actions.push({ method: 'createEllipse', parentId: 'halftone', args: { x: cx, y: cy, width: size, height: size } });\\n    actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }] } });\\n  }\\n}\\nreturn actions;"
-}
-
-### Generator example: Voronoi image mosaic
-
-This example uses lib.Delaunay + createVector + image pixel data to create an organic
-stained-glass mosaic from a selected image. Each cell is a real editable Figma vector.
-
-{
-  "actions": [],
-  "ui": {
-    "replace": true,
-    "imageNodeId": "10:5",
-    "controls": [
-      { "id": "cells", "type": "slider", "label": "Cell Count", "props": { "min": 20, "max": 300, "step": 1, "defaultValue": 80 } },
-      { "id": "strokeW", "type": "slider", "label": "Border Width", "props": { "min": 0, "max": 6, "step": 0.5, "defaultValue": 1 } },
-      { "id": "strokeColor", "type": "color", "label": "Border Color", "props": { "defaultValue": "#000000" } }
-    ]
-  },
-  "generate": "const n = params.cells || 80;\\nconst sw = params.strokeW ?? 1;\\nconst sc = lib.hexToRgb(params.strokeColor || '#000000');\\nconst img = lib.imageData;\\nconst W = 400;\\nconst H = Math.round(W * (img.height / img.width));\\nconst points = [];\\nfor (let i = 0; i < n; i++) points.push([lib.random() * W, lib.random() * H]);\\nconst voronoi = lib.Delaunay.from(points).voronoi([0, 0, W, H]);\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'mosaic', args: { x: 0, y: 0, width: W, height: H, name: 'Voronoi Mosaic' } });\\nfor (let i = 0; i < n; i++) {\\n  const path = voronoi.renderCell(i);\\n  const px = Math.round(points[i][0] * (img.width / W));\\n  const py = Math.round(points[i][1] * (img.height / H));\\n  const pixel = lib.getPixel(px, py);\\n  const color = { r: pixel.r / 255, g: pixel.g / 255, b: pixel.b / 255 };\\n  actions.push({ method: 'createVector', parentId: 'mosaic', args: { data: path } });\\n  actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [{ type: 'SOLID', color: color }] } });\\n  if (sw > 0) actions.push({ method: 'setStroke', nodeId: '__prev', args: { strokes: [{ type: 'SOLID', color: sc }], weight: sw } });\\n}\\nreturn actions;"
-}
-
-### Generator example: Gaussian blur bitmap effect
-
-This example shows how to use lib.processImage + applyImageFill for pixel-level effects.
-The generator processes the source image through Canvas2D and writes back a new image fill.
-
-{
-  "actions": [],
-  "ui": {
-    "replace": true,
-    "imageNodeId": "10:5",
-    "imageMaxWidth": 400,
-    "controls": [
-      { "id": "radius", "type": "slider", "label": "Blur Radius", "props": { "min": 0, "max": 20, "step": 0.5, "defaultValue": 4 } }
-    ]
-  },
-  "generate": "const r = params.radius || 4;\\nconst img = lib.imageData;\\nconst W = img.width;\\nconst H = img.height;\\nconst bytes = lib.processImage((ctx, canvas) => {\\n  ctx.filter = 'blur(' + r + 'px)';\\n  ctx.drawImage(canvas, 0, 0);\\n});\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: W, height: H, name: 'Blurred' } });\\nactions.push({ method: 'applyImageFill', parentId: 'root', args: { imageBytes: bytes, width: W, height: H, name: 'result' } });\\nreturn actions;"
-}
-
-### Generator example: 3D wireframe sphere
-
-This example shows how to use lib.sphere + lib.rotate3D + lib.project3D + lib.pointsToSvgPath
-to render a 3D wireframe as editable Figma vectors. Controls for X/Y rotation and segment count.
-
-{
-  "actions": [],
-  "ui": {
-    "replace": true,
-    "controls": [
-      { "id": "rx", "type": "dial", "label": "Rotate X", "props": { "min": -180, "max": 180, "step": 1, "defaultValue": 30 } },
-      { "id": "ry", "type": "dial", "label": "Rotate Y", "props": { "min": -180, "max": 180, "step": 1, "defaultValue": 45 } },
-      { "id": "segments", "type": "slider", "label": "Segments", "props": { "min": 4, "max": 20, "step": 1, "defaultValue": 10 } },
-      { "id": "color", "type": "color", "label": "Stroke Color", "props": { "defaultValue": "#3B82F6" } }
-    ]
-  },
-  "generate": "const SIZE = 300; const cx = SIZE/2; const cy = SIZE/2; const mesh = lib.sphere(120, Math.round(params.segments)); const rotated = mesh.vertices.map(v => lib.rotate3D(v, params.rx, params.ry, 0)); const projected = rotated.map(v => lib.project3D(v, 500)); const sorted = mesh.faces.slice().sort((a,b) => { const az = a.reduce((s,i)=>s+rotated[i].z,0)/a.length; const bz = b.reduce((s,i)=>s+rotated[i].z,0)/b.length; return az - bz; }); const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: SIZE, height: SIZE, name: '3D Sphere' } }); const col = lib.chroma(params.color || '#3B82F6'); for (const face of sorted) { const pts = face.map(i => ({ x: cx + projected[i].x, y: cy + projected[i].y })); const path = lib.pointsToSvgPath(pts, true); const avgZ = face.reduce((s,i)=>s+rotated[i].z,0)/face.length; const lightness = lib.mapRange(avgZ, -120, 120, 0.4, 1); const fc = col.luminance(lightness * 0.25); actions.push({ method: 'createVector', parentId: 'root', args: { data: path, name: 'face', fills: [{ type: 'SOLID', color: lib.chromaToFigma(fc), opacity: 0.9 }], strokes: [] } }); } return actions;"
-}
-
-### Generator example: organic blob shape (superformula)
-
-This example uses lib.superformulaPath to generate an organic shape with intuitive controls
-for symmetry (petals), roundness, and spikiness. A single createVector action outputs the shape.
-
-{
-  "actions": [],
-  "ui": {
-    "replace": true,
-    "controls": [
-      { "id": "petals", "type": "slider", "label": "Petals / Symmetry", "props": { "min": 1, "max": 12, "step": 1, "defaultValue": 5 } },
-      { "id": "roundness", "type": "slider", "label": "Roundness", "props": { "min": 0.1, "max": 20, "step": 0.1, "defaultValue": 1 } },
-      { "id": "spikiness", "type": "slider", "label": "Spikiness", "props": { "min": 0.1, "max": 5, "step": 0.1, "defaultValue": 0.5 } },
-      { "id": "size", "type": "slider", "label": "Size", "props": { "min": 50, "max": 300, "step": 10, "defaultValue": 150 } },
-      { "id": "fillColor", "type": "color", "label": "Fill", "props": { "defaultValue": "#6366F1" } }
-    ]
-  },
-  "generate": "const sz = params.size || 150; const FRAME = sz * 2 + 40; const cx = FRAME/2; const cy = FRAME/2; const path = lib.superformulaPath({ m: Math.round(params.petals), n1: params.roundness, n2: params.spikiness, n3: params.spikiness }, 256, sz); const col = lib.chroma(params.fillColor || '#6366F1'); const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: FRAME, height: FRAME, name: 'Organic Shape' } }); actions.push({ method: 'createVector', parentId: 'root', args: { data: path, x: cx, y: cy, name: 'shape', fills: [{ type: 'SOLID', color: lib.chromaToFigma(col), opacity: 1 }], strokes: [] } }); return actions;"
-}
-
-### Generator example: seamless dot pattern tile (renderCanvas)
-
-This example uses lib.renderCanvas to draw a repeating dot tile and applyImageFill with
-scaleMode TILE to fill a rectangle with an infinite pattern. No source image needed.
-
-{
-  "actions": [],
-  "ui": {
-    "replace": true,
-    "controls": [
-      { "id": "spacing", "type": "slider", "label": "Dot Spacing", "props": { "min": 12, "max": 80, "step": 4, "defaultValue": 32 } },
-      { "id": "dotSize", "type": "slider", "label": "Dot Size", "props": { "min": 2, "max": 30, "step": 1, "defaultValue": 8 } },
-      { "id": "dotColor", "type": "color", "label": "Dot Color", "props": { "defaultValue": "#1E293B" } },
-      { "id": "bgColor", "type": "color", "label": "Background", "props": { "defaultValue": "#F8FAFC" } }
-    ]
-  },
-  "generate": "const sp = Math.max(12, params.spacing || 32); const r = Math.min((params.dotSize || 8) / 2, sp/2 - 1); const bytes = lib.renderCanvas(sp, sp, (ctx) => { ctx.fillStyle = params.bgColor || '#F8FAFC'; ctx.fillRect(0, 0, sp, sp); ctx.fillStyle = params.dotColor || '#1E293B'; ctx.beginPath(); ctx.arc(sp/2, sp/2, r, 0, Math.PI*2); ctx.fill(); }); const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: 400, height: 400, name: 'Dot Pattern' } }); actions.push({ method: 'applyImageFill', parentId: 'root', args: { imageBytes: bytes, width: 400, height: 400, scaleMode: 'TILE', name: 'pattern' } }); return actions;"
-}
-
-### Generator example: vector hexagonal dot pattern (applyPatternFill)
-
-This example uses applyPatternFill with a generated tile node for a fully vector, scalable
-hexagonal dot pattern. The tile source frame is created first, then referenced as the pattern.
-
-{
-  "actions": [],
-  "ui": {
-    "replace": true,
-    "controls": [
-      { "id": "dotSize", "type": "slider", "label": "Dot Size", "props": { "min": 4, "max": 40, "step": 2, "defaultValue": 16 } },
-      { "id": "spacing", "type": "slider", "label": "Spacing", "props": { "min": 0, "max": 0.5, "step": 0.05, "defaultValue": 0.1 } },
-      { "id": "tileType", "type": "segmented", "label": "Tile Type", "props": { "options": [{ "value": "RECTANGULAR", "label": "Grid" }, { "value": "HORIZONTAL_HEXAGONAL", "label": "Hex" }], "defaultValue": "HORIZONTAL_HEXAGONAL" } },
-      { "id": "dotColor", "type": "color", "label": "Dot Color", "props": { "defaultValue": "#3B82F6" } },
-      { "id": "bgColor", "type": "color", "label": "Background", "props": { "defaultValue": "#F8FAFC" } }
-    ]
-  },
-  "generate": "const ds = params.dotSize || 16; const pad = ds * 0.3; const tileSize = ds + pad * 2; const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: 500, height: 500, name: 'Hex Dot Pattern', fills: [{ type: 'SOLID', color: lib.chromaToFigma(lib.chroma(params.bgColor || '#F8FAFC')), opacity: 1 }] } }); actions.push({ method: 'createFrame', tempId: 'tile', args: { width: tileSize, height: tileSize, fills: [] } }); actions.push({ method: 'createEllipse', parentId: 'tile', args: { x: pad, y: pad, width: ds, height: ds, fills: [{ type: 'SOLID', color: lib.chromaToFigma(lib.chroma(params.dotColor || '#3B82F6')), opacity: 1 }] } }); actions.push({ method: 'applyPatternFill', parentId: 'root', args: { sourceNodeId: 'tile', tileType: params.tileType || 'HORIZONTAL_HEXAGONAL', spacingX: params.spacing || 0.1, spacingY: params.spacing || 0.1, width: 500, height: 500, name: 'pattern' } }); return actions;"
-}
-
-### Generator example: patternize selected node
-
-This example tiles whatever node the user currently has selected, using lib.selectionId as
-the pattern source. No node creation \u2014 the selected frame/vector becomes the repeating tile.
-
-{
-  "actions": [],
-  "ui": {
-    "replace": true,
-    "controls": [
-      { "id": "tileType", "type": "segmented", "label": "Tile Type", "props": { "options": [{ "value": "RECTANGULAR", "label": "Grid" }, { "value": "HORIZONTAL_HEXAGONAL", "label": "Hex H" }, { "value": "VERTICAL_HEXAGONAL", "label": "Hex V" }], "defaultValue": "RECTANGULAR" } },
-      { "id": "scale", "type": "slider", "label": "Scale", "props": { "min": 0.1, "max": 2, "step": 0.05, "defaultValue": 1 } },
-      { "id": "spacing", "type": "slider", "label": "Gap", "props": { "min": 0, "max": 0.5, "step": 0.05, "defaultValue": 0 } },
-      { "id": "size", "type": "slider", "label": "Canvas Size", "props": { "min": 200, "max": 1200, "step": 100, "defaultValue": 600 } }
-    ]
-  },
-  "generate": "if (!lib.selectionId) { return []; } const sz = params.size || 600; const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: sz, height: sz, name: 'Tiled Pattern' } }); actions.push({ method: 'applyPatternFill', parentId: 'root', args: { sourceNodeId: lib.selectionId, tileType: params.tileType || 'RECTANGULAR', scalingFactor: params.scale || 1, spacingX: params.spacing || 0, spacingY: params.spacing || 0, width: sz, height: sz, name: 'pattern' } }); return actions;"
-}
-
-### Generator example: fractal tree (lib.LSystem)
-
-This example uses lib.LSystem to generate a fractal tree with turtle graphics interpretation.
-
-{
-  "actions": [],
-  "ui": {
-    "replace": true,
-    "controls": [
-      { "id": "iterations", "type": "slider", "label": "Iterations", "props": { "min": 1, "max": 6, "step": 1, "defaultValue": 4 } },
-      { "id": "angle", "type": "slider", "label": "Branch Angle", "props": { "min": 10, "max": 50, "step": 1, "defaultValue": 25 } },
-      { "id": "length", "type": "slider", "label": "Segment Length", "props": { "min": 1, "max": 15, "step": 0.5, "defaultValue": 6 } },
-      { "id": "color", "type": "color", "label": "Color", "props": { "defaultValue": "#1E3A2F" } }
-    ]
-  },
-  "generate": "const SZ = 500;\\nconst lsys = new lib.LSystem({ axiom: 'F', productions: { 'F': 'FF+[+F-F-F]-[-F+F+F]' } });\\nconst result = lsys.iterate(params.iterations || 4);\\nlet x = SZ/2, y = SZ - 20, ang = -90;\\nconst stack = [];\\nlet path = 'M ' + x + ' ' + y;\\nconst segLen = params.length || 6;\\nconst bAngle = params.angle || 25;\\nfor (const ch of result) {\\n  if (ch === 'F') { x += Math.cos(ang * Math.PI / 180) * segLen; y += Math.sin(ang * Math.PI / 180) * segLen; path += ' L ' + x.toFixed(2) + ' ' + y.toFixed(2); }\\n  else if (ch === '+') { ang += bAngle; }\\n  else if (ch === '-') { ang -= bAngle; }\\n  else if (ch === '[') { stack.push({ x, y, ang }); }\\n  else if (ch === ']') { const s = stack.pop(); x = s.x; y = s.y; ang = s.ang; path += ' M ' + x.toFixed(2) + ' ' + y.toFixed(2); }\\n}\\nconst col = lib.hexToRgb(params.color || '#1E3A2F');\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: SZ, height: SZ, name: 'Fractal Tree' } });\\nactions.push({ method: 'createVector', parentId: 'root', args: { data: path, name: 'tree', strokes: [{ type: 'SOLID', color: col, opacity: 1 }], fills: [] } });\\nactions.push({ method: 'setStroke', nodeId: '__prev', args: { strokes: [{ type: 'SOLID', color: col }], weight: 1 } });\\nreturn actions;"
-}
-
-### Generator example: bar chart (lib.charts.Bar)
-
-This example uses lib.charts.Bar to create a data-driven bar chart with axis lines and labels.
-
-{
-  "actions": [],
-  "ui": {
-    "replace": true,
-    "controls": [
-      { "id": "v1", "type": "slider", "label": "Bar 1", "props": { "min": 0, "max": 100, "step": 1, "defaultValue": 40 } },
-      { "id": "v2", "type": "slider", "label": "Bar 2", "props": { "min": 0, "max": 100, "step": 1, "defaultValue": 70 } },
-      { "id": "v3", "type": "slider", "label": "Bar 3", "props": { "min": 0, "max": 100, "step": 1, "defaultValue": 55 } },
-      { "id": "v4", "type": "slider", "label": "Bar 4", "props": { "min": 0, "max": 100, "step": 1, "defaultValue": 90 } },
-      { "id": "gap", "type": "slider", "label": "Gap", "props": { "min": 2, "max": 40, "step": 1, "defaultValue": 12 } },
-      { "id": "barColor", "type": "color", "label": "Bar Color", "props": { "defaultValue": "#3B82F6" } }
-    ]
-  },
-  "generate": "const values = [params.v1||0, params.v2||0, params.v3||0, params.v4||0];\\nconst W = 400; const H = 300; const pad = 40;\\nconst chart = lib.charts.Bar({ data: [values], width: W - pad * 2, height: H - pad * 2, gutter: params.gap || 12, max: 100, offset: [pad, pad] });\\nconst col = lib.chroma(params.barColor || '#3B82F6');\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: W, height: H, name: 'Bar Chart' } });\\nactions.push({ method: 'setFill', nodeId: 'root', args: { fills: [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }] } });\\nchart.curves.forEach((curve, i) => {\\n  actions.push({ method: 'createVector', parentId: 'root', args: { data: curve.line.path.print(), name: 'bar-' + i, fills: [{ type: 'SOLID', color: lib.chromaToFigma(col), opacity: 1 }], strokes: [] } });\\n});\\nreturn actions;"
-}
-
-### Generator example: hand-drawn sketchy rectangle (lib.rough)
-
-lib.rough draws shapes with a hand-drawn, sketchy appearance. Every method returns
-RoughPathInfo[] \u2014 an array of { d, stroke, strokeWidth, fill } objects. The "d" string
-is a ready-to-use SVG path for createVector. Typically a shape produces 2+ path objects:
-the outline and the fill hachure/pattern. Iterate all paths and emit a createVector for each.
-
-**API:**
+  - Sink/source: return { x: p.x - cx, y: p.y - cy } (or negated)`;
+  var MODULE_CHARTS = "#### Charts & data visualization (lib.charts) \u2014 paths-js\n\nPure SVG path generation for charts. Each chart function takes data and dimensions, returns\nobjects with SVG paths ready for createVector. No DOM, no rendering \u2014 just geometry.\n\nAvailable chart types:\n  - lib.charts.Bar({ data, width, height, gutter, accessor, max })\n    data: array of arrays (groups of bars). Each inner array = one group.\n    accessor: function to extract numeric value from item (default: identity).\n    gutter: space between bar groups (default 10).\n    Returns { curves, scale }. Each curve has .line.path.print() \u2192 SVG path string,\n    plus .item, .index, .group.\n\n  - lib.charts.Pie({ data, accessor, center, r, R })\n    data: array of items. accessor: extracts numeric value. center: [x,y].\n    r: inner radius (0 for full pie, >0 for donut). R: outer radius.\n    Returns { curves }. Each curve has .sector.path.print() \u2192 SVG path, .sector.centroid.\n\n  - lib.charts.SmoothLine({ data, xaccessor, yaccessor, width, height })\n    data: array of series \u2014 e.g. [[ [0,20], [1,45], [2,35], [3,70] ]].\n    IMPORTANT: each series is an array of [x,y] pairs, and data is wrapped in an outer array.\n    You MUST provide xaccessor and yaccessor: xaccessor: d => d[0], yaccessor: d => d[1].\n    width/height: chart dimensions in pixels.\n    Returns { curves }. Each curve has .line.path.print() \u2192 smooth SVG path,\n    .area.path.print() \u2192 filled area path below the line.\n\n  - lib.charts.Radar({ data, accessor, center, r, max, rings })\n    data: array of objects with named properties. accessor: optional { key: fn } map.\n    Returns { curves, rings }. Each curve has .polygon.path.print(). rings are guide polygons.\n\n  Key patterns:\n  - Call .path.print() on any path object to get the SVG path string for createVector\n  - All coordinates are pre-computed \u2014 pass the path string directly as createVector data arg\n  - Use lib.chroma for chart colors, create one createVector per bar/slice/line\n\n  Bar chart example:\n    const chart = lib.charts.Bar({\n      data: [values.map(v => v)],  // single series\n      width: params.chartWidth, height: params.chartHeight, gutter: params.gap\n    });\n    chart.curves.forEach((curve, i) => {\n      actions.push({ method: 'createVector', parentId: 'root',\n        args: { data: curve.line.path.print(), name: 'bar-' + i } });\n      actions.push({ method: 'setFill', nodeId: '__prev',\n        args: { fills: [{ type: 'SOLID', color: lib.chromaToFigma(barColor) }] } });\n    });\n\n  Pie chart example:\n    const chart = lib.charts.Pie({\n      data: values, accessor: d => d, center: [cx, cy], r: innerR, R: outerR\n    });\n    chart.curves.forEach((curve, i) => {\n      actions.push({ method: 'createVector', parentId: 'root',\n        args: { data: curve.sector.path.print(), name: 'slice-' + i } });\n    });";
+  var MODULE_ROUGH = `**API:**
 - lib.rough.rectangle(x, y, width, height, options?) \u2192 RoughPathInfo[]
 - lib.rough.circle(cx, cy, diameter, options?) \u2192 RoughPathInfo[]
 - lib.rough.ellipse(cx, cy, width, height, options?) \u2192 RoughPathInfo[]
@@ -31866,31 +31586,52 @@ Each RoughPathInfo has: { d: string, stroke: string, strokeWidth: number, fill: 
 - If fill is a real color (not "none") \u2192 use it as a Figma fill, set strokes to [].
 - Otherwise \u2192 it's a stroke path (hachure lines or outline). Set fills to [] and apply
   stroke color + strokeWidth. Hachure/cross-hatch/zigzag/dots/sunburst/dashed fills are
-  ALL rendered as stroked lines \u2014 only "solid" fillStyle produces a true fill path.
+  ALL rendered as stroked lines \u2014 only "solid" fillStyle produces a true fill path.`;
+  var MODULE_PATTERN = `#### Native vector patterns (lib.selectionId, applyPatternFill)
 
-{
-  "actions": [],
-  "ui": {
-    "replace": true,
-    "controls": [
-      { "id": "roughness", "type": "slider", "label": "Roughness", "props": { "min": 0, "max": 3, "step": 0.1, "defaultValue": 1.5 } },
-      { "id": "bowing", "type": "slider", "label": "Bowing", "props": { "min": 0, "max": 10, "step": 0.5, "defaultValue": 2 } },
-      { "id": "fillStyle", "type": "select", "label": "Fill Style", "props": { "options": ["hachure", "solid", "zigzag", "cross-hatch", "dots", "sunburst", "dashed", "zigzag-line"], "defaultValue": "hachure" } },
-      { "id": "fillColor", "type": "color", "label": "Fill", "props": { "defaultValue": "#3B82F6" } },
-      { "id": "strokeColor", "type": "color", "label": "Stroke", "props": { "defaultValue": "#1E293B" } }
-    ]
-  },
-  "generate": "const SZ = 400;\\nconst opts = { roughness: params.roughness || 1.5, bowing: params.bowing || 2, fill: params.fillColor || '#3B82F6', fillStyle: params.fillStyle || 'hachure', stroke: params.strokeColor || '#1E293B', strokeWidth: 2, seed: 42 };\\nconst paths = lib.rough.rectangle(50, 50, SZ - 100, SZ - 100, opts);\\nconst actions = [];\\nactions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: SZ, height: SZ, name: 'Sketchy Rectangle' } });\\nfor (const p of paths) {\\n  if (p.fill && p.fill !== 'none') {\\n    actions.push({ method: 'createVector', parentId: 'root', args: { data: p.d, fills: [{ type: 'SOLID', color: lib.hexToRgb(p.fill) }], strokes: [] } });\\n  } else if (p.stroke && p.stroke !== 'none') {\\n    actions.push({ method: 'createVector', parentId: 'root', args: { data: p.d, fills: [], strokes: [{ type: 'SOLID', color: lib.hexToRgb(p.stroke) }] } });\\n    actions.push({ method: 'setStroke', nodeId: '__prev', args: { strokes: [{ type: 'SOLID', color: lib.hexToRgb(p.stroke) }], weight: p.strokeWidth || 1 } });\\n  }\\n}\\nreturn actions;"
-}
+For resolution-independent tiled patterns, use the native Figma PATTERN fill type. The tile
+source is any node \u2014 one the generator creates (referenced by tempId) or the currently selected
+node. Unlike renderCanvas patterns, the output is fully vector and the tile source remains
+editable on the canvas after generation.
 
-### Key rules for generators
+  lib.selectionId \u2014 the currently selected node's Figma ID. Use as sourceNodeId to "patternize"
+  whatever the user has selected, with no node creation needed.
+
+  applyPatternFill action args:
+  - sourceNodeId (required) \u2014 Figma node ID or tempId of the tile source
+  - tileType \u2014 'RECTANGULAR' (default) | 'HORIZONTAL_HEXAGONAL' | 'VERTICAL_HEXAGONAL'
+  - scalingFactor \u2014 scale of the tile: 1 = 100%, 0.5 = 50% (default 1)
+  - spacingX / spacingY \u2014 gap between tiles as a ratio (0 = no gap, 0.2 = 20% gap, default 0)
+  - width, height, x, y, name \u2014 target fill rectangle dimensions and position
+  - targetNodeId \u2014 if set, applies fill to an existing node instead of creating a new rectangle
+
+  IMPORTANT: Must use setFillsAsync (not fills=) \u2014 handled automatically by the executor.
+
+  Typical workflow for generated vector tile:
+  1. Create a small frame (e.g., 40x40) to serve as the tile: { method: 'createFrame', tempId: 'tile', args: { width: 40, height: 40 } }
+  2. Add vector shapes inside it: { method: 'createEllipse', parentId: 'tile', args: { x: 5, y: 5, width: 30, height: 30 } }
+  3. Apply as pattern fill on a large rectangle:
+     { method: 'applyPatternFill', parentId: 'root', args: { sourceNodeId: 'tile', tileType: 'HORIZONTAL_HEXAGONAL', spacingX: 0.1, spacingY: 0.1, width: 600, height: 600, name: 'Pattern' } }
+
+  Patternize selection workflow (no tile creation needed):
+  1. Check lib.selectionId is not null
+  2. Emit one action: { method: 'applyPatternFill', args: { sourceNodeId: lib.selectionId, tileType: params.tileType, scalingFactor: params.scale, spacingX: params.spacing, spacingY: params.spacing, width: 600, height: 600, name: 'Pattern' } }
+
+  Prefer applyPatternFill over renderCanvas + applyImageFill whenever the tile can be drawn
+  as vector nodes \u2014 vector patterns are resolution-independent and the tile stays editable.`;
+  var MODULE_CREATE_METHODS = '### Supported create methods\n\nIn addition to createRectangle, createFrame, and createText, generators can also use:\n  - createEllipse: creates an ellipse node. Args: x, y, width, height, name (all optional).\n    Perfect for dot patterns, halftone art, circle-based designs.\n  - createVector: creates a vector node from an SVG path string. Args: data (SVG path string,\n    e.g. "M 0 0 L 100 0 L 50 86 Z"), windingRule ("NONZERO" or "EVENODD", default "NONZERO"),\n    x, y, name. Figma auto-sizes the node to fit the path vertices.\n    Use for arbitrary shapes: Voronoi cells, triangles, polygons, organic forms.';
+  var MODULE_GENERATOR_RULES = `### Key rules for generators
 
 1. The generate value is a STRING (not a function declaration). It is the function body.
-   Use \\n for newlines inside the JSON string. Do NOT wrap in function(...){...}.
+   Use \\\\n for newlines inside the JSON string. Do NOT wrap in function(...){...}.
 2. Always return an array of ActionDescriptor objects.
 3. **The very first action MUST be a createFrame with a tempId** (e.g. tempId: "root").
    This root frame is how the runtime identifies and reuses the generated output.
    All subsequent child nodes should use parentId referencing this root frame's tempId.
+   **CRITICAL \u2014 compute the frame width/height from params, NEVER hardcode fixed dimensions.**
+   The frame MUST grow/shrink when the user changes count, size, or spacing controls.
+   Grid: width = cols * (size + spacing). Row/palette: width = count * (size + gap) - gap.
+   For single-axis rows, use layoutMode 'HORIZONTAL' with itemSpacing for automatic sizing.
 4. Use tempId on created nodes and reference them in subsequent actions via nodeId or parentId.
 5. Use "__prev" as nodeId to target the most recently created node.
 6. For 2D grids, compute x/y positions explicitly using row and column math.
@@ -31969,6 +31710,34 @@ Each RoughPathInfo has: { d: string, stroke: string, strokeWidth: number, fill: 
     tile can be drawn as vector nodes \u2014 the result is resolution-independent and the tile
     source remains editable. For "patternize this" requests, use lib.selectionId as the
     sourceNodeId and skip tile creation entirely.
+28. **Dynamic frame sizing**: ALWAYS compute the root frame's width and height from control
+    parameters so the frame grows/shrinks with the content. For grids: width = cols * (size + gap).
+    For horizontal rows (palettes, icon strips): width = count * (size + gap) - gap. For vertical
+    stacks: height = count * (size + gap) - gap. NEVER hardcode a fixed frame size when a count
+    or size control exists \u2014 the frame must resize on every re-run to wrap its children tightly.
+    For single-axis rows, prefer layoutMode 'HORIZONTAL' with itemSpacing for automatic sizing.
+29. **Vector path context**: When the selected node is a vector (type VECTOR, LINE, POLYGON,
+    STAR, or BOOLEAN_OPERATION), its SVG path data appears in the selection context as
+    "vectorPaths": ["M 0 100 L 100 100 ..."] \u2014 an array of SVG path data strings.
+    Use this data with lib.samplePath and lib.pathBounds in your generator.
+    **CRITICAL \u2014 frame sizing**: The vectorPaths coordinates are in the node's local space.
+    The selection context also provides the node's width and height. Your output frame MUST
+    match or exceed the path's bounding box so the generated content appears at the correct
+    scale. Use lib.pathBounds(pathData) to get the path dimensions, then create a frame
+    sized to fit (with optional padding for objects that extend beyond the path).
+    Example: if pathBounds returns {x:0, y:0, width:800, height:500} and you're placing
+    circles of radius 20 along it, create a frame of at least (800+40) x (500+40) and
+    offset objects by 20 so they don't clip.
+    **Two usage modes \u2014 infer from the user's language:**
+    - **Literal tracing** ("along this path", "follow this path", "on this path",
+      "distribute along"): Sample exact positions with lib.samplePath(vectorPaths[0], count)
+      and place objects at those {x, y, angle} coordinates. Use angle to orient objects
+      along the tangent if the user wants them to follow the curve direction.
+    - **Interpretive / inspirational** ("similar to this", "in this shape", "like this",
+      "inspired by"): Use lib.pathBounds to understand the overall dimensions and gesture
+      of the path. Generate new content that echoes the form but isn't rigidly placed on it.
+    Access the path data from the selection context JSON \u2014 the first node's vectorPaths
+    field. Pass it as a string literal into lib.samplePath in the generator code.
 
 ### When to use a generator vs direct control actions
 
@@ -32004,124 +31773,269 @@ Key points for the direct-actions example above:
 - For bitmap image effects (blur, sharpen, posterize, vignette, color grading, glitch, pixelate,
   etc.), ALWAYS use a generator with imageNodeId, set imageMaxWidth to 400+, use
   lib.processImage for Canvas2D manipulation, and emit applyImageFill with the result bytes.
-  This pipeline processes from the original source every time \u2014 non-destructive by design.
-`;
-  var AUTO_GENERATE_ADDENDUM = `
-## Auto-generate mode
-
-The user has triggered automatic control generation. Instead of waiting for a description,
-analyze the selected nodes and infer the most useful control panel for manipulating them.
-
-Your job: reverse-engineer the selection into a set of controls that let the user tweak
-the design live. Think like a senior designer building a custom plugin for this exact
-selection.
-
-### Analysis steps
-
-1. **Inventory properties**: For each selected node, note its fill colors, stroke colors/weights,
-   effects (shadows, blurs), opacity, corner radius, dimensions, and text properties.
-2. **Find shared properties**: If multiple nodes share the same fill color, group them under
-   one color control. If they share the same corner radius, make one radius slider.
-3. **Find varying properties**: If nodes have different opacities (e.g. 0.5, 0.8, 1.0),
-   create a slider with a range that covers them. Use the most common value as defaultValue.
-4. **Infer spatial relationships**: Examine x/y positions and dimensions carefully.
-   - **Grid detection**: If nodes form rows and columns with consistent gaps, create
-     "Row Gap" and "Column Gap" sliders. Each slider action should use setProperty with
-     property "x" or "y" and a scale/offset transform so moving the slider repositions
-     nodes relative to each other. For a row of N items, item[i].x = firstX + i * (itemWidth + gap).
-   - **Even spacing**: If nodes are in a single row or column with equal spacing, create a
-     "Spacing" slider that repositions all items.
-   - **Alignment**: If some nodes share the same x or y, note they are aligned. Consider
-     alignment controls only if alignment varies.
-5. **Look for coordinated opportunities**: Can a single "depth" control drive shadow blur +
-   spread + offset together? Can a "scale" slider resize all selected nodes proportionally?
-   Can a "Grid Size" slider resize all items and recompute their positions?
-
-### Rules
-
-1. Every control MUST use "action" or "actions" referencing real node IDs from the selection.
-   The nodes may be wrapped in a parent frame for grouping \u2014 always use the CHILD node IDs
-   (not the parent frame ID) in control actions.
-2. Use coordinated "actions" (array) when one control should drive the same property on
-   multiple nodes simultaneously. This is the key power of auto-generated controls.
-3. For **spatial controls** (spacing, gaps, grid layout), you MAY use a "generate" function
-   instead of per-control actions. The generator can read control values and compute x/y
-   positions for all child nodes. Use setProperty with "x"/"y" to reposition nodes.
-   When using a generator, provide an "actionTemplate" that maps each control change
-   to re-execution of the generator.
-4. Set "replace": true \u2014 this is a fresh control panel.
-5. Set "actions": [] at the top level \u2014 no canvas changes on initial generation. The controls
-   themselves handle all updates via their action/actions fields.
-6. Set defaultValue on every control to match the current canvas state exactly, so nothing
-   changes until the user interacts.
-7. Aim for 3\u20138 controls. Be opinionated: pick the controls that give the most design leverage.
-   Don't dump every property as a control.
-8. Prioritize visual properties (fill, opacity, corner radius, effects, stroke) AND spatial
-   properties (gaps, spacing, sizing) when a clear layout pattern exists. For a grid of
-   identical items, gap/spacing controls are MORE useful than individual property controls.
-9. Give controls clear, human-friendly labels (e.g. "Shadow Depth" not "dropShadowRadius").
-10. Use the most appropriate control type for each property:
-    - color \u2192 color control
-    - opacity, radius, numeric ranges \u2192 slider
-    - boolean (visible, clip) \u2192 toggle
-    - small set of options \u2192 segmented
-    - font weight, blend mode \u2192 select
-11. For shadow/effect controls, use the property-patch form in actions (property + effectType).
-
-### Example auto-generated output for 3 rectangles with the same blue fill and different corner radii
+  This pipeline processes from the original source every time \u2014 non-destructive by design.`;
+  var MODULE_COMPUTATIONAL = "#### Computational design helpers\n\nSix native helpers for generative/computational design. All use lib.random() for deterministic\nresults. Most return vector data (SVG path strings or coordinate arrays for createVector/createEllipse).\n\n##### Circle packing (lib.circlePack)\n\nFills a rectangle with non-overlapping circles. Returns Array<{ x, y, r }>.\nEmit one createEllipse per circle \u2014 native Figma shapes, no path conversion needed.\n\n  lib.circlePack(width, height, options?) \u2192 { x, y, r }[]\n\n  Options:\n  - count: target number of circles (default 100, max ~500)\n  - minRadius: minimum circle radius in px (default 2)\n  - maxRadius: maximum circle radius in px (default 50)\n  - padding: gap between circles in px (default 1)\n  - maxAttempts: placement attempts before giving up (default 10000)\n\n  Usage:\n    const circles = lib.circlePack(params.size, params.size, {\n      count: params.count, minRadius: params.minR, maxRadius: params.maxR, padding: params.gap\n    });\n    circles.forEach((c, i) => {\n      actions.push({ method: 'createEllipse', parentId: 'root',\n        args: { x: c.x - c.r, y: c.y - c.r, width: c.r * 2, height: c.r * 2 } });\n      actions.push({ method: 'setFill', nodeId: '__prev',\n        args: { fills: [{ type: 'SOLID', color: lib.randomColor() }] } });\n    });\n\n  Recommended controls:\n  - count: slider 10\u2013500, default 100\n  - minRadius: slider 1\u201320, default 2\n  - maxRadius: slider 10\u201380, default 50\n  - padding: slider 0\u201310, default 1\n  - size: slider 200\u2013800, default 400\n\n##### Strange attractors (lib.strangeAttractor)\n\nTraces chaotic orbital paths from iterative equations. Returns an SVG path string.\nProduce with a single createVector \u2014 the attractor IS the path.\n\n  lib.strangeAttractor(width, height, options?) \u2192 string (SVG path)\n\n  Options:\n  - type: 'clifford' (default) or 'dejong'\n  - a, b, c, d: equation parameters (defaults: -1.4, 1.6, 1.0, 0.7)\n    Different values produce wildly different shapes. Try ranges -3 to 3.\n  - iterations: point count (default 50000). 10K = sparse, 200K = dense.\n  - skip: transient steps to discard (default 100)\n\n  Equations:\n  - Clifford: x' = sin(a*y) + c*cos(a*x),  y' = sin(b*x) + d*cos(b*y)\n  - De Jong:  x' = sin(a*y) - cos(b*x),     y' = sin(c*x) - cos(d*y)\n\n  Usage:\n    const path = lib.strangeAttractor(params.size, params.size, {\n      type: params.type, a: params.a, b: params.b, c: params.c, d: params.d,\n      iterations: params.iterations\n    });\n    actions.push({ method: 'createVector', parentId: 'root',\n      args: { data: path, name: 'Attractor' } });\n    actions.push({ method: 'setStroke', nodeId: '__prev',\n      args: { strokes: [{ type: 'SOLID', color: lib.hexToRgb(params.color) }], weight: 0.5 } });\n    actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [] } });\n\n  IMPORTANT: Attractors are open stroke paths. Set fills to [] and apply a thin stroke.\n\n  Recommended controls:\n  - type: segmented ['clifford', 'dejong']\n  - a, b, c, d: sliders -3 to 3, step 0.1\n  - iterations: slider 10000\u2013200000, step 5000, default 50000\n  - size: slider 200\u2013800, default 400\n\n##### Metaballs (lib.metaballs)\n\nOrganic blobs that merge smoothly when close together (lava lamp / biological look).\nReturns an SVG path string via marching squares + Chaikin smoothing.\n\n  lib.metaballs(width, height, options?) \u2192 string (SVG path)\n\n  Options:\n  - count: number of blobs (default 5)\n  - minRadius: minimum blob radius in px (default 30)\n  - maxRadius: maximum blob radius in px (default 80)\n  - gridSize: field resolution (default 100). Higher = smoother contours, slower.\n  - smoothing: Chaikin smoothing passes (default 2). 0 = angular, 2\u20133 = organic.\n\n  Usage:\n    const path = lib.metaballs(params.size, params.size, {\n      count: params.count, minRadius: params.minR, maxRadius: params.maxR, smoothing: params.smooth\n    });\n    actions.push({ method: 'createVector', parentId: 'root',\n      args: { data: path, windingRule: 'EVENODD', name: 'Metaballs' } });\n    actions.push({ method: 'setFill', nodeId: '__prev',\n      args: { fills: [{ type: 'SOLID', color: lib.hexToRgb(params.color) }] } });\n\n  Recommended controls:\n  - count: slider 2\u201312, default 5\n  - minRadius: slider 10\u201350, default 30\n  - maxRadius: slider 30\u2013120, default 80\n  - smoothing: slider 0\u20134, step 1, default 2\n\n##### Diffusion-Limited Aggregation (lib.dla)\n\nBranching fractal growth \u2014 coral, frost, lightning, mineral veins.\nReturns Array<{ x, y, parent }>. Each particle knows its parent index for branch tracing.\nConnect particles to parents as line segments in a single SVG path.\n\n  lib.dla(width, height, options?) \u2192 { x, y, parent: number }[]\n\n  Options:\n  - count: number of particles (default 200, max ~500)\n  - stepSize: random walk step in px (default 1)\n  - stickDistance: how close to stick in px (default 3)\n\n  Usage \u2014 as a connected branch path (recommended for dense trees):\n    const particles = lib.dla(params.size, params.size, {\n      count: params.count, stickDistance: params.stickDist\n    });\n    const segs = [];\n    for (const p of particles) {\n      if (p.parent >= 0) {\n        const pp = particles[p.parent];\n        segs.push('M ' + pp.x.toFixed(1) + ' ' + pp.y.toFixed(1) +\n                  ' L ' + p.x.toFixed(1) + ' ' + p.y.toFixed(1));\n      }\n    }\n    actions.push({ method: 'createVector', parentId: 'root',\n      args: { data: segs.join(' '), name: 'DLA' } });\n    actions.push({ method: 'setStroke', nodeId: '__prev',\n      args: { strokes: [{ type: 'SOLID', color: lib.hexToRgb(params.color) }], weight: 1 } });\n    actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [] } });\n\n  Usage \u2014 as individual circles (for sparse trees with visible particles):\n    particles.forEach(p => {\n      const r = params.particleSize / 2;\n      actions.push({ method: 'createEllipse', parentId: 'root',\n        args: { x: p.x - r, y: p.y - r, width: r * 2, height: r * 2 } });\n    });\n\n  IMPORTANT: DLA branch paths are open stroked lines. Set fills to [] and apply stroke.\n\n  Recommended controls:\n  - count: slider 50\u2013500, default 200\n  - stickDistance: slider 1\u201310, default 3\n  - size: slider 200\u2013600, default 400\n\n##### Cellular Automata (lib.cellularAutomata)\n\nGame of Life and Wolfram elementary automata \u2014 evolving grid textures.\nReturns an SVG path string. Two output modes: smooth contours (marching squares)\nor blocky rectangles (run-length encoded).\n\n  lib.cellularAutomata(width, height, options?) \u2192 string (SVG path)\n\n  Options:\n  - type: 'life' (default) or 'wolfram'\n  - rule: Wolfram rule number 0\u2013255 (default 30). Classic rules:\n      Rule 30 = chaotic, Rule 90 = Sierpinski triangle, Rule 110 = complex/Turing-complete\n  - gridSize: cell count per axis (default 80)\n  - steps: simulation steps (default 50). For Wolfram, also sets the number of rows.\n  - fillRatio: initial random fill for Life (default 0.4)\n  - surviveMin/surviveMax: Life survive range (default 2/3 = standard B3/S23)\n  - birthMin/birthMax: Life birth range (default 3/3 = standard B3/S23)\n  - smooth: true = marching squares contours (default for Life),\n            false = blocky rectangles (default for Wolfram)\n  - smoothing: Chaikin passes when smooth=true (default 2)\n\n  Usage:\n    const path = lib.cellularAutomata(params.size, params.size, {\n      type: params.type, rule: params.rule, gridSize: params.grid,\n      steps: params.steps, smooth: params.smooth\n    });\n    actions.push({ method: 'createVector', parentId: 'root',\n      args: { data: path, windingRule: 'EVENODD', name: 'Cellular Automata' } });\n    actions.push({ method: 'setFill', nodeId: '__prev',\n      args: { fills: [{ type: 'SOLID', color: lib.hexToRgb(params.color) }] } });\n\n  Recommended controls:\n  - type: segmented ['life', 'wolfram']\n  - rule: slider 0\u2013255, step 1, default 30 (only relevant for wolfram)\n  - gridSize: slider 20\u2013150, default 80\n  - steps: slider 10\u2013200, default 50\n  - smooth: toggle, default true\n\n##### Wave Function Collapse (lib.waveFunctionCollapse)\n\nConstraint-based tile generation. Produces coherent tiled patterns from adjacency rules.\nReturns an SVG path string combining all tile geometries. Single createVector.\n\n  lib.waveFunctionCollapse(width, height, options?) \u2192 string (SVG path)\n\n  Options:\n  - tileSet: 'truchet' (default), 'lines', or 'arcs'\n      truchet: quarter-circle arcs \u2014 beautiful flowing curved patterns\n      lines: straight line segments \u2014 maze-like connected networks\n      arcs: quadratic curve segments \u2014 organic pipe-like patterns\n  - cols: grid columns (default 10)\n  - rows: grid rows (default 10)\n  - tileSize: tile size in px (alternative to cols/rows \u2014 auto-computes grid)\n  - maxRetries: restart attempts on contradiction (default 10)\n\n  Usage:\n    const path = lib.waveFunctionCollapse(params.size, params.size, {\n      tileSet: params.tileSet, cols: params.cols, rows: params.rows\n    });\n    actions.push({ method: 'createVector', parentId: 'root',\n      args: { data: path, name: 'WFC Pattern' } });\n    actions.push({ method: 'setStroke', nodeId: '__prev',\n      args: { strokes: [{ type: 'SOLID', color: lib.hexToRgb(params.color) }], weight: params.weight } });\n    actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [] } });\n\n  IMPORTANT: WFC tiles are stroke paths (lines/arcs). Set fills to [] and apply stroke.\n  For truchet tiles, a thicker stroke (2\u20134px) looks best.\n\n  Recommended controls:\n  - tileSet: segmented ['truchet', 'lines', 'arcs']\n  - cols: slider 5\u201330, default 10\n  - rows: slider 5\u201330, default 10\n  - weight: slider 0.5\u20136, step 0.5, default 2\n  - size: slider 200\u2013800, default 400";
+  var MODULE_EXAMPLES = `### Generator example: colorful circle grid
 
 {
   "actions": [],
   "ui": {
     "replace": true,
     "controls": [
-      {
-        "id": "fillColor",
-        "type": "color",
-        "label": "Fill Color",
-        "props": { "defaultValue": "#3B82F6" },
-        "actions": [
-          { "method": "setFill", "nodeId": "1:2", "args": { "property": "color" } },
-          { "method": "setFill", "nodeId": "1:3", "args": { "property": "color" } },
-          { "method": "setFill", "nodeId": "1:4", "args": { "property": "color" } }
-        ]
-      },
-      {
-        "id": "cornerRadius",
-        "type": "slider",
-        "label": "Corner Radius",
-        "props": { "min": 0, "max": 50, "step": 1, "defaultValue": 8 },
-        "actions": [
-          { "method": "setCornerRadius", "nodeId": "1:2", "args": {} },
-          { "method": "setCornerRadius", "nodeId": "1:3", "args": {} },
-          { "method": "setCornerRadius", "nodeId": "1:4", "args": {} }
-        ]
-      },
-      {
-        "id": "opacity",
-        "type": "slider",
-        "label": "Opacity",
-        "props": { "min": 0, "max": 1, "step": 0.01, "defaultValue": 1 },
-        "actions": [
-          { "method": "setProperty", "nodeId": "1:2", "args": { "property": "opacity" } },
-          { "method": "setProperty", "nodeId": "1:3", "args": { "property": "opacity" } },
-          { "method": "setProperty", "nodeId": "1:4", "args": { "property": "opacity" } }
-        ]
-      }
+      { "id": "columns", "type": "slider", "label": "Columns", "props": { "min": 2, "max": 12, "step": 1, "defaultValue": 6 } },
+      { "id": "size", "type": "slider", "label": "Circle Size", "props": { "min": 8, "max": 48, "step": 1, "defaultValue": 16 } },
+      { "id": "spacing", "type": "slider", "label": "Spacing", "props": { "min": 0, "max": 24, "step": 1, "defaultValue": 8 } }
     ]
-  }
+  },
+  "generate": "const cols = params.columns || 6;\\\\nconst size = params.size || 16;\\\\nconst spacing = params.spacing || 8;\\\\nconst frameW = cols * (size + spacing) - spacing;\\\\nconst actions = [];\\\\nactions.push({ method: 'createFrame', tempId: 'grid', args: { x: 100, y: 100, width: frameW, height: frameW, name: 'Circle Grid' } });\\\\nfor (let row = 0; row < cols; row++) {\\\\n  for (let col = 0; col < cols; col++) {\\\\n    const x = col * (size + spacing);\\\\n    const y = row * (size + spacing);\\\\n    actions.push({ method: 'createEllipse', parentId: 'grid', args: { x: x, y: y, width: size, height: size } });\\\\n    const color = lib.randomColor();\\\\n    actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [{ type: 'SOLID', color: color }] } });\\\\n  }\\\\n}\\\\nreturn actions;"
 }
-`;
+
+### Generator example: halftone dot pattern from image
+
+This example shows how to use imageNodeId and pixel data to create a halftone effect.
+The generator samples brightness from the image and creates proportionally-sized dots.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "imageNodeId": "10:5",
+    "controls": [
+      { "id": "density", "type": "slider", "label": "Dot Density", "props": { "min": 10, "max": 60, "step": 1, "defaultValue": 30 } },
+      { "id": "maxDot", "type": "slider", "label": "Max Dot Size", "props": { "min": 2, "max": 20, "step": 1, "defaultValue": 8 } },
+      { "id": "bgColor", "type": "color", "label": "Background", "props": { "defaultValue": "#FFFFFF" } }
+    ]
+  },
+  "generate": "const cols = params.density || 30;\\\\nconst maxDot = params.maxDot || 8;\\\\nconst bg = lib.hexToRgb(params.bgColor || '#FFFFFF');\\\\nconst img = lib.imageData;\\\\nconst rows = Math.round(cols * (img.height / img.width));\\\\nconst cellW = maxDot + 2;\\\\nconst frameW = cols * cellW;\\\\nconst frameH = rows * cellW;\\\\nconst grid = lib.sampleGrid(cols, rows);\\\\nconst actions = [];\\\\nactions.push({ method: 'createFrame', tempId: 'halftone', args: { x: 0, y: 0, width: frameW, height: frameH, name: 'Halftone' } });\\\\nactions.push({ method: 'setFill', nodeId: 'halftone', args: { fills: [{ type: 'SOLID', color: bg }] } });\\\\nfor (let r = 0; r < rows; r++) {\\\\n  for (let c = 0; c < cols; c++) {\\\\n    const b = 1 - grid[r][c].brightness;\\\\n    const size = Math.max(1, b * maxDot);\\\\n    const cx = c * cellW + cellW / 2 - size / 2;\\\\n    const cy = r * cellW + cellW / 2 - size / 2;\\\\n    actions.push({ method: 'createEllipse', parentId: 'halftone', args: { x: cx, y: cy, width: size, height: size } });\\\\n    actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }] } });\\\\n  }\\\\n}\\\\nreturn actions;"
+}
+
+### Generator example: Voronoi image mosaic
+
+This example uses lib.Delaunay + createVector + image pixel data to create an organic
+stained-glass mosaic from a selected image. Each cell is a real editable Figma vector.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "imageNodeId": "10:5",
+    "controls": [
+      { "id": "cells", "type": "slider", "label": "Cell Count", "props": { "min": 20, "max": 300, "step": 1, "defaultValue": 80 } },
+      { "id": "strokeW", "type": "slider", "label": "Border Width", "props": { "min": 0, "max": 6, "step": 0.5, "defaultValue": 1 } },
+      { "id": "strokeColor", "type": "color", "label": "Border Color", "props": { "defaultValue": "#000000" } }
+    ]
+  },
+  "generate": "const n = params.cells || 80;\\\\nconst sw = params.strokeW ?? 1;\\\\nconst sc = lib.hexToRgb(params.strokeColor || '#000000');\\\\nconst img = lib.imageData;\\\\nconst W = 400;\\\\nconst H = Math.round(W * (img.height / img.width));\\\\nconst points = [];\\\\nfor (let i = 0; i < n; i++) points.push([lib.random() * W, lib.random() * H]);\\\\nconst voronoi = lib.Delaunay.from(points).voronoi([0, 0, W, H]);\\\\nconst actions = [];\\\\nactions.push({ method: 'createFrame', tempId: 'mosaic', args: { x: 0, y: 0, width: W, height: H, name: 'Voronoi Mosaic' } });\\\\nfor (let i = 0; i < n; i++) {\\\\n  const path = voronoi.renderCell(i);\\\\n  const px = Math.round(points[i][0] * (img.width / W));\\\\n  const py = Math.round(points[i][1] * (img.height / H));\\\\n  const pixel = lib.getPixel(px, py);\\\\n  const color = { r: pixel.r / 255, g: pixel.g / 255, b: pixel.b / 255 };\\\\n  actions.push({ method: 'createVector', parentId: 'mosaic', args: { data: path } });\\\\n  actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [{ type: 'SOLID', color: color }] } });\\\\n  if (sw > 0) actions.push({ method: 'setStroke', nodeId: '__prev', args: { strokes: [{ type: 'SOLID', color: sc }], weight: sw } });\\\\n}\\\\nreturn actions;"
+}
+
+### Generator example: 3D wireframe sphere
+
+This example shows how to use lib.sphere + lib.rotate3D + lib.project3D + lib.pointsToSvgPath
+to render a 3D wireframe as editable Figma vectors. Controls for X/Y rotation and segment count.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "controls": [
+      { "id": "rx", "type": "dial", "label": "Rotate X", "props": { "min": -180, "max": 180, "step": 1, "defaultValue": 30 } },
+      { "id": "ry", "type": "dial", "label": "Rotate Y", "props": { "min": -180, "max": 180, "step": 1, "defaultValue": 45 } },
+      { "id": "segments", "type": "slider", "label": "Segments", "props": { "min": 4, "max": 20, "step": 1, "defaultValue": 10 } },
+      { "id": "color", "type": "color", "label": "Stroke Color", "props": { "defaultValue": "#3B82F6" } }
+    ]
+  },
+  "generate": "const SIZE = 300; const cx = SIZE/2; const cy = SIZE/2; const mesh = lib.sphere(120, Math.round(params.segments)); const rotated = mesh.vertices.map(v => lib.rotate3D(v, params.rx, params.ry, 0)); const projected = rotated.map(v => lib.project3D(v, 500)); const sorted = mesh.faces.slice().sort((a,b) => { const az = a.reduce((s,i)=>s+rotated[i].z,0)/a.length; const bz = b.reduce((s,i)=>s+rotated[i].z,0)/b.length; return az - bz; }); const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: SIZE, height: SIZE, name: '3D Sphere' } }); const col = lib.chroma(params.color || '#3B82F6'); for (const face of sorted) { const pts = face.map(i => ({ x: cx + projected[i].x, y: cy + projected[i].y })); const path = lib.pointsToSvgPath(pts, true); const avgZ = face.reduce((s,i)=>s+rotated[i].z,0)/face.length; const lightness = lib.mapRange(avgZ, -120, 120, 0.4, 1); const fc = col.luminance(lightness * 0.25); actions.push({ method: 'createVector', parentId: 'root', args: { data: path, name: 'face', fills: [{ type: 'SOLID', color: lib.chromaToFigma(fc), opacity: 0.9 }], strokes: [] } }); } return actions;"
+}
+
+### Generator example: patternize selected node
+
+This example tiles whatever node the user currently has selected, using lib.selectionId as
+the pattern source. No node creation \u2014 the selected frame/vector becomes the repeating tile.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "controls": [
+      { "id": "tileType", "type": "segmented", "label": "Tile Type", "props": { "options": [{ "value": "RECTANGULAR", "label": "Grid" }, { "value": "HORIZONTAL_HEXAGONAL", "label": "Hex H" }, { "value": "VERTICAL_HEXAGONAL", "label": "Hex V" }], "defaultValue": "RECTANGULAR" } },
+      { "id": "scale", "type": "slider", "label": "Scale", "props": { "min": 0.1, "max": 2, "step": 0.05, "defaultValue": 1 } },
+      { "id": "spacing", "type": "slider", "label": "Gap", "props": { "min": 0, "max": 0.5, "step": 0.05, "defaultValue": 0 } },
+      { "id": "size", "type": "slider", "label": "Canvas Size", "props": { "min": 200, "max": 1200, "step": 100, "defaultValue": 600 } }
+    ]
+  },
+  "generate": "if (!lib.selectionId) { return []; } const sz = params.size || 600; const actions = []; actions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: sz, height: sz, name: 'Tiled Pattern' } }); actions.push({ method: 'applyPatternFill', parentId: 'root', args: { sourceNodeId: lib.selectionId, tileType: params.tileType || 'RECTANGULAR', scalingFactor: params.scale || 1, spacingX: params.spacing || 0, spacingY: params.spacing || 0, width: sz, height: sz, name: 'pattern' } }); return actions;"
+}
+
+### Generator example: fractal tree (lib.LSystem)
+
+This example uses lib.LSystem to generate a fractal tree with turtle graphics interpretation.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "controls": [
+      { "id": "iterations", "type": "slider", "label": "Iterations", "props": { "min": 1, "max": 6, "step": 1, "defaultValue": 4 } },
+      { "id": "angle", "type": "slider", "label": "Branch Angle", "props": { "min": 10, "max": 50, "step": 1, "defaultValue": 25 } },
+      { "id": "length", "type": "slider", "label": "Segment Length", "props": { "min": 1, "max": 15, "step": 0.5, "defaultValue": 6 } },
+      { "id": "color", "type": "color", "label": "Color", "props": { "defaultValue": "#1E3A2F" } }
+    ]
+  },
+  "generate": "const SZ = 500;\\\\nconst lsys = new lib.LSystem({ axiom: 'F', productions: { 'F': 'FF+[+F-F-F]-[-F+F+F]' } });\\\\nconst result = lsys.iterate(params.iterations || 4);\\\\nlet x = SZ/2, y = SZ - 20, ang = -90;\\\\nconst stack = [];\\\\nlet path = 'M ' + x + ' ' + y;\\\\nconst segLen = params.length || 6;\\\\nconst bAngle = params.angle || 25;\\\\nfor (const ch of result) {\\\\n  if (ch === 'F') { x += Math.cos(ang * Math.PI / 180) * segLen; y += Math.sin(ang * Math.PI / 180) * segLen; path += ' L ' + x.toFixed(2) + ' ' + y.toFixed(2); }\\\\n  else if (ch === '+') { ang += bAngle; }\\\\n  else if (ch === '-') { ang -= bAngle; }\\\\n  else if (ch === '[') { stack.push({ x, y, ang }); }\\\\n  else if (ch === ']') { const s = stack.pop(); x = s.x; y = s.y; ang = s.ang; path += ' M ' + x.toFixed(2) + ' ' + y.toFixed(2); }\\\\n}\\\\nconst col = lib.hexToRgb(params.color || '#1E3A2F');\\\\nconst actions = [];\\\\nactions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: SZ, height: SZ, name: 'Fractal Tree' } });\\\\nactions.push({ method: 'createVector', parentId: 'root', args: { data: path, name: 'tree', strokes: [{ type: 'SOLID', color: col, opacity: 1 }], fills: [] } });\\\\nactions.push({ method: 'setStroke', nodeId: '__prev', args: { strokes: [{ type: 'SOLID', color: col }], weight: 1 } });\\\\nreturn actions;"
+}
+
+### Generator example: hand-drawn sketchy rectangle (lib.rough)
+
+lib.rough draws shapes with a hand-drawn, sketchy appearance. Every method returns
+RoughPathInfo[] \u2014 an array of { d, stroke, strokeWidth, fill } objects. The "d" string
+is a ready-to-use SVG path for createVector. Typically a shape produces 2+ path objects:
+the outline and the fill hachure/pattern. Iterate all paths and emit a createVector for each.
+
+{
+  "actions": [],
+  "ui": {
+    "replace": true,
+    "controls": [
+      { "id": "roughness", "type": "slider", "label": "Roughness", "props": { "min": 0, "max": 3, "step": 0.1, "defaultValue": 1.5 } },
+      { "id": "bowing", "type": "slider", "label": "Bowing", "props": { "min": 0, "max": 10, "step": 0.5, "defaultValue": 2 } },
+      { "id": "fillStyle", "type": "select", "label": "Fill Style", "props": { "options": ["hachure", "solid", "zigzag", "cross-hatch", "dots", "sunburst", "dashed", "zigzag-line"], "defaultValue": "hachure" } },
+      { "id": "fillColor", "type": "color", "label": "Fill", "props": { "defaultValue": "#3B82F6" } },
+      { "id": "strokeColor", "type": "color", "label": "Stroke", "props": { "defaultValue": "#1E293B" } }
+    ]
+  },
+  "generate": "const SZ = 400;\\\\nconst opts = { roughness: params.roughness || 1.5, bowing: params.bowing || 2, fill: params.fillColor || '#3B82F6', fillStyle: params.fillStyle || 'hachure', stroke: params.strokeColor || '#1E293B', strokeWidth: 2, seed: 42 };\\\\nconst paths = lib.rough.rectangle(50, 50, SZ - 100, SZ - 100, opts);\\\\nconst actions = [];\\\\nactions.push({ method: 'createFrame', tempId: 'root', args: { x: 0, y: 0, width: SZ, height: SZ, name: 'Sketchy Rectangle' } });\\\\nfor (const p of paths) {\\\\n  if (p.fill && p.fill !== 'none') {\\\\n    actions.push({ method: 'createVector', parentId: 'root', args: { data: p.d, fills: [{ type: 'SOLID', color: lib.hexToRgb(p.fill) }], strokes: [] } });\\\\n  } else if (p.stroke && p.stroke !== 'none') {\\\\n    actions.push({ method: 'createVector', parentId: 'root', args: { data: p.d, fills: [], strokes: [{ type: 'SOLID', color: lib.hexToRgb(p.stroke) }] } });\\\\n    actions.push({ method: 'setStroke', nodeId: '__prev', args: { strokes: [{ type: 'SOLID', color: lib.hexToRgb(p.stroke) }], weight: p.strokeWidth || 1 } });\\\\n  }\\\\n}\\\\nreturn actions;"
+}`;
 
   // src/ui/prompt/prompt-composer.ts
+  var MODULE_KEYWORD_MAP = [
+    { module: "chroma", keywords: /\b(color|palette|gradient|saturate|desaturate|darken|lighten|hue|chroma|tint|shade|warm|cool|complementary|analogous)\b/i },
+    { module: "noise", keywords: /\b(noise|organic|procedural|perlin|simplex|turbulence|natural|random.*pattern)\b/i },
+    { module: "easing", keywords: /\b(easing|ease|bezier|curve.*editor|falloff|distribution|progression|taper)\b/i },
+    { module: "delaunay", keywords: /\b(voronoi|delaunay|triangulat|mosaic|stained.?glass|tessellat)\b/i },
+    { module: "image", keywords: /\b(halftone|dither|posterize|pixel|image|photo|bitmap|blur.*image|sharpen|vignette|glitch|mosaic|ascii.*art|color.*extract|quantiz)\b/i },
+    { module: "canvas", keywords: /\b(renderCanvas|tile|seamless|repeating.*pattern|pattern.*fill.*canvas)\b/i },
+    { module: "rd", keywords: /\b(turing|reaction.?diffusion|gray.?scott|morphogenesis|biological.*pattern|organic.*spots|organic.*stripes|labyrinth|coral.*pattern|fingerprint.*pattern)\b/i },
+    { module: "3d", keywords: /\b(3d|sphere|cube|torus|wireframe|rotate3d|project3d|mesh|vertices|faces|perspective|along.*path|follow.*path|on.*path|distribute.*along|samplePath|pathBounds|vector.*path)\b/i },
+    { module: "lsystem", keywords: /\b(fractal|l.?system|tree|fern|koch|sierpinski|dragon.*curve|branch|recursive|botanical)\b/i },
+    { module: "qrcode", keywords: /\b(qr|qrcode|barcode)\b/i },
+    { module: "flowfield", keywords: /\b(flow.*field|streamline|vector.*field|field.*line)\b/i },
+    { module: "charts", keywords: /\b(chart|bar.*chart|pie.*chart|radar|line.*chart|graph|data.*viz|plot|histogram)\b/i },
+    { module: "rough", keywords: /\b(rough|sketch|hand.?drawn|whiteboard|doodle|hachure)\b/i },
+    { module: "pattern", keywords: /\b(pattern.*fill|applyPattern|tile.*pattern|patternize|hexagonal.*tile)\b/i },
+    { module: "computational", keywords: /\b(circle.*pack|pack.*circle|attractor|clifford|dejong|lorenz|metaball|blob.*merge|lava.*lamp|dla|diffusion.*aggregat|coral.*growth|frost|lightning.*branch|crystal.*growth|cellular.*automat|game.*of.*life|wolfram|rule.*30|rule.*90|rule.*110|conway|wfc|wave.*function.*collapse|truchet|tile.*generation|constraint.*tile|generative.*art|computational.*design)\b/i }
+  ];
+  var GENERATOR_KEYWORDS = /\b(grid|pattern|dots|circle|generate|create.*\d|layout|arrange|distribute|carousel|randomize|gradient|spiral|animate|scatter|wavy|noise|organic|palette|color.*scale|saturate|desaturate|darken|lighten|hue.*shift|3d|sphere|cube|fractal|tree|qr|halftone|dither|posterize|flow.*field|chart|voronoi|rough|sketch|mosaic|superformula|blob|along.*path|follow.*path|on.*path|along.*line|along.*curve|turing|reaction.?diffusion|gray.?scott|morphogenesis|circle.*pack|pack.*circle|attractor|clifford|dejong|metaball|lava.*lamp|dla|diffusion.*aggregat|coral.*growth|frost|lightning.*branch|cellular.*automat|game.*of.*life|wolfram|conway|wfc|wave.*function.*collapse|truchet|generative.*art|computational.*design)\b/i;
+  function selectModules(userMessage, autoGenerate, selectionContext) {
+    if (autoGenerate) {
+      return CORE_PROMPT + "\n" + AUTO_GENERATE_ADDENDUM;
+    }
+    const hasVectorPaths = selectionContext?.nodes.some(
+      (n3) => n3.vectorPaths && n3.vectorPaths.length > 0
+    ) ?? false;
+    const parts = [CORE_PROMPT];
+    const needsGenerator = GENERATOR_KEYWORDS.test(userMessage) || hasVectorPaths;
+    if (needsGenerator) {
+      parts.push(MODULE_GENERATOR_INTRO);
+      parts.push(MODULE_VECTORS);
+      parts.push(MODULE_CREATE_METHODS);
+    }
+    const matched = {};
+    for (const { module, keywords } of MODULE_KEYWORD_MAP) {
+      if (keywords.test(userMessage)) {
+        matched[module] = true;
+      }
+    }
+    if (hasVectorPaths) matched["3d"] = true;
+    if (matched["chroma"] || needsGenerator) parts.push(MODULE_CHROMA);
+    if (matched["noise"]) parts.push(MODULE_NOISE);
+    if (matched["easing"]) parts.push(MODULE_EASING);
+    if (matched["delaunay"]) parts.push(MODULE_DELAUNAY);
+    if (matched["image"]) parts.push(MODULE_IMAGE);
+    if (matched["canvas"]) parts.push(MODULE_CANVAS);
+    if (matched["rd"]) parts.push(MODULE_REACTION_DIFFUSION);
+    if (matched["3d"]) parts.push(MODULE_3D);
+    if (matched["lsystem"]) parts.push(MODULE_LSYSTEM);
+    if (matched["qrcode"]) parts.push(MODULE_QRCODE);
+    if (matched["flowfield"]) parts.push(MODULE_FLOWFIELD);
+    if (matched["charts"]) parts.push(MODULE_CHARTS);
+    if (matched["rough"]) parts.push(MODULE_ROUGH);
+    if (matched["pattern"]) parts.push(MODULE_PATTERN);
+    if (matched["computational"]) parts.push(MODULE_COMPUTATIONAL);
+    if (needsGenerator) {
+      parts.push(MODULE_EXAMPLES);
+      parts.push(MODULE_GENERATOR_RULES);
+    }
+    return parts.join("\n\n");
+  }
+  var MAX_RECENT_TURNS = 4;
+  var HISTORY_CHAR_BUDGET = 2e4;
+  function summariseAssistantMessage(content) {
+    try {
+      let raw = content.trim();
+      const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (fenceMatch) raw = fenceMatch[1].trim();
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        const msg = typeof parsed.message === "string" ? parsed.message : "";
+        const controlCount = Array.isArray(parsed.ui?.controls) ? parsed.ui.controls.length : 0;
+        const hasGen = typeof parsed.generate === "string";
+        const parts = [];
+        if (msg) parts.push(msg);
+        if (controlCount > 0) parts.push(`[generated plugin with ${controlCount} control${controlCount > 1 ? "s" : ""}${hasGen ? ", generator" : ""}]`);
+        return parts.join(" ") || "[generated plugin response]";
+      }
+    } catch {
+    }
+    return content;
+  }
+  function prepareHistory(chatHistory) {
+    const conversation = chatHistory.filter((m4) => m4.role !== "error");
+    if (conversation.length === 0) return [];
+    const turnPairs = [];
+    let current = {};
+    for (const msg of conversation) {
+      if (msg.role === "user") {
+        if (current.user) turnPairs.push(current);
+        current = { user: msg };
+      } else {
+        current.assistant = msg;
+        turnPairs.push(current);
+        current = {};
+      }
+    }
+    if (current.user || current.assistant) turnPairs.push(current);
+    const recentStart = Math.max(0, turnPairs.length - MAX_RECENT_TURNS);
+    const result = [];
+    for (let i3 = 0; i3 < turnPairs.length; i3++) {
+      const pair = turnPairs[i3];
+      const isOld = i3 < recentStart;
+      if (pair.user) {
+        result.push({ role: "user", content: pair.user.content });
+      }
+      if (pair.assistant) {
+        const content = isOld ? summariseAssistantMessage(pair.assistant.content) : pair.assistant.content;
+        result.push({ role: "assistant", content });
+      }
+    }
+    let totalChars = result.reduce((sum2, m4) => sum2 + m4.content.length, 0);
+    while (totalChars > HISTORY_CHAR_BUDGET && result.length > 2) {
+      const removed = result.shift();
+      totalChars -= removed.content.length;
+      if (result.length > 0 && result[0].role === "assistant") {
+        totalChars -= result[0].content.length;
+        result.shift();
+      }
+    }
+    return result;
+  }
   function composePrompt(selectionContext, currentUISpec, chatHistory, userMessage, options) {
     const autoGenerate = options?.autoGenerate ?? false;
-    const systemPrompt = autoGenerate ? SYSTEM_PROMPT + "\n" + AUTO_GENERATE_ADDENDUM : SYSTEM_PROMPT;
+    const systemPrompt = selectModules(userMessage, autoGenerate, selectionContext);
     const apiMessages = [];
     const preambleParts = [];
     if (selectionContext && selectionContext.nodes.length > 0) {
       preambleParts.push(
-        "## Current Figma selection\n```json\n" + JSON.stringify(selectionContext, null, 2) + "\n```"
+        "## Current Figma selection\n```json\n" + JSON.stringify(selectionContext) + "\n```"
       );
       if (selectionContext.truncated) {
         preambleParts.push(
@@ -32133,7 +32047,7 @@ selection.
     }
     if (currentUISpec) {
       preambleParts.push(
-        "## Current control panel spec (may be refined by this turn)\n```json\n" + JSON.stringify(currentUISpec, null, 2) + "\n```"
+        "## Current control panel spec (may be refined by this turn)\n```json\n" + JSON.stringify(currentUISpec) + "\n```"
       );
     }
     if (preambleParts.length > 0) {
@@ -32143,13 +32057,8 @@ selection.
         content: "Understood. I have the selection context and will respond with the required JSON format."
       });
     }
-    const conversationHistory = chatHistory.filter((m4) => m4.role !== "error");
-    for (const msg of conversationHistory) {
-      apiMessages.push({
-        role: msg.role === "user" ? "user" : "assistant",
-        content: msg.content
-      });
-    }
+    const historyMessages = prepareHistory(chatHistory);
+    apiMessages.push(...historyMessages);
     const finalMessage = autoGenerate ? "Analyze the selected nodes and auto-generate the best control panel for them. Follow the auto-generate mode rules." : userMessage;
     const last = apiMessages[apiMessages.length - 1];
     if (last && last.role === "user") {
@@ -32159,6 +32068,22 @@ selection.
       };
     } else {
       apiMessages.push({ role: "user", content: finalMessage });
+    }
+    const totalChars = systemPrompt.length + apiMessages.reduce((s3, m4) => s3 + m4.content.length, 0);
+    const estimatedTokens = Math.ceil(totalChars / 4);
+    const TOKEN_SAFETY_LIMIT = 18e4;
+    if (estimatedTokens > TOKEN_SAFETY_LIMIT) {
+      while (apiMessages.length > 4) {
+        const charsBefore = apiMessages.reduce((s3, m4) => s3 + m4.content.length, 0);
+        apiMessages.splice(2, 1);
+        if (apiMessages.length > 2 && apiMessages[2].role === "assistant") {
+          apiMessages.splice(2, 1);
+        }
+        const charsAfter = apiMessages.reduce((s3, m4) => s3 + m4.content.length, 0);
+        if (charsAfter === charsBefore) break;
+        const newEstimate = Math.ceil((systemPrompt.length + charsAfter) / 4);
+        if (newEstimate <= TOKEN_SAFETY_LIMIT) break;
+      }
     }
     return { system: systemPrompt, messages: apiMessages };
   }
@@ -47748,10 +47673,10 @@ void main() {
     const z2 = zr * Zn;
     return [x3, y3, z2];
   };
-  var compand = (linear) => {
-    const sign = Math.sign(linear);
-    linear = Math.abs(linear);
-    return (linear <= 31308e-7 ? linear * 12.92 : 1.055 * Math.pow(linear, 1 / 2.4) - 0.055) * sign;
+  var compand = (linear2) => {
+    const sign = Math.sign(linear2);
+    linear2 = Math.abs(linear2);
+    return (linear2 <= 31308e-7 ? linear2 * 12.92 : 1.055 * Math.pow(linear2, 1 / 2.4) - 0.055) * sign;
   };
   var xyz2rgb = (x3, y3, z2) => {
     const { MtxAdaptMa, MtxAdaptMaI, MtxXYZ2RGB, RefWhiteRGB, Xn, Yn, Zn } = lab_constants_default;
@@ -47800,8 +47725,8 @@ void main() {
   function gammaAdjustSRGB(companded) {
     const sign = Math.sign(companded);
     companded = Math.abs(companded);
-    const linear = companded <= 0.04045 ? companded / 12.92 : Math.pow((companded + 0.055) / 1.055, 2.4);
-    return linear * sign;
+    const linear2 = companded <= 0.04045 ? companded / 12.92 : Math.pow((companded + 0.055) / 1.055, 2.4);
+    return linear2 * sign;
   }
   var rgb2xyz = (r3, g3, b3) => {
     r3 = gammaAdjustSRGB(r3 / 255);
@@ -53307,6 +53232,806 @@ void main() {
   };
   var at = { canvas: (t3, e3) => new st(t3, e3), svg: (t3, e3) => new ot(t3, e3), generator: (t3) => new et(t3), newSeed: () => et.newSeed() };
 
+  // node_modules/marchingsquares/dist/marchingsquares-esm.js
+  function linear(a3, b3, v4) {
+    if (a3 < b3)
+      return (v4 - a3) / (b3 - a3);
+    return (a3 - v4) / (a3 - b3);
+  }
+  function Options() {
+    this.successCallback = null;
+    this.verbose = false;
+    this.polygons = false;
+    this.polygons_full = false;
+    this.linearRing = true;
+    this.noQuadTree = false;
+    this.noFrame = false;
+  }
+  function isoLineOptions(userSettings) {
+    var i3, key, val, lineOptions, optionKeys;
+    lineOptions = new Options();
+    userSettings = userSettings ? userSettings : {};
+    optionKeys = Object.keys(lineOptions);
+    for (i3 = 0; i3 < optionKeys.length; i3++) {
+      key = optionKeys[i3];
+      val = userSettings[key];
+      if (typeof val !== "undefined" && val !== null)
+        lineOptions[key] = val;
+    }
+    lineOptions.polygons_full = !lineOptions.polygons;
+    lineOptions.interpolate = linear;
+    return lineOptions;
+  }
+  function cell2Polygons(cell, x3, y3, settings) {
+    var polygons = [];
+    cell.polygons.forEach(function(p3) {
+      p3.forEach(function(pp) {
+        pp[0] += x3;
+        pp[1] += y3;
+      });
+      if (settings.linearRing)
+        p3.push(p3[0]);
+      polygons.push(p3);
+    });
+    return polygons;
+  }
+  function entry_coordinate(x3, y3, mode, path) {
+    if (mode === 0) {
+      x3 += 1;
+      y3 += path[0][1];
+    } else if (mode === 1) {
+      x3 += path[0][0];
+    } else if (mode === 2) {
+      y3 += path[0][1];
+    } else if (mode === 3) {
+      x3 += path[0][0];
+      y3 += 1;
+    }
+    return [x3, y3];
+  }
+  function skip_coordinate(x3, y3, mode) {
+    if (mode === 0) {
+      x3++;
+    } else if (mode === 1) ;
+    else if (mode === 2) {
+      y3++;
+    } else if (mode === 3) {
+      x3++;
+      y3++;
+    }
+    return [x3, y3];
+  }
+  function requireLineFrame(data, threshold) {
+    var frameRequired, cols, rows, i3, j2;
+    frameRequired = true;
+    cols = data[0].length;
+    rows = data.length;
+    for (j2 = 0; j2 < rows; j2++) {
+      if (data[j2][0] >= threshold || data[j2][cols - 1] >= threshold) {
+        frameRequired = false;
+        break;
+      }
+    }
+    if (frameRequired && (data[rows - 1][0] >= threshold || data[rows - 1][cols - 1] >= threshold)) {
+      frameRequired = false;
+    }
+    if (frameRequired)
+      for (i3 = 0; i3 < cols - 1; i3++) {
+        if (data[0][i3] >= threshold || data[rows - 1][i3] > threshold) {
+          frameRequired = false;
+          break;
+        }
+      }
+    return frameRequired;
+  }
+  function traceLinePaths(data, cellGrid, settings) {
+    var nextedge, e3, ee, cc2, path, enter, x3, y3, finalized, origin, point, dir, count, found_entry, ve;
+    var polygons = [];
+    var rows = data.length - 1;
+    var cols = data[0].length - 1;
+    var valid_entries = [
+      "right",
+      /* down */
+      "bottom",
+      /* left */
+      "left",
+      /* up */
+      "top"
+      /* right */
+    ];
+    var add_x = [0, -1, 0, 1];
+    var add_y = [-1, 0, 1, 0];
+    var entry_dir = {
+      bottom: 1,
+      left: 2,
+      top: 3,
+      right: 0
+    };
+    if (!settings.noFrame) {
+      if (requireLineFrame(data, settings.threshold)) {
+        if (settings.linearRing)
+          polygons.push([[0, 0], [0, rows], [cols, rows], [cols, 0], [0, 0]]);
+        else
+          polygons.push([[0, 0], [0, rows], [cols, rows], [cols, 0]]);
+      }
+    }
+    cellGrid.forEach(function(a3, i3) {
+      a3.forEach(function(cell, j2) {
+        nextedge = null;
+        for (e3 = 0; e3 < 4; e3++) {
+          nextedge = valid_entries[e3];
+          if (typeof cell.edges[nextedge] !== "object")
+            continue;
+          path = [];
+          ee = cell.edges[nextedge];
+          enter = nextedge;
+          x3 = i3;
+          y3 = j2;
+          finalized = false;
+          origin = [i3 + ee.path[0][0], j2 + ee.path[0][1]];
+          path.push(origin);
+          while (!finalized) {
+            cc2 = cellGrid[x3][y3];
+            if (typeof cc2.edges[enter] !== "object")
+              break;
+            ee = cc2.edges[enter];
+            delete cc2.edges[enter];
+            point = ee.path[1];
+            point[0] += x3;
+            point[1] += y3;
+            path.push(point);
+            enter = ee.move.enter;
+            x3 = x3 + ee.move.x;
+            y3 = y3 + ee.move.y;
+            if (typeof cellGrid[x3] === "undefined" || typeof cellGrid[x3][y3] === "undefined") {
+              if (!settings.linearRing)
+                break;
+              dir = 0;
+              count = 0;
+              if (x3 === cols) {
+                x3--;
+                dir = 0;
+              } else if (x3 < 0) {
+                x3++;
+                dir = 2;
+              } else if (y3 === rows) {
+                y3--;
+                dir = 3;
+              } else if (y3 < 0) {
+                y3++;
+                dir = 1;
+              }
+              if (x3 === i3 && y3 === j2 && dir === entry_dir[nextedge]) {
+                finalized = true;
+                enter = nextedge;
+                break;
+              }
+              while (1) {
+                found_entry = false;
+                if (count > 4)
+                  throw new Error("Direction change counter overflow! This should never happen!");
+                if (!(typeof cellGrid[x3] === "undefined" || typeof cellGrid[x3][y3] === "undefined")) {
+                  cc2 = cellGrid[x3][y3];
+                  ve = valid_entries[dir];
+                  if (typeof cc2.edges[ve] === "object") {
+                    ee = cc2.edges[ve];
+                    path.push(entry_coordinate(x3, y3, dir, ee.path));
+                    enter = ve;
+                    found_entry = true;
+                    break;
+                  }
+                }
+                if (found_entry) {
+                  break;
+                } else {
+                  path.push(skip_coordinate(x3, y3, dir));
+                  x3 += add_x[dir];
+                  y3 += add_y[dir];
+                  if (typeof cellGrid[x3] === "undefined" || typeof cellGrid[x3][y3] === "undefined") {
+                    if (dir === 0 && y3 < 0 || dir === 1 && x3 < 0 || dir === 2 && y3 === rows || dir === 3 && x3 === cols) {
+                      x3 -= add_x[dir];
+                      y3 -= add_y[dir];
+                      dir = (dir + 1) % 4;
+                      count++;
+                    }
+                  }
+                  if (x3 === i3 && y3 === j2 && dir === entry_dir[nextedge]) {
+                    finalized = true;
+                    enter = nextedge;
+                    break;
+                  }
+                }
+              }
+            }
+          }
+          if (settings.linearRing && (path[path.length - 1][0] !== origin[0] || path[path.length - 1][1] !== origin[1]))
+            path.push(origin);
+          polygons.push(path);
+        }
+      });
+    });
+    return polygons;
+  }
+  function TreeNode(data, x3, y3, dx, dy) {
+    var dx_tmp = dx, dy_tmp = dy, msb_x = 0, msb_y = 0;
+    this.x = x3;
+    this.y = y3;
+    this.lowerBound = null;
+    this.upperBound = null;
+    this.childA = null;
+    this.childB = null;
+    this.childC = null;
+    this.childD = null;
+    if (dx === 1 && dy === 1) {
+      this.lowerBound = Math.min(
+        data[y3][x3],
+        data[y3][x3 + 1],
+        data[y3 + 1][x3 + 1],
+        data[y3 + 1][x3]
+      );
+      this.upperBound = Math.max(
+        data[y3][x3],
+        data[y3][x3 + 1],
+        data[y3 + 1][x3 + 1],
+        data[y3 + 1][x3]
+      );
+    } else {
+      if (dx > 1) {
+        while (dx_tmp !== 0) {
+          dx_tmp = dx_tmp >> 1;
+          msb_x++;
+        }
+        if (dx === 1 << msb_x - 1)
+          msb_x--;
+        dx_tmp = 1 << msb_x - 1;
+      }
+      if (dy > 1) {
+        while (dy_tmp !== 0) {
+          dy_tmp = dy_tmp >> 1;
+          msb_y++;
+        }
+        if (dy === 1 << msb_y - 1)
+          msb_y--;
+        dy_tmp = 1 << msb_y - 1;
+      }
+      this.childA = new TreeNode(data, x3, y3, dx_tmp, dy_tmp);
+      this.lowerBound = this.childA.lowerBound;
+      this.upperBound = this.childA.upperBound;
+      if (dx - dx_tmp > 0) {
+        this.childB = new TreeNode(data, x3 + dx_tmp, y3, dx - dx_tmp, dy_tmp);
+        this.lowerBound = Math.min(this.lowerBound, this.childB.lowerBound);
+        this.upperBound = Math.max(this.upperBound, this.childB.upperBound);
+        if (dy - dy_tmp > 0) {
+          this.childC = new TreeNode(data, x3 + dx_tmp, y3 + dy_tmp, dx - dx_tmp, dy - dy_tmp);
+          this.lowerBound = Math.min(this.lowerBound, this.childC.lowerBound);
+          this.upperBound = Math.max(this.upperBound, this.childC.upperBound);
+        }
+      }
+      if (dy - dy_tmp > 0) {
+        this.childD = new TreeNode(data, x3, y3 + dy_tmp, dx_tmp, dy - dy_tmp);
+        this.lowerBound = Math.min(this.lowerBound, this.childD.lowerBound);
+        this.upperBound = Math.max(this.upperBound, this.childD.upperBound);
+      }
+    }
+  }
+  TreeNode.prototype.cellsInBand = function(lowerBound, upperBound, subsumed) {
+    var cells = [];
+    subsumed = typeof subsumed === "undefined" ? true : subsumed;
+    if (this.lowerBound > upperBound || this.upperBound < lowerBound)
+      return cells;
+    if (!(this.childA || this.childB || this.childC || this.childD)) {
+      if (subsumed || this.lowerBound <= lowerBound || this.upperBound >= upperBound) {
+        cells.push({
+          x: this.x,
+          y: this.y
+        });
+      }
+    } else {
+      if (this.childA)
+        cells = cells.concat(this.childA.cellsInBand(lowerBound, upperBound, subsumed));
+      if (this.childB)
+        cells = cells.concat(this.childB.cellsInBand(lowerBound, upperBound, subsumed));
+      if (this.childD)
+        cells = cells.concat(this.childD.cellsInBand(lowerBound, upperBound, subsumed));
+      if (this.childC)
+        cells = cells.concat(this.childC.cellsInBand(lowerBound, upperBound, subsumed));
+    }
+    return cells;
+  };
+  TreeNode.prototype.cellsBelowThreshold = function(threshold, subsumed) {
+    var cells = [];
+    subsumed = typeof subsumed === "undefined" ? true : subsumed;
+    if (this.lowerBound > threshold)
+      return cells;
+    if (!(this.childA || this.childB || this.childC || this.childD)) {
+      if (subsumed || this.upperBound >= threshold) {
+        cells.push({
+          x: this.x,
+          y: this.y
+        });
+      }
+    } else {
+      if (this.childA)
+        cells = cells.concat(this.childA.cellsBelowThreshold(threshold, subsumed));
+      if (this.childB)
+        cells = cells.concat(this.childB.cellsBelowThreshold(threshold, subsumed));
+      if (this.childD)
+        cells = cells.concat(this.childD.cellsBelowThreshold(threshold, subsumed));
+      if (this.childC)
+        cells = cells.concat(this.childC.cellsBelowThreshold(threshold, subsumed));
+    }
+    return cells;
+  };
+  function QuadTree(data) {
+    var i3, cols;
+    if (!data)
+      throw new Error("data is required");
+    if (!Array.isArray(data) || !Array.isArray(data[0]))
+      throw new Error("data must be scalar field, i.e. array of arrays");
+    if (data.length < 2)
+      throw new Error("data must contain at least two rows");
+    cols = data[0].length;
+    if (cols < 2)
+      throw new Error("data must contain at least two columns");
+    for (i3 = 1; i3 < data.length; i3++) {
+      if (!Array.isArray(data[i3]))
+        throw new Error("Row " + i3 + " is not an array");
+      if (data[i3].length != cols)
+        throw new Error("unequal row lengths detected, please provide a regular grid");
+    }
+    this.data = data;
+    this.root = new TreeNode(data, 0, 0, data[0].length - 1, data.length - 1);
+  }
+  function isoLines(input, threshold, options) {
+    var settings, i3, j2, useQuadTree = false, multiLine = false, tree = null, root2 = null, data = null, cellGrid = null, linePolygons = null, ret = [];
+    if (!input) throw new Error("data is required");
+    if (threshold === void 0 || threshold === null) throw new Error("threshold is required");
+    if (!!options && typeof options !== "object") throw new Error("options must be an object");
+    settings = isoLineOptions(options);
+    if (input instanceof QuadTree) {
+      tree = input;
+      root2 = input.root;
+      data = input.data;
+      if (!settings.noQuadTree)
+        useQuadTree = true;
+    } else if (Array.isArray(input) && Array.isArray(input[0])) {
+      data = input;
+    } else {
+      throw new Error("input is neither array of arrays nor object retrieved from 'QuadTree()'");
+    }
+    if (Array.isArray(threshold)) {
+      multiLine = true;
+      if (!settings.noQuadTree)
+        useQuadTree = true;
+      for (i3 = 0; i3 < threshold.length; i3++)
+        if (isNaN(+threshold[i3]))
+          throw new Error("threshold[" + i3 + "] is not a number");
+    } else {
+      if (isNaN(+threshold))
+        throw new Error("threshold must be a number or array of numbers");
+      threshold = [threshold];
+    }
+    if (useQuadTree && !root2) {
+      tree = new QuadTree(data);
+      root2 = tree.root;
+      data = tree.data;
+    }
+    if (settings.verbose) {
+      if (settings.polygons)
+        console.log("MarchingSquaresJS-isoLines: returning single lines (polygons) for each grid cell");
+      else
+        console.log("MarchingSquaresJS-isoLines: returning line paths (polygons) for entire data grid");
+      if (multiLine)
+        console.log("MarchingSquaresJS-isoLines: multiple lines requested, returning array of line paths instead of lines for a single threshold");
+    }
+    threshold.forEach(function(t3, i4) {
+      linePolygons = [];
+      settings.threshold = t3;
+      if (settings.verbose)
+        console.log("MarchingSquaresJS-isoLines: computing iso lines for threshold " + t3);
+      if (settings.polygons) {
+        if (useQuadTree) {
+          root2.cellsBelowThreshold(settings.threshold, true).forEach(function(c3) {
+            linePolygons = linePolygons.concat(
+              cell2Polygons(
+                prepareCell(
+                  data,
+                  c3.x,
+                  c3.y,
+                  settings
+                ),
+                c3.x,
+                c3.y,
+                settings
+              )
+            );
+          });
+        } else {
+          for (j2 = 0; j2 < data.length - 1; ++j2) {
+            for (i4 = 0; i4 < data[0].length - 1; ++i4)
+              linePolygons = linePolygons.concat(
+                cell2Polygons(
+                  prepareCell(
+                    data,
+                    i4,
+                    j2,
+                    settings
+                  ),
+                  i4,
+                  j2,
+                  settings
+                )
+              );
+          }
+        }
+      } else {
+        cellGrid = [];
+        for (i4 = 0; i4 < data[0].length - 1; ++i4)
+          cellGrid[i4] = [];
+        if (useQuadTree) {
+          root2.cellsBelowThreshold(settings.threshold, false).forEach(function(c3) {
+            cellGrid[c3.x][c3.y] = prepareCell(
+              data,
+              c3.x,
+              c3.y,
+              settings
+            );
+          });
+        } else {
+          for (i4 = 0; i4 < data[0].length - 1; ++i4) {
+            for (j2 = 0; j2 < data.length - 1; ++j2) {
+              cellGrid[i4][j2] = prepareCell(
+                data,
+                i4,
+                j2,
+                settings
+              );
+            }
+          }
+        }
+        linePolygons = traceLinePaths(data, cellGrid, settings);
+      }
+      if (multiLine)
+        ret.push(linePolygons);
+      else
+        ret = linePolygons;
+      if (typeof settings.successCallback === "function")
+        settings.successCallback(ret, t3);
+    });
+    return ret;
+  }
+  function prepareCell(grid, x3, y3, settings) {
+    var left, right, top, bottom, average, cell;
+    var cval = 0;
+    var x32 = grid[y3 + 1][x3];
+    var x22 = grid[y3 + 1][x3 + 1];
+    var x1 = grid[y3][x3 + 1];
+    var x0 = grid[y3][x3];
+    var threshold = settings.threshold;
+    if (isNaN(x0) || isNaN(x1) || isNaN(x22) || isNaN(x32)) {
+      return;
+    }
+    cval |= x32 >= threshold ? 8 : 0;
+    cval |= x22 >= threshold ? 4 : 0;
+    cval |= x1 >= threshold ? 2 : 0;
+    cval |= x0 >= threshold ? 1 : 0;
+    cval = +cval;
+    cell = {
+      cval,
+      polygons: [],
+      edges: {},
+      x0,
+      x1,
+      x2: x22,
+      x3: x32
+    };
+    switch (cval) {
+      case 0:
+        if (settings.polygons)
+          cell.polygons.push([[0, 0], [0, 1], [1, 1], [1, 0]]);
+        break;
+      case 15:
+        break;
+      case 14:
+        left = settings.interpolate(x0, x32, threshold);
+        bottom = settings.interpolate(x0, x1, threshold);
+        if (settings.polygons_full) {
+          cell.edges.left = {
+            path: [[0, left], [bottom, 0]],
+            move: {
+              x: 0,
+              y: -1,
+              enter: "top"
+            }
+          };
+        }
+        if (settings.polygons)
+          cell.polygons.push([[0, 0], [0, left], [bottom, 0]]);
+        break;
+      case 13:
+        bottom = settings.interpolate(x0, x1, threshold);
+        right = settings.interpolate(x1, x22, threshold);
+        if (settings.polygons_full) {
+          cell.edges.bottom = {
+            path: [[bottom, 0], [1, right]],
+            move: {
+              x: 1,
+              y: 0,
+              enter: "left"
+            }
+          };
+        }
+        if (settings.polygons)
+          cell.polygons.push([[bottom, 0], [1, right], [1, 0]]);
+        break;
+      case 11:
+        right = settings.interpolate(x1, x22, threshold);
+        top = settings.interpolate(x32, x22, threshold);
+        if (settings.polygons_full) {
+          cell.edges.right = {
+            path: [[1, right], [top, 1]],
+            move: {
+              x: 0,
+              y: 1,
+              enter: "bottom"
+            }
+          };
+        }
+        if (settings.polygons)
+          cell.polygons.push([[1, right], [top, 1], [1, 1]]);
+        break;
+      case 7:
+        left = settings.interpolate(x0, x32, threshold);
+        top = settings.interpolate(x32, x22, threshold);
+        if (settings.polygons_full) {
+          cell.edges.top = {
+            path: [[top, 1], [0, left]],
+            move: {
+              x: -1,
+              y: 0,
+              enter: "right"
+            }
+          };
+        }
+        if (settings.polygons)
+          cell.polygons.push([[top, 1], [0, left], [0, 1]]);
+        break;
+      case 1:
+        left = settings.interpolate(x0, x32, threshold);
+        bottom = settings.interpolate(x0, x1, threshold);
+        if (settings.polygons_full) {
+          cell.edges.bottom = {
+            path: [[bottom, 0], [0, left]],
+            move: {
+              x: -1,
+              y: 0,
+              enter: "right"
+            }
+          };
+        }
+        if (settings.polygons)
+          cell.polygons.push([[bottom, 0], [0, left], [0, 1], [1, 1], [1, 0]]);
+        break;
+      case 2:
+        bottom = settings.interpolate(x0, x1, threshold);
+        right = settings.interpolate(x1, x22, threshold);
+        if (settings.polygons_full) {
+          cell.edges.right = {
+            path: [[1, right], [bottom, 0]],
+            move: {
+              x: 0,
+              y: -1,
+              enter: "top"
+            }
+          };
+        }
+        if (settings.polygons)
+          cell.polygons.push([[0, 0], [0, 1], [1, 1], [1, right], [bottom, 0]]);
+        break;
+      case 4:
+        right = settings.interpolate(x1, x22, threshold);
+        top = settings.interpolate(x32, x22, threshold);
+        if (settings.polygons_full) {
+          cell.edges.top = {
+            path: [[top, 1], [1, right]],
+            move: {
+              x: 1,
+              y: 0,
+              enter: "left"
+            }
+          };
+        }
+        if (settings.polygons)
+          cell.polygons.push([[0, 0], [0, 1], [top, 1], [1, right], [1, 0]]);
+        break;
+      case 8:
+        left = settings.interpolate(x0, x32, threshold);
+        top = settings.interpolate(x32, x22, threshold);
+        if (settings.polygons_full) {
+          cell.edges.left = {
+            path: [[0, left], [top, 1]],
+            move: {
+              x: 0,
+              y: 1,
+              enter: "bottom"
+            }
+          };
+        }
+        if (settings.polygons)
+          cell.polygons.push([[0, 0], [0, left], [top, 1], [1, 1], [1, 0]]);
+        break;
+      case 12:
+        left = settings.interpolate(x0, x32, threshold);
+        right = settings.interpolate(x1, x22, threshold);
+        if (settings.polygons_full) {
+          cell.edges.left = {
+            path: [[0, left], [1, right]],
+            move: {
+              x: 1,
+              y: 0,
+              enter: "left"
+            }
+          };
+        }
+        if (settings.polygons)
+          cell.polygons.push([[0, 0], [0, left], [1, right], [1, 0]]);
+        break;
+      case 9:
+        bottom = settings.interpolate(x0, x1, threshold);
+        top = settings.interpolate(x32, x22, threshold);
+        if (settings.polygons_full) {
+          cell.edges.bottom = {
+            path: [[bottom, 0], [top, 1]],
+            move: {
+              x: 0,
+              y: 1,
+              enter: "bottom"
+            }
+          };
+        }
+        if (settings.polygons)
+          cell.polygons.push([[bottom, 0], [top, 1], [1, 1], [1, 0]]);
+        break;
+      case 3:
+        left = settings.interpolate(x0, x32, threshold);
+        right = settings.interpolate(x1, x22, threshold);
+        if (settings.polygons_full) {
+          cell.edges.right = {
+            path: [[1, right], [0, left]],
+            move: {
+              x: -1,
+              y: 0,
+              enter: "right"
+            }
+          };
+        }
+        if (settings.polygons)
+          cell.polygons.push([[0, left], [0, 1], [1, 1], [1, right]]);
+        break;
+      case 6:
+        bottom = settings.interpolate(x0, x1, threshold);
+        top = settings.interpolate(x32, x22, threshold);
+        if (settings.polygons_full) {
+          cell.edges.top = {
+            path: [[top, 1], [bottom, 0]],
+            move: {
+              x: 0,
+              y: -1,
+              enter: "top"
+            }
+          };
+        }
+        if (settings.polygons)
+          cell.polygons.push([[0, 0], [0, 1], [top, 1], [bottom, 0]]);
+        break;
+      case 10:
+        left = settings.interpolate(x0, x32, threshold);
+        right = settings.interpolate(x1, x22, threshold);
+        bottom = settings.interpolate(x0, x1, threshold);
+        top = settings.interpolate(x32, x22, threshold);
+        average = (x0 + x1 + x22 + x32) / 4;
+        if (settings.polygons_full) {
+          if (average < threshold) {
+            cell.edges.left = {
+              path: [[0, left], [top, 1]],
+              move: {
+                x: 0,
+                y: 1,
+                enter: "bottom"
+              }
+            };
+            cell.edges.right = {
+              path: [[1, right], [bottom, 0]],
+              move: {
+                x: 0,
+                y: -1,
+                enter: "top"
+              }
+            };
+          } else {
+            cell.edges.right = {
+              path: [[1, right], [top, 1]],
+              move: {
+                x: 0,
+                y: 1,
+                enter: "bottom"
+              }
+            };
+            cell.edges.left = {
+              path: [[0, left], [bottom, 0]],
+              move: {
+                x: 0,
+                y: -1,
+                enter: "top"
+              }
+            };
+          }
+        }
+        if (settings.polygons) {
+          if (average < threshold) {
+            cell.polygons.push([[0, 0], [0, left], [top, 1], [1, 1], [1, right], [bottom, 0]]);
+          } else {
+            cell.polygons.push([[0, 0], [0, left], [bottom, 0]]);
+            cell.polygons.push([[top, 1], [1, 1], [1, right]]);
+          }
+        }
+        break;
+      case 5:
+        left = settings.interpolate(x0, x32, threshold);
+        right = settings.interpolate(x1, x22, threshold);
+        bottom = settings.interpolate(x0, x1, threshold);
+        top = settings.interpolate(x32, x22, threshold);
+        average = (x0 + x1 + x22 + x32) / 4;
+        if (settings.polygons_full) {
+          if (average < threshold) {
+            cell.edges.bottom = {
+              path: [[bottom, 0], [0, left]],
+              move: {
+                x: -1,
+                y: 0,
+                enter: "right"
+              }
+            };
+            cell.edges.top = {
+              path: [[top, 1], [1, right]],
+              move: {
+                x: 1,
+                y: 0,
+                enter: "left"
+              }
+            };
+          } else {
+            cell.edges.top = {
+              path: [[top, 1], [0, left]],
+              move: {
+                x: -1,
+                y: 0,
+                enter: "right"
+              }
+            };
+            cell.edges.bottom = {
+              path: [[bottom, 0], [1, right]],
+              move: {
+                x: 1,
+                y: 0,
+                enter: "left"
+              }
+            };
+          }
+        }
+        if (settings.polygons) {
+          if (average < threshold) {
+            cell.polygons.push([[0, left], [0, 1], [top, 1], [1, right], [1, 0], [bottom, 0]]);
+          } else {
+            cell.polygons.push([[0, left], [0, 1], [top, 1]]);
+            cell.polygons.push([[bottom, 0], [1, right], [1, 0]]);
+          }
+        }
+        break;
+    }
+    return cell;
+  }
+
   // src/ui/codegen.ts
   var DITHER_KERNELS = {
     "floyd-steinberg": {
@@ -53662,6 +54387,276 @@ void main() {
     if (closed) parts.push("Z");
     return parts.join(" ");
   }
+  function parseSvgPathSegments(d3) {
+    const subpaths = [];
+    let current = [];
+    let cx = 0, cy = 0;
+    let startX = 0, startY = 0;
+    const tokens = d3.match(/[MLCQZHVSmlcqzhvs]|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/g);
+    if (!tokens) return subpaths;
+    let i3 = 0;
+    const num3 = () => parseFloat(tokens[i3++]);
+    while (i3 < tokens.length) {
+      const cmd = tokens[i3++];
+      switch (cmd) {
+        case "M":
+          if (current.length > 0) subpaths.push(current);
+          current = [];
+          cx = num3();
+          cy = num3();
+          startX = cx;
+          startY = cy;
+          while (i3 < tokens.length && !isNaN(parseFloat(tokens[i3]))) {
+            const nx = num3(), ny = num3();
+            current.push({ type: "L", points: [cx, cy, nx, ny] });
+            cx = nx;
+            cy = ny;
+          }
+          break;
+        case "m": {
+          if (current.length > 0) subpaths.push(current);
+          current = [];
+          cx += num3();
+          cy += num3();
+          startX = cx;
+          startY = cy;
+          while (i3 < tokens.length && !isNaN(parseFloat(tokens[i3]))) {
+            const dx = num3(), dy = num3();
+            const nx = cx + dx, ny = cy + dy;
+            current.push({ type: "L", points: [cx, cy, nx, ny] });
+            cx = nx;
+            cy = ny;
+          }
+          break;
+        }
+        case "L":
+          while (i3 < tokens.length && !isNaN(parseFloat(tokens[i3]))) {
+            const nx = num3(), ny = num3();
+            current.push({ type: "L", points: [cx, cy, nx, ny] });
+            cx = nx;
+            cy = ny;
+          }
+          break;
+        case "l":
+          while (i3 < tokens.length && !isNaN(parseFloat(tokens[i3]))) {
+            const dx = num3(), dy = num3();
+            const nx = cx + dx, ny = cy + dy;
+            current.push({ type: "L", points: [cx, cy, nx, ny] });
+            cx = nx;
+            cy = ny;
+          }
+          break;
+        case "H":
+          while (i3 < tokens.length && !isNaN(parseFloat(tokens[i3]))) {
+            const nx = num3();
+            current.push({ type: "L", points: [cx, cy, nx, cy] });
+            cx = nx;
+          }
+          break;
+        case "h":
+          while (i3 < tokens.length && !isNaN(parseFloat(tokens[i3]))) {
+            const dx = num3();
+            current.push({ type: "L", points: [cx, cy, cx + dx, cy] });
+            cx += dx;
+          }
+          break;
+        case "V":
+          while (i3 < tokens.length && !isNaN(parseFloat(tokens[i3]))) {
+            const ny = num3();
+            current.push({ type: "L", points: [cx, cy, cx, ny] });
+            cy = ny;
+          }
+          break;
+        case "v":
+          while (i3 < tokens.length && !isNaN(parseFloat(tokens[i3]))) {
+            const dy = num3();
+            current.push({ type: "L", points: [cx, cy, cx, cy + dy] });
+            cy += dy;
+          }
+          break;
+        case "C":
+          while (i3 < tokens.length && !isNaN(parseFloat(tokens[i3]))) {
+            const x1 = num3(), y1 = num3(), x22 = num3(), y22 = num3(), x3 = num3(), y3 = num3();
+            current.push({ type: "C", points: [cx, cy, x1, y1, x22, y22, x3, y3] });
+            cx = x3;
+            cy = y3;
+          }
+          break;
+        case "c":
+          while (i3 < tokens.length && !isNaN(parseFloat(tokens[i3]))) {
+            const dx1 = num3(), dy1 = num3(), dx2 = num3(), dy2 = num3(), dx3 = num3(), dy3 = num3();
+            current.push({ type: "C", points: [cx, cy, cx + dx1, cy + dy1, cx + dx2, cy + dy2, cx + dx3, cy + dy3] });
+            cx += dx3;
+            cy += dy3;
+          }
+          break;
+        case "Q":
+          while (i3 < tokens.length && !isNaN(parseFloat(tokens[i3]))) {
+            const x1 = num3(), y1 = num3(), x22 = num3(), y22 = num3();
+            current.push({ type: "Q", points: [cx, cy, x1, y1, x22, y22] });
+            cx = x22;
+            cy = y22;
+          }
+          break;
+        case "q":
+          while (i3 < tokens.length && !isNaN(parseFloat(tokens[i3]))) {
+            const dx1 = num3(), dy1 = num3(), dx2 = num3(), dy2 = num3();
+            current.push({ type: "Q", points: [cx, cy, cx + dx1, cy + dy1, cx + dx2, cy + dy2] });
+            cx += dx2;
+            cy += dy2;
+          }
+          break;
+        case "S":
+          while (i3 < tokens.length && !isNaN(parseFloat(tokens[i3]))) {
+            const x22 = num3(), y22 = num3(), x3 = num3(), y3 = num3();
+            let rx = cx, ry = cy;
+            const prev = current[current.length - 1];
+            if (prev && prev.type === "C") {
+              rx = 2 * cx - prev.points[4];
+              ry = 2 * cy - prev.points[5];
+            }
+            current.push({ type: "C", points: [cx, cy, rx, ry, x22, y22, x3, y3] });
+            cx = x3;
+            cy = y3;
+          }
+          break;
+        case "s":
+          while (i3 < tokens.length && !isNaN(parseFloat(tokens[i3]))) {
+            const dx2 = num3(), dy2 = num3(), dx3 = num3(), dy3 = num3();
+            let rx = cx, ry = cy;
+            const prev = current[current.length - 1];
+            if (prev && prev.type === "C") {
+              rx = 2 * cx - prev.points[4];
+              ry = 2 * cy - prev.points[5];
+            }
+            current.push({ type: "C", points: [cx, cy, rx, ry, cx + dx2, cy + dy2, cx + dx3, cy + dy3] });
+            cx += dx3;
+            cy += dy3;
+          }
+          break;
+        case "Z":
+        case "z":
+          if (cx !== startX || cy !== startY) {
+            current.push({ type: "L", points: [cx, cy, startX, startY] });
+          }
+          cx = startX;
+          cy = startY;
+          break;
+        default:
+          break;
+      }
+    }
+    if (current.length > 0) subpaths.push(current);
+    return subpaths;
+  }
+  function evalBezier2(t3, p0, p1, p22) {
+    const u6 = 1 - t3;
+    return u6 * u6 * p0 + 2 * u6 * t3 * p1 + t3 * t3 * p22;
+  }
+  function evalBezier3(t3, p0, p1, p22, p3) {
+    const u6 = 1 - t3;
+    return u6 * u6 * u6 * p0 + 3 * u6 * u6 * t3 * p1 + 3 * u6 * t3 * t3 * p22 + t3 * t3 * t3 * p3;
+  }
+  function segmentPoint(seg, t3) {
+    const p3 = seg.points;
+    switch (seg.type) {
+      case "L":
+        return { x: p3[0] + (p3[2] - p3[0]) * t3, y: p3[1] + (p3[3] - p3[1]) * t3 };
+      case "Q":
+        return { x: evalBezier2(t3, p3[0], p3[2], p3[4]), y: evalBezier2(t3, p3[1], p3[3], p3[5]) };
+      case "C":
+        return { x: evalBezier3(t3, p3[0], p3[2], p3[4], p3[6]), y: evalBezier3(t3, p3[1], p3[3], p3[5], p3[7]) };
+    }
+  }
+  function segmentTangent(seg, t3) {
+    const p3 = seg.points;
+    const EPS2 = 1e-6;
+    switch (seg.type) {
+      case "L":
+        return { dx: p3[2] - p3[0], dy: p3[3] - p3[1] };
+      case "Q": {
+        const u6 = 1 - t3;
+        return {
+          dx: 2 * u6 * (p3[2] - p3[0]) + 2 * t3 * (p3[4] - p3[2]),
+          dy: 2 * u6 * (p3[3] - p3[1]) + 2 * t3 * (p3[5] - p3[3])
+        };
+      }
+      case "C": {
+        const u6 = 1 - t3;
+        let dx = 3 * u6 * u6 * (p3[2] - p3[0]) + 6 * u6 * t3 * (p3[4] - p3[2]) + 3 * t3 * t3 * (p3[6] - p3[4]);
+        let dy = 3 * u6 * u6 * (p3[3] - p3[1]) + 6 * u6 * t3 * (p3[5] - p3[3]) + 3 * t3 * t3 * (p3[7] - p3[5]);
+        if (Math.abs(dx) < EPS2 && Math.abs(dy) < EPS2) {
+          const p22 = segmentPoint(seg, Math.min(t3 + 1e-3, 1));
+          const p1 = segmentPoint(seg, Math.max(t3 - 1e-3, 0));
+          dx = p22.x - p1.x;
+          dy = p22.y - p1.y;
+        }
+        return { dx, dy };
+      }
+    }
+  }
+  var ARC_LEN_SUBDIVS = 32;
+  function segmentArcLength(seg) {
+    if (seg.type === "L") {
+      const p3 = seg.points;
+      const dx = p3[2] - p3[0], dy = p3[3] - p3[1];
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+    let len = 0;
+    let prev = segmentPoint(seg, 0);
+    for (let i3 = 1; i3 <= ARC_LEN_SUBDIVS; i3++) {
+      const cur = segmentPoint(seg, i3 / ARC_LEN_SUBDIVS);
+      const dx = cur.x - prev.x, dy = cur.y - prev.y;
+      len += Math.sqrt(dx * dx + dy * dy);
+      prev = cur;
+    }
+    return len;
+  }
+  function samplePath(svgPath, count) {
+    const subpaths = parseSvgPathSegments(svgPath);
+    const segments = subpaths.flat();
+    if (segments.length === 0 || count < 1) return [];
+    const lengths = segments.map(segmentArcLength);
+    const totalLength = lengths.reduce((a3, b3) => a3 + b3, 0);
+    if (totalLength === 0) return [];
+    const cumulative = [];
+    let running = 0;
+    for (const l3 of lengths) {
+      running += l3;
+      cumulative.push(running);
+    }
+    const samples = [];
+    for (let i3 = 0; i3 < count; i3++) {
+      const targetDist = count === 1 ? 0 : i3 / (count - 1) * totalLength;
+      let segIdx = 0;
+      while (segIdx < segments.length - 1 && cumulative[segIdx] < targetDist) segIdx++;
+      const segStart = segIdx === 0 ? 0 : cumulative[segIdx - 1];
+      const segLen = lengths[segIdx];
+      const localT = segLen > 0 ? Math.max(0, Math.min(1, (targetDist - segStart) / segLen)) : 0;
+      const pt = segmentPoint(segments[segIdx], localT);
+      const tan = segmentTangent(segments[segIdx], localT);
+      const angle2 = Math.atan2(tan.dy, tan.dx) * 180 / Math.PI;
+      samples.push({ x: pt.x, y: pt.y, angle: angle2 });
+    }
+    return samples;
+  }
+  function pathBounds(svgPath) {
+    const subpaths = parseSvgPathSegments(svgPath);
+    const segments = subpaths.flat();
+    if (segments.length === 0) return { x: 0, y: 0, width: 0, height: 0 };
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const seg of segments) {
+      const steps = seg.type === "L" ? 1 : ARC_LEN_SUBDIVS;
+      for (let i3 = 0; i3 <= steps; i3++) {
+        const pt = segmentPoint(seg, i3 / steps);
+        if (pt.x < minX) minX = pt.x;
+        if (pt.y < minY) minY = pt.y;
+        if (pt.x > maxX) maxX = pt.x;
+        if (pt.y > maxY) maxY = pt.y;
+      }
+    }
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  }
   function superformula(theta, m4, n1, n22, n3, a3 = 1, b3 = 1) {
     const t1 = Math.abs(Math.cos(m4 * theta / 4) / a3);
     const t22 = Math.abs(Math.sin(m4 * theta / 4) / b3);
@@ -53717,6 +54712,670 @@ void main() {
       return roughToPaths((g3) => g3.path(svgPath, options));
     }
   };
+  function runGrayScott(options) {
+    const {
+      feed = 0.04,
+      kill = 0.06,
+      iterations = 3e3,
+      gridSize = 200,
+      dA = 0.21,
+      dB = 0.105
+    } = options;
+    const N2 = gridSize;
+    const size = N2 * N2;
+    let a3 = new Float32Array(size).fill(1);
+    let b3 = new Float32Array(size).fill(0);
+    let nextA = new Float32Array(size);
+    let nextB = new Float32Array(size);
+    for (let s3 = 0; s3 < 30; s3++) {
+      const sx = Math.floor(mulberry32() * N2);
+      const sy = Math.floor(mulberry32() * N2);
+      const r3 = 3 + Math.floor(mulberry32() * 5);
+      for (let dy = -r3; dy <= r3; dy++) {
+        for (let dx = -r3; dx <= r3; dx++) {
+          if (dx * dx + dy * dy <= r3 * r3) {
+            const ix = (sx + dx + N2) % N2;
+            const iy = (sy + dy + N2) % N2;
+            a3[iy * N2 + ix] = 0;
+            b3[iy * N2 + ix] = 1;
+          }
+        }
+      }
+    }
+    for (let iter = 0; iter < iterations; iter++) {
+      for (let y3 = 0; y3 < N2; y3++) {
+        const yt = (y3 - 1 + N2) % N2 * N2;
+        const yc = y3 * N2;
+        const yb = (y3 + 1) % N2 * N2;
+        for (let x3 = 0; x3 < N2; x3++) {
+          const xl = (x3 - 1 + N2) % N2;
+          const xr = (x3 + 1) % N2;
+          const av = a3[yc + x3];
+          const bv = b3[yc + x3];
+          const lapA = 0.05 * (a3[yt + xl] + a3[yt + xr] + a3[yb + xl] + a3[yb + xr]) + 0.2 * (a3[yt + x3] + a3[yb + x3] + a3[yc + xl] + a3[yc + xr]) - av;
+          const lapB = 0.05 * (b3[yt + xl] + b3[yt + xr] + b3[yb + xl] + b3[yb + xr]) + 0.2 * (b3[yt + x3] + b3[yb + x3] + b3[yc + xl] + b3[yc + xr]) - bv;
+          const abb = av * bv * bv;
+          let na = av + dA * lapA - abb + feed * (1 - av);
+          let nb = bv + dB * lapB + abb - (kill + feed) * bv;
+          nextA[yc + x3] = na < 0 ? 0 : na > 1 ? 1 : na;
+          nextB[yc + x3] = nb < 0 ? 0 : nb > 1 ? 1 : nb;
+        }
+      }
+      const tmpA = a3;
+      a3 = nextA;
+      nextA = tmpA;
+      const tmpB = b3;
+      b3 = nextB;
+      nextB = tmpB;
+    }
+    let minB = b3[0];
+    let maxB = b3[0];
+    for (let i3 = 1; i3 < size; i3++) {
+      if (b3[i3] < minB) minB = b3[i3];
+      if (b3[i3] > maxB) maxB = b3[i3];
+    }
+    const rangeB = maxB - minB > 0 ? maxB - minB : 1;
+    return { grid: b3, N: N2, minB, maxB, rangeB };
+  }
+  function reactionDiffusion(width, height, options) {
+    const { color: color2 = "#000000", background = "#ffffff", threshold = 0, ...simOpts } = options || {};
+    const { grid, N: N2, minB, rangeB } = runGrayScott(simOpts);
+    const size = N2 * N2;
+    const fg = chroma_js_default(color2);
+    const bg = chroma_js_default(background);
+    return renderCanvas(width, height, (ctx) => {
+      const sim = document.createElement("canvas");
+      sim.width = N2;
+      sim.height = N2;
+      const sCtx = sim.getContext("2d");
+      const img = sCtx.createImageData(N2, N2);
+      const d3 = img.data;
+      for (let i3 = 0; i3 < size; i3++) {
+        let t3 = (grid[i3] - minB) / rangeB;
+        if (threshold > 0) t3 = t3 > threshold ? 1 : 0;
+        const [r3, g3, bl] = chroma_js_default.mix(bg, fg, t3).rgb();
+        const p3 = i3 << 2;
+        d3[p3] = r3;
+        d3[p3 + 1] = g3;
+        d3[p3 + 2] = bl;
+        d3[p3 + 3] = 255;
+      }
+      sCtx.putImageData(img, 0, 0);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(sim, 0, 0, width, height);
+    });
+  }
+  function chaikinSmooth(pts, passes) {
+    let result = pts;
+    for (let p3 = 0; p3 < passes; p3++) {
+      const next = [];
+      for (let i3 = 0; i3 < result.length; i3++) {
+        const cur = result[i3];
+        const nxt = result[(i3 + 1) % result.length];
+        next.push(
+          [cur[0] * 0.75 + nxt[0] * 0.25, cur[1] * 0.75 + nxt[1] * 0.25],
+          [cur[0] * 0.25 + nxt[0] * 0.75, cur[1] * 0.25 + nxt[1] * 0.75]
+        );
+      }
+      result = next;
+    }
+    return result;
+  }
+  function reactionDiffusionSVG(width, height, options) {
+    const { threshold = 0.5, smoothing = 2, ...simOpts } = options || {};
+    const { grid, N: N2, minB, rangeB } = runGrayScott(simOpts);
+    const field = [];
+    for (let y3 = 0; y3 < N2; y3++) {
+      const row = [];
+      for (let x3 = 0; x3 < N2; x3++) {
+        row.push((grid[y3 * N2 + x3] - minB) / rangeB);
+      }
+      field.push(row);
+    }
+    const contours = isoLines(field, [threshold]);
+    const paths = contours[0] || [];
+    const sx = width / (N2 - 1);
+    const sy = height / (N2 - 1);
+    const pathParts = [];
+    for (const ring of paths) {
+      if (ring.length < 3) continue;
+      const scaled = ring.map((pt) => [pt[0] * sx, pt[1] * sy]);
+      const smooth = smoothing > 0 ? chaikinSmooth(scaled, smoothing) : scaled;
+      const first = smooth[0];
+      const segments = [`M ${first[0].toFixed(1)} ${first[1].toFixed(1)}`];
+      for (let i3 = 1; i3 < smooth.length; i3++) {
+        segments.push(`L ${smooth[i3][0].toFixed(1)} ${smooth[i3][1].toFixed(1)}`);
+      }
+      segments.push("Z");
+      pathParts.push(segments.join(" "));
+    }
+    return pathParts.join(" ");
+  }
+  function contoursToSvg(field, width, height, cols, rows, smoothPasses) {
+    const contours = isoLines(field, [0.5]);
+    const rings = contours[0] || [];
+    const sx = width / (cols - 1);
+    const sy = height / (rows - 1);
+    const pathParts = [];
+    for (const ring of rings) {
+      if (ring.length < 3) continue;
+      const scaled = ring.map((pt) => [pt[0] * sx, pt[1] * sy]);
+      const sm = smoothPasses > 0 ? chaikinSmooth(scaled, smoothPasses) : scaled;
+      const first = sm[0];
+      const segs = [`M ${first[0].toFixed(1)} ${first[1].toFixed(1)}`];
+      for (let i3 = 1; i3 < sm.length; i3++) {
+        segs.push(`L ${sm[i3][0].toFixed(1)} ${sm[i3][1].toFixed(1)}`);
+      }
+      segs.push("Z");
+      pathParts.push(segs.join(" "));
+    }
+    return pathParts.join(" ");
+  }
+  function circlePack(width, height, options) {
+    const {
+      count = 100,
+      minRadius = 2,
+      maxRadius = 50,
+      padding = 1,
+      maxAttempts = 1e4
+    } = options || {};
+    const circles = [];
+    const cellSize = maxRadius * 2 + padding;
+    const grid = /* @__PURE__ */ new Map();
+    function gk(x3, y3) {
+      return `${Math.floor(x3 / cellSize)},${Math.floor(y3 / cellSize)}`;
+    }
+    function addG(c3) {
+      const k2 = gk(c3.x, c3.y);
+      let arr = grid.get(k2);
+      if (!arr) {
+        arr = [];
+        grid.set(k2, arr);
+      }
+      arr.push(c3);
+    }
+    function overlaps(x3, y3, r3) {
+      const ci = Math.floor(x3 / cellSize);
+      const cj = Math.floor(y3 / cellSize);
+      for (let di = -2; di <= 2; di++) {
+        for (let dj = -2; dj <= 2; dj++) {
+          const arr = grid.get(`${ci + di},${cj + dj}`);
+          if (!arr) continue;
+          for (const c3 of arr) {
+            const dx = c3.x - x3, dy = c3.y - y3;
+            const md = c3.r + r3 + padding;
+            if (dx * dx + dy * dy < md * md) return true;
+          }
+        }
+      }
+      return false;
+    }
+    let attempts = 0;
+    while (circles.length < count && attempts < maxAttempts) {
+      attempts++;
+      const r3 = minRadius + mulberry32() * (maxRadius - minRadius);
+      const x3 = r3 + mulberry32() * (width - 2 * r3);
+      const y3 = r3 + mulberry32() * (height - 2 * r3);
+      if (!overlaps(x3, y3, r3)) {
+        const c3 = { x: x3, y: y3, r: r3 };
+        circles.push(c3);
+        addG(c3);
+      }
+    }
+    return circles;
+  }
+  function strangeAttractor(width, height, options) {
+    const {
+      type = "clifford",
+      a: a3 = -1.4,
+      b: b3 = 1.6,
+      c: c3 = 1,
+      d: d3 = 0.7,
+      iterations = 5e4,
+      skip = 100
+    } = options || {};
+    let x3 = 0.1, y3 = 0.1;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    const pts = [];
+    for (let i3 = 0; i3 < iterations + skip; i3++) {
+      let nx, ny;
+      if (type === "dejong") {
+        nx = Math.sin(a3 * y3) - Math.cos(b3 * x3);
+        ny = Math.sin(c3 * x3) - Math.cos(d3 * y3);
+      } else {
+        nx = Math.sin(a3 * y3) + c3 * Math.cos(a3 * x3);
+        ny = Math.sin(b3 * x3) + d3 * Math.cos(b3 * y3);
+      }
+      x3 = nx;
+      y3 = ny;
+      if (i3 >= skip) {
+        pts.push({ x: x3, y: y3 });
+        if (x3 < minX) minX = x3;
+        if (x3 > maxX) maxX = x3;
+        if (y3 < minY) minY = y3;
+        if (y3 > maxY) maxY = y3;
+      }
+    }
+    const rangeX = maxX - minX || 1;
+    const rangeY = maxY - minY || 1;
+    const margin = 10;
+    const sw = width - 2 * margin, sh = height - 2 * margin;
+    const segments = [];
+    let prevSx = -Infinity, prevSy = -Infinity;
+    let inPath = false;
+    for (const pt of pts) {
+      const sx = margin + (pt.x - minX) / rangeX * sw;
+      const sy = margin + (pt.y - minY) / rangeY * sh;
+      const dx = sx - prevSx, dy = sy - prevSy;
+      if (dx * dx + dy * dy < 0.25) continue;
+      segments.push(`${inPath ? "L" : "M"} ${sx.toFixed(1)} ${sy.toFixed(1)}`);
+      inPath = true;
+      prevSx = sx;
+      prevSy = sy;
+    }
+    return segments.join(" ");
+  }
+  function metaballs(width, height, options) {
+    const {
+      count = 5,
+      minRadius = 30,
+      maxRadius = 80,
+      gridSize = 100,
+      smoothing = 2
+    } = options || {};
+    const N2 = gridSize;
+    const scale8 = width / N2;
+    const blobs = [];
+    for (let i3 = 0; i3 < count; i3++) {
+      const r3 = (minRadius + mulberry32() * (maxRadius - minRadius)) / scale8;
+      blobs.push({
+        cx: r3 + mulberry32() * (N2 - 2 * r3),
+        cy: r3 + mulberry32() * (N2 - 2 * r3),
+        r: r3
+      });
+    }
+    const field = [];
+    for (let y3 = 0; y3 < N2; y3++) {
+      const row = [];
+      for (let x3 = 0; x3 < N2; x3++) {
+        let val = 0;
+        for (const bl of blobs) {
+          const dx = x3 - bl.cx, dy = y3 - bl.cy;
+          const distSq = dx * dx + dy * dy;
+          val += bl.r * bl.r / (distSq || 1e-3);
+        }
+        row.push(val);
+      }
+      field.push(row);
+    }
+    const contours = isoLines(field, [1]);
+    const rings = contours[0] || [];
+    const sx = width / (N2 - 1);
+    const sy = height / (N2 - 1);
+    const pathParts = [];
+    for (const ring of rings) {
+      if (ring.length < 3) continue;
+      const scaled = ring.map((pt) => [pt[0] * sx, pt[1] * sy]);
+      const sm = smoothing > 0 ? chaikinSmooth(scaled, smoothing) : scaled;
+      const first = sm[0];
+      const segs = [`M ${first[0].toFixed(1)} ${first[1].toFixed(1)}`];
+      for (let i3 = 1; i3 < sm.length; i3++) {
+        segs.push(`L ${sm[i3][0].toFixed(1)} ${sm[i3][1].toFixed(1)}`);
+      }
+      segs.push("Z");
+      pathParts.push(segs.join(" "));
+    }
+    return pathParts.join(" ");
+  }
+  function dla(width, height, options) {
+    const {
+      count = 200,
+      stepSize = 1,
+      stickDistance = 3
+    } = options || {};
+    const particles = [];
+    particles.push({ x: width / 2, y: height / 2, parent: -1 });
+    const cellSize = stickDistance * 2;
+    const grid = /* @__PURE__ */ new Map();
+    function gk(x3, y3) {
+      return `${Math.floor(x3 / cellSize)},${Math.floor(y3 / cellSize)}`;
+    }
+    function addG(idx) {
+      const k2 = gk(particles[idx].x, particles[idx].y);
+      let arr = grid.get(k2);
+      if (!arr) {
+        arr = [];
+        grid.set(k2, arr);
+      }
+      arr.push(idx);
+    }
+    addG(0);
+    function findNearest(x3, y3) {
+      const ci = Math.floor(x3 / cellSize), cj = Math.floor(y3 / cellSize);
+      let bestDist = Infinity, bestIdx = -1;
+      for (let di = -1; di <= 1; di++) {
+        for (let dj = -1; dj <= 1; dj++) {
+          const arr = grid.get(`${ci + di},${cj + dj}`);
+          if (!arr) continue;
+          for (const idx of arr) {
+            const p3 = particles[idx];
+            const dx = p3.x - x3, dy = p3.y - y3;
+            const dist2 = Math.sqrt(dx * dx + dy * dy);
+            if (dist2 < bestDist) {
+              bestDist = dist2;
+              bestIdx = idx;
+            }
+          }
+        }
+      }
+      return bestDist <= stickDistance ? bestIdx : -1;
+    }
+    const maxWalkSteps = 5e3;
+    const margin = stickDistance * 2;
+    while (particles.length < count) {
+      const side = Math.floor(mulberry32() * 4);
+      let wx, wy;
+      if (side === 0) {
+        wx = mulberry32() * width;
+        wy = margin;
+      } else if (side === 1) {
+        wx = mulberry32() * width;
+        wy = height - margin;
+      } else if (side === 2) {
+        wx = margin;
+        wy = mulberry32() * height;
+      } else {
+        wx = width - margin;
+        wy = mulberry32() * height;
+      }
+      for (let s3 = 0; s3 < maxWalkSteps; s3++) {
+        const angle2 = mulberry32() * Math.PI * 2;
+        wx += Math.cos(angle2) * stepSize;
+        wy += Math.sin(angle2) * stepSize;
+        if (wx < 0 || wx > width || wy < 0 || wy > height) break;
+        const nearest = findNearest(wx, wy);
+        if (nearest >= 0) {
+          const idx = particles.length;
+          particles.push({ x: wx, y: wy, parent: nearest });
+          addG(idx);
+          break;
+        }
+      }
+    }
+    return particles;
+  }
+  function cellularAutomata(width, height, options) {
+    const {
+      type = "life",
+      rule = 30,
+      gridSize = 80,
+      steps = 50,
+      fillRatio = 0.4,
+      surviveMin = 2,
+      surviveMax = 3,
+      birthMin = 3,
+      birthMax = 3,
+      smoothing = 2
+    } = options || {};
+    const useSmooth = options?.smooth ?? type === "life";
+    if (type === "wolfram") {
+      const cols = gridSize;
+      const rows = steps > 0 ? steps : gridSize;
+      const grid2 = new Uint8Array(rows * cols);
+      grid2[Math.floor(cols / 2)] = 1;
+      for (let y3 = 1; y3 < rows; y3++) {
+        for (let x3 = 0; x3 < cols; x3++) {
+          const left = x3 > 0 ? grid2[(y3 - 1) * cols + x3 - 1] : 0;
+          const center = grid2[(y3 - 1) * cols + x3];
+          const right = x3 < cols - 1 ? grid2[(y3 - 1) * cols + x3 + 1] : 0;
+          const pattern = left << 2 | center << 1 | right;
+          grid2[y3 * cols + x3] = rule >> pattern & 1;
+        }
+      }
+      if (useSmooth) {
+        const field = [];
+        for (let y3 = 0; y3 < rows; y3++) {
+          const row = [];
+          for (let x3 = 0; x3 < cols; x3++) row.push(grid2[y3 * cols + x3]);
+          field.push(row);
+        }
+        return contoursToSvg(field, width, height, cols, rows, smoothing);
+      }
+      return cellsToRectSvg(grid2, cols, rows, width, height);
+    }
+    const N2 = gridSize;
+    let grid = new Uint8Array(N2 * N2);
+    for (let i3 = 0; i3 < N2 * N2; i3++) grid[i3] = mulberry32() < fillRatio ? 1 : 0;
+    const next = new Uint8Array(N2 * N2);
+    for (let step = 0; step < steps; step++) {
+      for (let y3 = 0; y3 < N2; y3++) {
+        for (let x3 = 0; x3 < N2; x3++) {
+          let neighbors = 0;
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              if (dx === 0 && dy === 0) continue;
+              neighbors += grid[(y3 + dy + N2) % N2 * N2 + (x3 + dx + N2) % N2];
+            }
+          }
+          const alive = grid[y3 * N2 + x3];
+          next[y3 * N2 + x3] = alive ? neighbors >= surviveMin && neighbors <= surviveMax ? 1 : 0 : neighbors >= birthMin && neighbors <= birthMax ? 1 : 0;
+        }
+      }
+      grid.set(next);
+    }
+    if (useSmooth) {
+      const field = [];
+      for (let y3 = 0; y3 < N2; y3++) {
+        const row = [];
+        for (let x3 = 0; x3 < N2; x3++) row.push(grid[y3 * N2 + x3]);
+        field.push(row);
+      }
+      return contoursToSvg(field, width, height, N2, N2, smoothing);
+    }
+    return cellsToRectSvg(grid, N2, N2, width, height);
+  }
+  function cellsToRectSvg(grid, cols, rows, width, height) {
+    const cw = width / cols;
+    const ch = height / rows;
+    const parts = [];
+    for (let y3 = 0; y3 < rows; y3++) {
+      let runStart = -1;
+      for (let x3 = 0; x3 <= cols; x3++) {
+        const alive = x3 < cols ? grid[y3 * cols + x3] : 0;
+        if (alive && runStart < 0) {
+          runStart = x3;
+        } else if (!alive && runStart >= 0) {
+          const rx = runStart * cw;
+          const ry = y3 * ch;
+          const rw = (x3 - runStart) * cw;
+          parts.push(`M ${rx.toFixed(1)} ${ry.toFixed(1)} h ${rw.toFixed(1)} v ${ch.toFixed(1)} h ${(-rw).toFixed(1)} Z`);
+          runStart = -1;
+        }
+      }
+    }
+    return parts.join(" ");
+  }
+  var WFC_TILES = {
+    truchet: [
+      { edges: ["a", "a", "a", "a"] },
+      { edges: ["a", "a", "a", "a"] }
+    ],
+    lines: [
+      { edges: ["0", "0", "0", "0"] },
+      { edges: ["0", "1", "0", "1"] },
+      { edges: ["1", "0", "1", "0"] },
+      { edges: ["1", "1", "0", "0"] },
+      { edges: ["0", "1", "1", "0"] },
+      { edges: ["0", "0", "1", "1"] },
+      { edges: ["1", "0", "0", "1"] },
+      { edges: ["1", "1", "1", "1"] }
+    ],
+    arcs: [
+      { edges: ["0", "0", "0", "0"] },
+      { edges: ["a", "a", "0", "0"] },
+      { edges: ["0", "a", "a", "0"] },
+      { edges: ["0", "0", "a", "a"] },
+      { edges: ["a", "0", "0", "a"] },
+      { edges: ["a", "0", "a", "0"] },
+      { edges: ["0", "a", "0", "a"] }
+    ]
+  };
+  function wfcTileSvg(set7, tileIdx, ox, oy, ts) {
+    const h3 = ts / 2;
+    const mx = ox + h3, my = oy + h3;
+    const r3 = ox + ts, b3 = oy + ts;
+    const f3 = (n3) => n3.toFixed(1);
+    if (set7 === "truchet") {
+      if (tileIdx === 0) {
+        return `M ${f3(mx)} ${f3(oy)} A ${f3(h3)} ${f3(h3)} 0 0 0 ${f3(ox)} ${f3(my)} M ${f3(r3)} ${f3(my)} A ${f3(h3)} ${f3(h3)} 0 0 0 ${f3(mx)} ${f3(b3)}`;
+      }
+      return `M ${f3(mx)} ${f3(oy)} A ${f3(h3)} ${f3(h3)} 0 0 1 ${f3(r3)} ${f3(my)} M ${f3(ox)} ${f3(my)} A ${f3(h3)} ${f3(h3)} 0 0 1 ${f3(mx)} ${f3(b3)}`;
+    }
+    if (set7 === "lines") {
+      switch (tileIdx) {
+        case 0:
+          return "";
+        case 1:
+          return `M ${f3(ox)} ${f3(my)} L ${f3(r3)} ${f3(my)}`;
+        case 2:
+          return `M ${f3(mx)} ${f3(oy)} L ${f3(mx)} ${f3(b3)}`;
+        case 3:
+          return `M ${f3(mx)} ${f3(oy)} L ${f3(mx)} ${f3(my)} L ${f3(r3)} ${f3(my)}`;
+        case 4:
+          return `M ${f3(r3)} ${f3(my)} L ${f3(mx)} ${f3(my)} L ${f3(mx)} ${f3(b3)}`;
+        case 5:
+          return `M ${f3(mx)} ${f3(b3)} L ${f3(mx)} ${f3(my)} L ${f3(ox)} ${f3(my)}`;
+        case 6:
+          return `M ${f3(ox)} ${f3(my)} L ${f3(mx)} ${f3(my)} L ${f3(mx)} ${f3(oy)}`;
+        case 7:
+          return `M ${f3(mx)} ${f3(oy)} L ${f3(mx)} ${f3(b3)} M ${f3(ox)} ${f3(my)} L ${f3(r3)} ${f3(my)}`;
+        default:
+          return "";
+      }
+    }
+    switch (tileIdx) {
+      case 0:
+        return "";
+      case 1:
+        return `M ${f3(mx)} ${f3(oy)} Q ${f3(mx)} ${f3(my)} ${f3(r3)} ${f3(my)}`;
+      case 2:
+        return `M ${f3(r3)} ${f3(my)} Q ${f3(mx)} ${f3(my)} ${f3(mx)} ${f3(b3)}`;
+      case 3:
+        return `M ${f3(mx)} ${f3(b3)} Q ${f3(mx)} ${f3(my)} ${f3(ox)} ${f3(my)}`;
+      case 4:
+        return `M ${f3(ox)} ${f3(my)} Q ${f3(mx)} ${f3(my)} ${f3(mx)} ${f3(oy)}`;
+      case 5:
+        return `M ${f3(mx)} ${f3(oy)} L ${f3(mx)} ${f3(b3)}`;
+      case 6:
+        return `M ${f3(ox)} ${f3(my)} L ${f3(r3)} ${f3(my)}`;
+      default:
+        return "";
+    }
+  }
+  function waveFunctionCollapse(width, height, options) {
+    const {
+      tileSet = "truchet",
+      maxRetries = 10
+    } = options || {};
+    const tiles = WFC_TILES[tileSet] || WFC_TILES.truchet;
+    let cols, rows, ts;
+    if (options?.cols && options?.rows) {
+      cols = options.cols;
+      rows = options.rows;
+      ts = Math.min(width / cols, height / rows);
+    } else if (options?.tileSize) {
+      ts = options.tileSize;
+      cols = Math.max(1, Math.floor(width / ts));
+      rows = Math.max(1, Math.floor(height / ts));
+    } else {
+      cols = 10;
+      rows = 10;
+      ts = Math.min(width / cols, height / rows);
+    }
+    const oppEdge = [2, 3, 0, 1];
+    const dCol = [0, 1, 0, -1];
+    const dRow = [-1, 0, 1, 0];
+    const total = cols * rows;
+    for (let retry = 0; retry < maxRetries; retry++) {
+      let entropy2 = function(idx) {
+        if (collapsed[idx] >= 0) return Infinity;
+        let c3 = 0;
+        for (let t3 = 0; t3 < tiles.length; t3++) if (possible[idx][t3]) c3++;
+        return c3;
+      }, propagate2 = function(idx) {
+        const stack = [idx];
+        while (stack.length > 0) {
+          const cur = stack.pop();
+          const cr = Math.floor(cur / cols), cc2 = cur % cols;
+          for (let dir = 0; dir < 4; dir++) {
+            const nr = cr + dRow[dir], nc = cc2 + dCol[dir];
+            if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
+            const nIdx = nr * cols + nc;
+            if (collapsed[nIdx] >= 0) continue;
+            const validEdges = {};
+            for (let t3 = 0; t3 < tiles.length; t3++) {
+              if (possible[cur][t3]) validEdges[tiles[t3].edges[dir]] = true;
+            }
+            let changed = false;
+            for (let t3 = 0; t3 < tiles.length; t3++) {
+              if (possible[nIdx][t3] && !validEdges[tiles[t3].edges[oppEdge[dir]]]) {
+                possible[nIdx][t3] = false;
+                changed = true;
+              }
+            }
+            if (changed) {
+              if (entropy2(nIdx) === 0) return false;
+              stack.push(nIdx);
+            }
+          }
+        }
+        return true;
+      };
+      var entropy = entropy2, propagate = propagate2;
+      const possible = [];
+      const collapsed = new Array(total).fill(-1);
+      for (let i3 = 0; i3 < total; i3++) possible.push(new Array(tiles.length).fill(true));
+      let ok = true;
+      for (let step = 0; step < total; step++) {
+        let minE = Infinity, minIdx = -1;
+        for (let i3 = 0; i3 < total; i3++) {
+          const e3 = entropy2(i3);
+          if (e3 < minE) {
+            minE = e3;
+            minIdx = i3;
+          }
+        }
+        if (minIdx < 0 || minE === Infinity) break;
+        if (minE === 0) {
+          ok = false;
+          break;
+        }
+        const valid = [];
+        for (let t3 = 0; t3 < tiles.length; t3++) if (possible[minIdx][t3]) valid.push(t3);
+        const chosen = valid[Math.floor(mulberry32() * valid.length)];
+        collapsed[minIdx] = chosen;
+        for (let t3 = 0; t3 < tiles.length; t3++) possible[minIdx][t3] = t3 === chosen;
+        if (!propagate2(minIdx)) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok) {
+        const pathParts = [];
+        for (let r3 = 0; r3 < rows; r3++) {
+          for (let c3 = 0; c3 < cols; c3++) {
+            const ti = collapsed[r3 * cols + c3];
+            if (ti < 0) continue;
+            const svg = wfcTileSvg(tileSet, ti, c3 * ts, r3 * ts, ts);
+            if (svg) pathParts.push(svg);
+          }
+        }
+        return pathParts.join(" ");
+      }
+    }
+    return "";
+  }
   function renderCanvas(width, height, fn) {
     const canvas = document.createElement("canvas");
     canvas.width = width;
@@ -53856,6 +55515,9 @@ void main() {
     sphere: (radius, segments) => make3DSphere(radius, segments),
     torus: (major, minor, segments) => make3DTorus(major, minor, segments),
     pointsToSvgPath,
+    // --- SVG path sampling ---
+    samplePath,
+    pathBounds,
     // --- Superformula organic shapes ---
     superformula,
     superformulaPath,
@@ -53891,6 +55553,16 @@ void main() {
       Waterfall: import_waterfall.default,
       Sankey: import_sankey.default
     },
+    // --- Reaction-diffusion (Turing patterns) ---
+    reactionDiffusion,
+    reactionDiffusionSVG,
+    // --- Computational design helpers ---
+    circlePack,
+    strangeAttractor,
+    metaballs,
+    dla,
+    cellularAutomata,
+    waveFunctionCollapse,
     // --- Canvas rendering (blank canvas, for pattern tiles etc.) ---
     renderCanvas,
     // --- Currently selected node ID (populated before generator runs) ---
@@ -54547,11 +56219,28 @@ void main() {
 
   // src/ui/App.tsx
   var import_jsx_runtime27 = __toESM(require_jsx_runtime());
+  function rewriteActionIds(a3, map) {
+    const nodeId = a3.nodeId && map[a3.nodeId] ? map[a3.nodeId] : a3.nodeId;
+    const parentId = a3.parentId && map[a3.parentId] ? map[a3.parentId] : a3.parentId;
+    let args = a3.args;
+    if (args && Object.keys(map).length > 0) {
+      const rewrittenArgs = {};
+      let changed = false;
+      for (const [k2, v4] of Object.entries(args)) {
+        if (typeof v4 === "string" && map[v4]) {
+          rewrittenArgs[k2] = map[v4];
+          changed = true;
+        } else {
+          rewrittenArgs[k2] = v4;
+        }
+      }
+      if (changed) args = rewrittenArgs;
+    }
+    return { ...a3, nodeId, parentId, args };
+  }
   function rewriteTempIds(spec, map) {
     function rewriteAction(a3) {
-      const nodeId = a3.nodeId && map[a3.nodeId] ? map[a3.nodeId] : a3.nodeId;
-      const parentId = a3.parentId && map[a3.parentId] ? map[a3.parentId] : a3.parentId;
-      return { ...a3, nodeId, parentId };
+      return rewriteActionIds(a3, map);
     }
     function rewriteControl(c3) {
       const action = c3.action ? rewriteAction(c3.action) : c3.action;
@@ -54874,11 +56563,15 @@ ${errors.join("\n")}`);
         if (rootIdx !== -1) {
           const rootAction = resolved[rootIdx];
           const rootTempId = rootAction.tempId;
-          const cleanupActions2 = [{
-            method: "deleteChildren",
-            nodeId: existingFrameId,
-            args: {}
-          }];
+          const cleanupActions2 = [];
+          if (typeof rootAction.args?.width === "number" && typeof rootAction.args?.height === "number") {
+            cleanupActions2.push({
+              method: "resize",
+              nodeId: existingFrameId,
+              args: { width: rootAction.args.width, height: rootAction.args.height }
+            });
+          }
+          cleanupActions2.push({ method: "deleteChildren", nodeId: existingFrameId, args: {} });
           const rootFramePropertyMethods = /* @__PURE__ */ new Set([
             "setFill",
             "setStroke",
@@ -54886,19 +56579,13 @@ ${errors.join("\n")}`);
             "setEffect",
             "setCornerRadius"
           ]);
+          const tempIdMap = rootTempId ? { [rootTempId]: existingFrameId } : {};
           const rewrittenActions = resolved.slice(rootIdx + 1).filter((a3) => {
             if (rootTempId && a3.nodeId === rootTempId && rootFramePropertyMethods.has(a3.method)) {
               return false;
             }
             return true;
-          }).map((a3) => {
-            const rewritten = { ...a3 };
-            if (rootTempId) {
-              if (rewritten.nodeId === rootTempId) rewritten.nodeId = existingFrameId;
-              if (rewritten.parentId === rootTempId) rewritten.parentId = existingFrameId;
-            }
-            return rewritten;
-          });
+          }).map((a3) => rewriteActionIds(a3, tempIdMap));
           postToMain({
             type: "EXECUTE_ACTIONS",
             payload: {
@@ -55373,7 +57060,8 @@ ${errors.join("\n")}`);
         text,
         isAutoGenerate ? { autoGenerate: true } : void 0
       );
-      const result = await callClaude(apiMessages, system);
+      const generatorLikely = /\b(grid|pattern|dots|circle|generate|create.*\d|layout|arrange|distribute|carousel|randomize|gradient|spiral|scatter|wavy|noise|organic|palette|color.*scale|saturate|desaturate|darken|lighten|hue.*shift|3d|sphere|cube|fractal|tree|qr|halftone|dither|posterize|flow.*field|chart|voronoi|rough|sketch|mosaic|superformula|blob)\b/i.test(text);
+      const result = await callClaude(apiMessages, system, { generatorLikely });
       if (!result.ok) {
         addMessage("error", result.error);
         finishLoading(false);
@@ -55449,12 +57137,17 @@ ${errors.join("\n")}`);
           if (existingFrameId) {
             const rootIdx = generated.findIndex((a3) => a3.method === "createFrame" && !a3.parentId);
             if (rootIdx !== -1) {
-              const rootTempId = generated[rootIdx].tempId;
-              const cleanupActions = [{
-                method: "deleteChildren",
-                nodeId: existingFrameId,
-                args: {}
-              }];
+              const rootAction = generated[rootIdx];
+              const rootTempId = rootAction.tempId;
+              const cleanupActions = [];
+              if (typeof rootAction.args?.width === "number" && typeof rootAction.args?.height === "number") {
+                cleanupActions.push({
+                  method: "resize",
+                  nodeId: existingFrameId,
+                  args: { width: rootAction.args.width, height: rootAction.args.height }
+                });
+              }
+              cleanupActions.push({ method: "deleteChildren", nodeId: existingFrameId, args: {} });
               const rootFramePropertyMethods = /* @__PURE__ */ new Set([
                 "setFill",
                 "setStroke",
@@ -55462,19 +57155,13 @@ ${errors.join("\n")}`);
                 "setEffect",
                 "setCornerRadius"
               ]);
+              const tempIdMap = rootTempId ? { [rootTempId]: existingFrameId } : {};
               const rewrittenActions = generated.slice(rootIdx + 1).filter((a3) => {
                 if (rootTempId && a3.nodeId === rootTempId && rootFramePropertyMethods.has(a3.method)) {
                   return false;
                 }
                 return true;
-              }).map((a3) => {
-                const rewritten = { ...a3 };
-                if (rootTempId) {
-                  if (rewritten.nodeId === rootTempId) rewritten.nodeId = existingFrameId;
-                  if (rewritten.parentId === rootTempId) rewritten.parentId = existingFrameId;
-                }
-                return rewritten;
-              });
+              }).map((a3) => rewriteActionIds(a3, tempIdMap));
               postToMain({
                 type: "EXECUTE_ACTIONS",
                 payload: { actions: [...cleanupActions, ...rewrittenActions], pluginSpec: specJson }
@@ -55658,6 +57345,16 @@ chroma-js/src/utils/contrastAPCA.js:
    * You can read more about the APCA Readability Criterion at
    * https://readtech.org/ARC/
    *)
+
+marchingsquares/dist/marchingsquares-esm.js:
+  (*!
+  * MarchingSquaresJS
+  * version 1.3.3
+  * https://github.com/RaumZeit/MarchingSquares.js
+  *
+  * @license GNU Affero General Public License.
+  * Copyright (c) 2015-2019 Ronny Lorenz <ronny@tbi.univie.ac.at>
+  *)
 */
 
   </script>

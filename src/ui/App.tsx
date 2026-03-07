@@ -19,15 +19,38 @@ import { motion, AnimatePresence } from 'motion/react';
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
+ * Rewrites a single ActionDescriptor, replacing any tempId references in
+ * nodeId, parentId, AND inside args (e.g. targetNodeId) with real Figma IDs.
+ */
+function rewriteActionIds(a: ActionDescriptor, map: Record<string, string>): ActionDescriptor {
+  const nodeId = a.nodeId && map[a.nodeId] ? map[a.nodeId] : a.nodeId;
+  const parentId = a.parentId && map[a.parentId] ? map[a.parentId] : a.parentId;
+  // Also rewrite any string values inside args that are known tempIds
+  let args = a.args;
+  if (args && Object.keys(map).length > 0) {
+    const rewrittenArgs: Record<string, unknown> = {};
+    let changed = false;
+    for (const [k, v] of Object.entries(args)) {
+      if (typeof v === 'string' && map[v]) {
+        rewrittenArgs[k] = map[v];
+        changed = true;
+      } else {
+        rewrittenArgs[k] = v;
+      }
+    }
+    if (changed) args = rewrittenArgs;
+  }
+  return { ...a, nodeId, parentId, args };
+}
+
+/**
  * Walks the UISpec and replaces any tempId references in control action nodeId /
  * parentId fields with real Figma node IDs using the mapping returned by the
  * executor after a batch runs.
  */
 function rewriteTempIds(spec: UISpec, map: Record<string, string>): UISpec {
   function rewriteAction(a: ActionDescriptor): ActionDescriptor {
-    const nodeId = a.nodeId && map[a.nodeId] ? map[a.nodeId] : a.nodeId;
-    const parentId = a.parentId && map[a.parentId] ? map[a.parentId] : a.parentId;
-    return { ...a, nodeId, parentId };
+    return rewriteActionIds(a, map);
   }
 
   function rewriteControl(c: UIControl): UIControl {
@@ -457,15 +480,24 @@ function App() {
         const rootAction = resolved[rootIdx];
         const rootTempId = rootAction.tempId;
 
-        const cleanupActions: ActionDescriptor[] = [{
-          method: 'deleteChildren',
-          nodeId: existingFrameId,
-          args: {},
-        }];
+        const cleanupActions: ActionDescriptor[] = [];
+        // Resize the root frame if the generator computed new dimensions
+        if (
+          typeof rootAction.args?.width === 'number' &&
+          typeof rootAction.args?.height === 'number'
+        ) {
+          cleanupActions.push({
+            method: 'resize',
+            nodeId: existingFrameId,
+            args: { width: rootAction.args.width, height: rootAction.args.height },
+          });
+        }
+        cleanupActions.push({ method: 'deleteChildren', nodeId: existingFrameId, args: {} });
 
         const rootFramePropertyMethods = new Set([
           'setFill', 'setStroke', 'setProperty', 'setEffect', 'setCornerRadius',
         ]);
+        const tempIdMap = rootTempId ? { [rootTempId]: existingFrameId } : {};
         const rewrittenActions = resolved.slice(rootIdx + 1)
           .filter((a) => {
             if (rootTempId && a.nodeId === rootTempId && rootFramePropertyMethods.has(a.method)) {
@@ -473,14 +505,7 @@ function App() {
             }
             return true;
           })
-          .map((a) => {
-            const rewritten = { ...a };
-            if (rootTempId) {
-              if (rewritten.nodeId === rootTempId) rewritten.nodeId = existingFrameId;
-              if (rewritten.parentId === rootTempId) rewritten.parentId = existingFrameId;
-            }
-            return rewritten;
-          });
+          .map((a) => rewriteActionIds(a, tempIdMap));
 
         postToMain({
           type: 'EXECUTE_ACTIONS',
@@ -1017,7 +1042,8 @@ function App() {
       isAutoGenerate ? { autoGenerate: true } : undefined,
     );
 
-    const result = await callClaude(apiMessages, system);
+    const generatorLikely = /\b(grid|pattern|dots|circle|generate|create.*\d|layout|arrange|distribute|carousel|randomize|gradient|spiral|scatter|wavy|noise|organic|palette|color.*scale|saturate|desaturate|darken|lighten|hue.*shift|3d|sphere|cube|fractal|tree|qr|halftone|dither|posterize|flow.*field|chart|voronoi|rough|sketch|mosaic|superformula|blob)\b/i.test(text);
+    const result = await callClaude(apiMessages, system, { generatorLikely });
 
     if (!result.ok) {
       addMessage('error', result.error);
@@ -1112,15 +1138,24 @@ function App() {
           // Reuse the existing frame: strip createFrame, deleteChildren, rewrite tempIds.
           const rootIdx = generated.findIndex(a => a.method === 'createFrame' && !a.parentId);
           if (rootIdx !== -1) {
-            const rootTempId = generated[rootIdx].tempId;
-            const cleanupActions: ActionDescriptor[] = [{
-              method: 'deleteChildren',
-              nodeId: existingFrameId,
-              args: {},
-            }];
+            const rootAction = generated[rootIdx];
+            const rootTempId = rootAction.tempId;
+            const cleanupActions: ActionDescriptor[] = [];
+            if (
+              typeof rootAction.args?.width === 'number' &&
+              typeof rootAction.args?.height === 'number'
+            ) {
+              cleanupActions.push({
+                method: 'resize',
+                nodeId: existingFrameId,
+                args: { width: rootAction.args.width, height: rootAction.args.height },
+              });
+            }
+            cleanupActions.push({ method: 'deleteChildren', nodeId: existingFrameId, args: {} });
             const rootFramePropertyMethods = new Set([
               'setFill', 'setStroke', 'setProperty', 'setEffect', 'setCornerRadius',
             ]);
+            const tempIdMap = rootTempId ? { [rootTempId]: existingFrameId } : {};
             const rewrittenActions = generated.slice(rootIdx + 1)
               .filter((a) => {
                 if (rootTempId && a.nodeId === rootTempId && rootFramePropertyMethods.has(a.method)) {
@@ -1128,14 +1163,7 @@ function App() {
                 }
                 return true;
               })
-              .map((a) => {
-                const rewritten = { ...a };
-                if (rootTempId) {
-                  if (rewritten.nodeId === rootTempId) rewritten.nodeId = existingFrameId;
-                  if (rewritten.parentId === rootTempId) rewritten.parentId = existingFrameId;
-                }
-                return rewritten;
-              });
+              .map((a) => rewriteActionIds(a, tempIdMap));
             postToMain({
               type: 'EXECUTE_ACTIONS',
               payload: { actions: [...cleanupActions, ...rewrittenActions], pluginSpec: specJson },

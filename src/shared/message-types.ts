@@ -87,6 +87,8 @@ export interface NodeDescriptor {
   characters?: string;
   lineHeight?: LineHeight;
   letterSpacing?: LetterSpacing;
+  // Vector path geometry (SVG path data strings)
+  vectorPaths?: string[];
   // Prototyping
   reactions?: ReactionDescriptor[];
 }
@@ -184,27 +186,6 @@ export interface ExecutionResult {
   rootFrameId?: string;
 }
 
-/** Iframe → main: asks the main thread to proxy a Claude API call. */
-export interface ClaudeRequestMessage {
-  type: 'CLAUDE_REQUEST';
-  payload: {
-    requestId: string;
-    apiKey: string;
-    body: string; // pre-serialized JSON body
-  };
-}
-
-/** Main → iframe: delivers the Claude API response (or error). */
-export interface ClaudeResponseMessage {
-  type: 'CLAUDE_RESPONSE';
-  payload: {
-    requestId: string;
-    ok: boolean;
-    status: number;
-    body: string; // raw response text
-  };
-}
-
 /** Iframe → main: request pixel data for a node (for image-processing generators). */
 export interface RequestImageDataMessage {
   type: 'REQUEST_IMAGE_DATA';
@@ -230,7 +211,6 @@ export type MainToIframeMessage =
   | SelectionContextMessage
   | ExecutionResultMessage
   | ErrorMessage
-  | ClaudeResponseMessage
   | ImageDataMessage
   | ClientStorageValueMessage;
 
@@ -285,7 +265,6 @@ export type IframeToMainMessage =
   | ControlChangeMessage
   | ExecuteActionsMessage
   | ErrorMessage
-  | ClaudeRequestMessage
   | RequestImageDataMessage
   | ClearPluginDataMessage
   | PersistMessagesMessage

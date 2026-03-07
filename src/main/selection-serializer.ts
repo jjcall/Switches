@@ -20,6 +20,19 @@ import type {
 // richer multi-node context for auto-generate control inference.
 const CHAR_BUDGET = 12000;
 
+function rd(n: number, places: number): number {
+  const f = 10 ** places;
+  return Math.round(n * f) / f;
+}
+
+function rdColor(c: { r: number; g: number; b: number }): { r: number; g: number; b: number } {
+  return { r: rd(c.r, 3), g: rd(c.g, 3), b: rd(c.b, 3) };
+}
+
+function rdColorA(c: { r: number; g: number; b: number; a: number }): { r: number; g: number; b: number; a: number } {
+  return { r: rd(c.r, 3), g: rd(c.g, 3), b: rd(c.b, 3), a: rd(c.a, 2) };
+}
+
 // ─── Fill extraction ──────────────────────────────────────────────────────────
 
 function serializeFills(node: SceneNode): FillDescriptor[] {
@@ -31,8 +44,8 @@ function serializeFills(node: SceneNode): FillDescriptor[] {
       const p = paint as SolidPaint;
       const result: SolidFill = {
         type: 'SOLID',
-        color: { r: p.color.r, g: p.color.g, b: p.color.b },
-        opacity: p.opacity ?? 1,
+        color: rdColor(p.color),
+        opacity: rd(p.opacity ?? 1, 2),
       };
       return result;
     }
@@ -47,10 +60,10 @@ function serializeFills(node: SceneNode): FillDescriptor[] {
       const result: GradientFill = {
         type: p.type,
         gradientStops: p.gradientStops.map(s => ({
-          position: s.position,
-          color: { r: s.color.r, g: s.color.g, b: s.color.b, a: s.color.a },
+          position: rd(s.position, 3),
+          color: rdColorA(s.color),
         })),
-        opacity: p.opacity ?? 1,
+        opacity: rd(p.opacity ?? 1, 2),
       };
       return result;
     }
@@ -60,7 +73,7 @@ function serializeFills(node: SceneNode): FillDescriptor[] {
     const result: ImageFill = {
       type: 'IMAGE',
       imageHash: p.imageHash ?? null,
-      opacity: p.opacity ?? 1,
+      opacity: rd(p.opacity ?? 1, 2),
     };
     return result;
   });
@@ -81,9 +94,9 @@ function serializeStrokes(node: SceneNode): StrokeDescriptor[] {
   return strokes
     .filter((p): p is SolidPaint => p.type === 'SOLID')
     .map(p => ({
-      color: { r: p.color.r, g: p.color.g, b: p.color.b },
-      opacity: p.opacity ?? 1,
-      weight,
+      color: rdColor(p.color),
+      opacity: rd(p.opacity ?? 1, 2),
+      weight: rd(weight, 1),
       alignment,
     }));
 }
@@ -99,15 +112,10 @@ function serializeEffects(node: SceneNode): EffectDescriptor[] {
       const shadow = e as DropShadowEffect | InnerShadowEffect;
       const result: ShadowEffect = {
         type: e.type,
-        color: {
-          r: shadow.color.r,
-          g: shadow.color.g,
-          b: shadow.color.b,
-          a: shadow.color.a,
-        },
-        offset: { x: shadow.offset.x, y: shadow.offset.y },
-        radius: shadow.radius,
-        spread: 'spread' in shadow ? shadow.spread : undefined,
+        color: rdColorA(shadow.color),
+        offset: { x: rd(shadow.offset.x, 1), y: rd(shadow.offset.y, 1) },
+        radius: rd(shadow.radius, 1),
+        spread: 'spread' in shadow ? rd(shadow.spread as number, 1) : undefined,
         visible: shadow.visible,
       };
       return result;
@@ -117,7 +125,7 @@ function serializeEffects(node: SceneNode): EffectDescriptor[] {
     const blur = e as BlurEffect;
     const result: BlurEffect = {
       type: blur.type,
-      radius: blur.radius,
+      radius: rd(blur.radius, 1),
       visible: blur.visible,
     };
     return result;
@@ -187,33 +195,98 @@ function serializeChildren(node: SceneNode): { childCount: number; children?: Ch
   };
 }
 
+// ─── Vector path extraction ───────────────────────────────────────────────────
+
+const PATH_CHAR_LIMIT = 2000;
+
+/**
+ * Round all numeric coordinates in an SVG path string to 1 decimal place
+ * to reduce token usage while preserving shape fidelity.
+ */
+function roundPathCoords(data: string): string {
+  return data.replace(/-?\d+\.\d{2,}/g, m => parseFloat(m).toFixed(1));
+}
+
+function serializeVectorPaths(node: SceneNode): string[] | undefined {
+  if (!('vectorPaths' in node)) return undefined;
+  const vp = (node as VectorNode).vectorPaths;
+  if (!vp || vp.length === 0) return undefined;
+
+  const paths: string[] = [];
+  for (const segment of vp) {
+    if (!segment.data || segment.data.trim() === '') continue;
+    let d = segment.data;
+    if (d.length > PATH_CHAR_LIMIT) {
+      d = roundPathCoords(d);
+    }
+    if (d.length > PATH_CHAR_LIMIT) {
+      // Still too long — skip this sub-path to stay within budget
+      continue;
+    }
+    paths.push(d);
+  }
+
+  return paths.length > 0 ? paths : undefined;
+}
+
 // ─── Single node serialization ────────────────────────────────────────────────
 
 function serializeNode(node: SceneNode): NodeDescriptor {
   const { childCount, children } = serializeChildren(node);
 
+  const x = 'x' in node ? rd(node.x, 1) : 0;
+  const y = 'y' in node ? rd(node.y, 1) : 0;
+  const width = 'width' in node ? rd(node.width, 1) : 0;
+  const height = 'height' in node ? rd(node.height, 1) : 0;
+  const rotation = 'rotation' in node ? rd(node.rotation, 1) : 0;
+  const opacity = 'opacity' in node ? rd(node.opacity, 2) : 1;
+  const visible = 'visible' in node ? node.visible : true;
+  const fills = serializeFills(node);
+  const strokes = serializeStrokes(node);
+  const effects = serializeEffects(node);
+  const parentId = node.parent ? node.parent.id : null;
+  const parentName = node.parent ? node.parent.name : null;
+
   const base: NodeDescriptor = {
     id: node.id,
     type: node.type,
     name: node.name,
-    x: 'x' in node ? node.x : 0,
-    y: 'y' in node ? node.y : 0,
-    width: 'width' in node ? node.width : 0,
-    height: 'height' in node ? node.height : 0,
-    rotation: 'rotation' in node ? node.rotation : 0,
-    opacity: 'opacity' in node ? node.opacity : 1,
-    visible: 'visible' in node ? node.visible : true,
-    fills: serializeFills(node),
-    strokes: serializeStrokes(node),
-    effects: serializeEffects(node),
-    parentId: node.parent ? node.parent.id : null,
-    parentName: node.parent ? node.parent.name : null,
+    x,
+    y,
+    width,
+    height,
+    rotation,
+    opacity,
+    visible,
+    fills,
+    strokes,
+    effects,
+    parentId,
+    parentName,
     childCount,
     children,
   };
 
+  // Strip fields that carry no information beyond defaults
+  const b = base as unknown as Record<string, unknown>;
+  if (rotation === 0) delete b.rotation;
+  if (opacity === 1) delete b.opacity;
+  if (visible) delete b.visible;
+  if (fills.length === 0) delete b.fills;
+  if (strokes.length === 0) delete b.strokes;
+  if (effects.length === 0) delete b.effects;
+  if (!parentId) {
+    delete b.parentId;
+    delete b.parentName;
+  }
+
   if (node.type === 'TEXT') {
     Object.assign(base, serializeTextProps(node as TextNode));
+  }
+
+  const vPaths = serializeVectorPaths(node);
+  if (vPaths) {
+    base.vectorPaths = vPaths;
   }
 
   const reactions = serializeReactions(node);

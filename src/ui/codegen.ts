@@ -34,6 +34,9 @@ import rough from 'roughjs';
 import type { Options as RoughOptions } from 'roughjs/bin/core';
 import type { RoughGenerator } from 'roughjs/bin/generator';
 
+// @ts-ignore — marchingsquares has no types
+import { isoLines } from 'marchingsquares';
+
 // ─── Dithering algorithms (hand-rolled, no deps) ────────────────────────────
 
 interface DitherKernelDef {
@@ -452,6 +455,290 @@ function pointsToSvgPath(points: Point2D[], closed = true): string {
   return parts.join(' ');
 }
 
+// ─── SVG path sampling ────────────────────────────────────────────────────────
+
+interface PathSample { x: number; y: number; angle: number }
+
+interface PathSegment {
+  type: 'L' | 'C' | 'Q';
+  points: number[]; // [x0,y0, ...control points..., xEnd,yEnd]
+}
+
+function parseSvgPathSegments(d: string): PathSegment[][] {
+  const subpaths: PathSegment[][] = [];
+  let current: PathSegment[] = [];
+  let cx = 0, cy = 0;
+  let startX = 0, startY = 0;
+
+  const tokens = d.match(/[MLCQZHVSmlcqzhvs]|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/g);
+  if (!tokens) return subpaths;
+
+  let i = 0;
+  const num = () => parseFloat(tokens[i++]);
+
+  while (i < tokens.length) {
+    const cmd = tokens[i++];
+    switch (cmd) {
+      case 'M':
+        if (current.length > 0) subpaths.push(current);
+        current = [];
+        cx = num(); cy = num();
+        startX = cx; startY = cy;
+        while (i < tokens.length && !isNaN(parseFloat(tokens[i]))) {
+          const nx = num(), ny = num();
+          current.push({ type: 'L', points: [cx, cy, nx, ny] });
+          cx = nx; cy = ny;
+        }
+        break;
+      case 'm': {
+        if (current.length > 0) subpaths.push(current);
+        current = [];
+        cx += num(); cy += num();
+        startX = cx; startY = cy;
+        while (i < tokens.length && !isNaN(parseFloat(tokens[i]))) {
+          const dx = num(), dy = num();
+          const nx = cx + dx, ny = cy + dy;
+          current.push({ type: 'L', points: [cx, cy, nx, ny] });
+          cx = nx; cy = ny;
+        }
+        break;
+      }
+      case 'L':
+        while (i < tokens.length && !isNaN(parseFloat(tokens[i]))) {
+          const nx = num(), ny = num();
+          current.push({ type: 'L', points: [cx, cy, nx, ny] });
+          cx = nx; cy = ny;
+        }
+        break;
+      case 'l':
+        while (i < tokens.length && !isNaN(parseFloat(tokens[i]))) {
+          const dx = num(), dy = num();
+          const nx = cx + dx, ny = cy + dy;
+          current.push({ type: 'L', points: [cx, cy, nx, ny] });
+          cx = nx; cy = ny;
+        }
+        break;
+      case 'H':
+        while (i < tokens.length && !isNaN(parseFloat(tokens[i]))) {
+          const nx = num();
+          current.push({ type: 'L', points: [cx, cy, nx, cy] });
+          cx = nx;
+        }
+        break;
+      case 'h':
+        while (i < tokens.length && !isNaN(parseFloat(tokens[i]))) {
+          const dx = num();
+          current.push({ type: 'L', points: [cx, cy, cx + dx, cy] });
+          cx += dx;
+        }
+        break;
+      case 'V':
+        while (i < tokens.length && !isNaN(parseFloat(tokens[i]))) {
+          const ny = num();
+          current.push({ type: 'L', points: [cx, cy, cx, ny] });
+          cy = ny;
+        }
+        break;
+      case 'v':
+        while (i < tokens.length && !isNaN(parseFloat(tokens[i]))) {
+          const dy = num();
+          current.push({ type: 'L', points: [cx, cy, cx, cy + dy] });
+          cy += dy;
+        }
+        break;
+      case 'C':
+        while (i < tokens.length && !isNaN(parseFloat(tokens[i]))) {
+          const x1 = num(), y1 = num(), x2 = num(), y2 = num(), x3 = num(), y3 = num();
+          current.push({ type: 'C', points: [cx, cy, x1, y1, x2, y2, x3, y3] });
+          cx = x3; cy = y3;
+        }
+        break;
+      case 'c':
+        while (i < tokens.length && !isNaN(parseFloat(tokens[i]))) {
+          const dx1 = num(), dy1 = num(), dx2 = num(), dy2 = num(), dx3 = num(), dy3 = num();
+          current.push({ type: 'C', points: [cx, cy, cx+dx1, cy+dy1, cx+dx2, cy+dy2, cx+dx3, cy+dy3] });
+          cx += dx3; cy += dy3;
+        }
+        break;
+      case 'Q':
+        while (i < tokens.length && !isNaN(parseFloat(tokens[i]))) {
+          const x1 = num(), y1 = num(), x2 = num(), y2 = num();
+          current.push({ type: 'Q', points: [cx, cy, x1, y1, x2, y2] });
+          cx = x2; cy = y2;
+        }
+        break;
+      case 'q':
+        while (i < tokens.length && !isNaN(parseFloat(tokens[i]))) {
+          const dx1 = num(), dy1 = num(), dx2 = num(), dy2 = num();
+          current.push({ type: 'Q', points: [cx, cy, cx+dx1, cy+dy1, cx+dx2, cy+dy2] });
+          cx += dx2; cy += dy2;
+        }
+        break;
+      case 'S':
+        while (i < tokens.length && !isNaN(parseFloat(tokens[i]))) {
+          const x2 = num(), y2 = num(), x3 = num(), y3 = num();
+          // Reflect previous C control point, or use current point
+          let rx = cx, ry = cy;
+          const prev = current[current.length - 1];
+          if (prev && prev.type === 'C') {
+            rx = 2 * cx - prev.points[4];
+            ry = 2 * cy - prev.points[5];
+          }
+          current.push({ type: 'C', points: [cx, cy, rx, ry, x2, y2, x3, y3] });
+          cx = x3; cy = y3;
+        }
+        break;
+      case 's':
+        while (i < tokens.length && !isNaN(parseFloat(tokens[i]))) {
+          const dx2 = num(), dy2 = num(), dx3 = num(), dy3 = num();
+          let rx = cx, ry = cy;
+          const prev = current[current.length - 1];
+          if (prev && prev.type === 'C') {
+            rx = 2 * cx - prev.points[4];
+            ry = 2 * cy - prev.points[5];
+          }
+          current.push({ type: 'C', points: [cx, cy, rx, ry, cx+dx2, cy+dy2, cx+dx3, cy+dy3] });
+          cx += dx3; cy += dy3;
+        }
+        break;
+      case 'Z':
+      case 'z':
+        if (cx !== startX || cy !== startY) {
+          current.push({ type: 'L', points: [cx, cy, startX, startY] });
+        }
+        cx = startX; cy = startY;
+        break;
+      default:
+        break;
+    }
+  }
+  if (current.length > 0) subpaths.push(current);
+  return subpaths;
+}
+
+function evalBezier2(t: number, p0: number, p1: number, p2: number): number {
+  const u = 1 - t;
+  return u * u * p0 + 2 * u * t * p1 + t * t * p2;
+}
+
+function evalBezier3(t: number, p0: number, p1: number, p2: number, p3: number): number {
+  const u = 1 - t;
+  return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
+}
+
+function segmentPoint(seg: PathSegment, t: number): { x: number; y: number } {
+  const p = seg.points;
+  switch (seg.type) {
+    case 'L':
+      return { x: p[0] + (p[2] - p[0]) * t, y: p[1] + (p[3] - p[1]) * t };
+    case 'Q':
+      return { x: evalBezier2(t, p[0], p[2], p[4]), y: evalBezier2(t, p[1], p[3], p[5]) };
+    case 'C':
+      return { x: evalBezier3(t, p[0], p[2], p[4], p[6]), y: evalBezier3(t, p[1], p[3], p[5], p[7]) };
+  }
+}
+
+function segmentTangent(seg: PathSegment, t: number): { dx: number; dy: number } {
+  const p = seg.points;
+  const EPS = 1e-6;
+  switch (seg.type) {
+    case 'L':
+      return { dx: p[2] - p[0], dy: p[3] - p[1] };
+    case 'Q': {
+      const u = 1 - t;
+      return {
+        dx: 2 * u * (p[2] - p[0]) + 2 * t * (p[4] - p[2]),
+        dy: 2 * u * (p[3] - p[1]) + 2 * t * (p[5] - p[3]),
+      };
+    }
+    case 'C': {
+      const u = 1 - t;
+      let dx = 3 * u * u * (p[2]-p[0]) + 6 * u * t * (p[4]-p[2]) + 3 * t * t * (p[6]-p[4]);
+      let dy = 3 * u * u * (p[3]-p[1]) + 6 * u * t * (p[5]-p[3]) + 3 * t * t * (p[7]-p[5]);
+      if (Math.abs(dx) < EPS && Math.abs(dy) < EPS) {
+        const p2 = segmentPoint(seg, Math.min(t + 0.001, 1));
+        const p1 = segmentPoint(seg, Math.max(t - 0.001, 0));
+        dx = p2.x - p1.x; dy = p2.y - p1.y;
+      }
+      return { dx, dy };
+    }
+  }
+}
+
+const ARC_LEN_SUBDIVS = 32;
+
+function segmentArcLength(seg: PathSegment): number {
+  if (seg.type === 'L') {
+    const p = seg.points;
+    const dx = p[2] - p[0], dy = p[3] - p[1];
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+  let len = 0;
+  let prev = segmentPoint(seg, 0);
+  for (let i = 1; i <= ARC_LEN_SUBDIVS; i++) {
+    const cur = segmentPoint(seg, i / ARC_LEN_SUBDIVS);
+    const dx = cur.x - prev.x, dy = cur.y - prev.y;
+    len += Math.sqrt(dx * dx + dy * dy);
+    prev = cur;
+  }
+  return len;
+}
+
+function samplePath(svgPath: string, count: number): PathSample[] {
+  const subpaths = parseSvgPathSegments(svgPath);
+  const segments = subpaths.flat();
+  if (segments.length === 0 || count < 1) return [];
+
+  const lengths = segments.map(segmentArcLength);
+  const totalLength = lengths.reduce((a, b) => a + b, 0);
+  if (totalLength === 0) return [];
+
+  const cumulative: number[] = [];
+  let running = 0;
+  for (const l of lengths) { running += l; cumulative.push(running); }
+
+  const samples: PathSample[] = [];
+  for (let i = 0; i < count; i++) {
+    const targetDist = count === 1 ? 0 : (i / (count - 1)) * totalLength;
+
+    let segIdx = 0;
+    while (segIdx < segments.length - 1 && cumulative[segIdx] < targetDist) segIdx++;
+
+    const segStart = segIdx === 0 ? 0 : cumulative[segIdx - 1];
+    const segLen = lengths[segIdx];
+    const localT = segLen > 0 ? Math.max(0, Math.min(1, (targetDist - segStart) / segLen)) : 0;
+
+    const pt = segmentPoint(segments[segIdx], localT);
+    const tan = segmentTangent(segments[segIdx], localT);
+    const angle = Math.atan2(tan.dy, tan.dx) * 180 / Math.PI;
+
+    samples.push({ x: pt.x, y: pt.y, angle });
+  }
+
+  return samples;
+}
+
+function pathBounds(svgPath: string): { x: number; y: number; width: number; height: number } {
+  const subpaths = parseSvgPathSegments(svgPath);
+  const segments = subpaths.flat();
+  if (segments.length === 0) return { x: 0, y: 0, width: 0, height: 0 };
+
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+  for (const seg of segments) {
+    const steps = seg.type === 'L' ? 1 : ARC_LEN_SUBDIVS;
+    for (let i = 0; i <= steps; i++) {
+      const pt = segmentPoint(seg, i / steps);
+      if (pt.x < minX) minX = pt.x;
+      if (pt.y < minY) minY = pt.y;
+      if (pt.x > maxX) maxX = pt.x;
+      if (pt.y > maxY) maxY = pt.y;
+    }
+  }
+
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
 // ─── Superformula helpers ─────────────────────────────────────────────────────
 
 interface SuperformulaConfig {
@@ -529,6 +816,858 @@ const roughLib = {
     return roughToPaths((g) => g.path(svgPath, options));
   },
 };
+
+// ─── Reaction-diffusion (Gray-Scott) ──────────────────────────────────────────
+
+interface GrayScottOptions {
+  feed?: number;
+  kill?: number;
+  iterations?: number;
+  gridSize?: number;
+  dA?: number;
+  dB?: number;
+}
+
+interface GrayScottResult {
+  grid: Float32Array;
+  N: number;
+  minB: number;
+  maxB: number;
+  rangeB: number;
+}
+
+// Shared simulation used by both raster and vector output paths.
+function runGrayScott(options: GrayScottOptions): GrayScottResult {
+  const {
+    feed = 0.04,
+    kill = 0.06,
+    iterations = 3000,
+    gridSize = 200,
+    dA = 0.21,
+    dB = 0.105,
+  } = options;
+
+  const N = gridSize;
+  const size = N * N;
+
+  let a = new Float32Array(size).fill(1);
+  let b = new Float32Array(size).fill(0);
+  let nextA = new Float32Array(size);
+  let nextB = new Float32Array(size);
+
+  for (let s = 0; s < 30; s++) {
+    const sx = Math.floor(mulberry32() * N);
+    const sy = Math.floor(mulberry32() * N);
+    const r = 3 + Math.floor(mulberry32() * 5);
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (dx * dx + dy * dy <= r * r) {
+          const ix = ((sx + dx) + N) % N;
+          const iy = ((sy + dy) + N) % N;
+          a[iy * N + ix] = 0;
+          b[iy * N + ix] = 1;
+        }
+      }
+    }
+  }
+
+  // 9-neighbor Laplacian (Pearson 1993 stencil):
+  //   corners: 0.05  edges: 0.20  center: -1.0
+  for (let iter = 0; iter < iterations; iter++) {
+    for (let y = 0; y < N; y++) {
+      const yt = ((y - 1 + N) % N) * N;
+      const yc = y * N;
+      const yb = ((y + 1) % N) * N;
+      for (let x = 0; x < N; x++) {
+        const xl = (x - 1 + N) % N;
+        const xr = (x + 1) % N;
+        const av = a[yc + x];
+        const bv = b[yc + x];
+
+        const lapA =
+          0.05 * (a[yt + xl] + a[yt + xr] + a[yb + xl] + a[yb + xr]) +
+          0.20 * (a[yt + x]  + a[yb + x]  + a[yc + xl] + a[yc + xr]) -
+          av;
+        const lapB =
+          0.05 * (b[yt + xl] + b[yt + xr] + b[yb + xl] + b[yb + xr]) +
+          0.20 * (b[yt + x]  + b[yb + x]  + b[yc + xl] + b[yc + xr]) -
+          bv;
+
+        const abb = av * bv * bv;
+        let na = av + dA * lapA - abb + feed * (1 - av);
+        let nb = bv + dB * lapB + abb - (kill + feed) * bv;
+        nextA[yc + x] = na < 0 ? 0 : na > 1 ? 1 : na;
+        nextB[yc + x] = nb < 0 ? 0 : nb > 1 ? 1 : nb;
+      }
+    }
+    const tmpA = a; a = nextA; nextA = tmpA;
+    const tmpB = b; b = nextB; nextB = tmpB;
+  }
+
+  let minB = b[0];
+  let maxB = b[0];
+  for (let i = 1; i < size; i++) {
+    if (b[i] < minB) minB = b[i];
+    if (b[i] > maxB) maxB = b[i];
+  }
+  const rangeB = maxB - minB > 0 ? maxB - minB : 1;
+
+  return { grid: b, N, minB, maxB, rangeB };
+}
+
+interface ReactionDiffusionOptions extends GrayScottOptions {
+  color?: string;
+  background?: string;
+  threshold?: number;
+}
+
+function reactionDiffusion(
+  width: number,
+  height: number,
+  options?: ReactionDiffusionOptions,
+): number[] {
+  const { color = '#000000', background = '#ffffff', threshold = 0, ...simOpts } = options || {};
+  const { grid, N, minB, rangeB } = runGrayScott(simOpts);
+  const size = N * N;
+
+  const fg = chroma(color);
+  const bg = chroma(background);
+
+  return renderCanvas(width, height, (ctx) => {
+    const sim = document.createElement('canvas');
+    sim.width = N;
+    sim.height = N;
+    const sCtx = sim.getContext('2d')!;
+    const img = sCtx.createImageData(N, N);
+    const d = img.data;
+
+    for (let i = 0; i < size; i++) {
+      let t = (grid[i] - minB) / rangeB;
+      if (threshold > 0) t = t > threshold ? 1 : 0;
+      const [r, g, bl] = chroma.mix(bg, fg, t).rgb();
+      const p = i << 2;
+      d[p] = r; d[p + 1] = g; d[p + 2] = bl; d[p + 3] = 255;
+    }
+    sCtx.putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(sim, 0, 0, width, height);
+  });
+}
+
+// ─── Chaikin curve smoothing ──────────────────────────────────────────────────
+
+function chaikinSmooth(pts: number[][], passes: number): number[][] {
+  let result = pts;
+  for (let p = 0; p < passes; p++) {
+    const next: number[][] = [];
+    for (let i = 0; i < result.length; i++) {
+      const cur = result[i];
+      const nxt = result[(i + 1) % result.length];
+      next.push(
+        [cur[0] * 0.75 + nxt[0] * 0.25, cur[1] * 0.75 + nxt[1] * 0.25],
+        [cur[0] * 0.25 + nxt[0] * 0.75, cur[1] * 0.25 + nxt[1] * 0.75],
+      );
+    }
+    result = next;
+  }
+  return result;
+}
+
+// ─── Vector reaction-diffusion (marching squares → SVG path) ─────────────────
+
+interface ReactionDiffusionSVGOptions extends GrayScottOptions {
+  threshold?: number;
+  smoothing?: number;
+}
+
+function reactionDiffusionSVG(
+  width: number,
+  height: number,
+  options?: ReactionDiffusionSVGOptions,
+): string {
+  const { threshold = 0.5, smoothing = 2, ...simOpts } = options || {};
+  const { grid, N, minB, rangeB } = runGrayScott(simOpts);
+
+  // Build 2D array normalized to [0,1] for marching squares
+  const field: number[][] = [];
+  for (let y = 0; y < N; y++) {
+    const row: number[] = [];
+    for (let x = 0; x < N; x++) {
+      row.push((grid[y * N + x] - minB) / rangeB);
+    }
+    field.push(row);
+  }
+
+  const contours: number[][][] = isoLines(field, [threshold]);
+  const paths = contours[0] || [];
+
+  const sx = width / (N - 1);
+  const sy = height / (N - 1);
+
+  const pathParts: string[] = [];
+  for (const ring of paths) {
+    if (ring.length < 3) continue;
+    // Scale from grid coords to output pixels and smooth
+    const scaled: number[][] = ring.map((pt: number[]) => [pt[0] * sx, pt[1] * sy]);
+    const smooth = smoothing > 0 ? chaikinSmooth(scaled, smoothing) : scaled;
+    const first = smooth[0];
+    const segments = [`M ${first[0].toFixed(1)} ${first[1].toFixed(1)}`];
+    for (let i = 1; i < smooth.length; i++) {
+      segments.push(`L ${smooth[i][0].toFixed(1)} ${smooth[i][1].toFixed(1)}`);
+    }
+    segments.push('Z');
+    pathParts.push(segments.join(' '));
+  }
+
+  return pathParts.join(' ');
+}
+
+// ─── Shared contour-to-SVG builder ────────────────────────────────────────────
+
+function contoursToSvg(
+  field: number[][],
+  width: number,
+  height: number,
+  cols: number,
+  rows: number,
+  smoothPasses: number,
+): string {
+  const contours: number[][][] = isoLines(field, [0.5]);
+  const rings = contours[0] || [];
+  const sx = width / (cols - 1);
+  const sy = height / (rows - 1);
+
+  const pathParts: string[] = [];
+  for (const ring of rings) {
+    if (ring.length < 3) continue;
+    const scaled: number[][] = ring.map((pt: number[]) => [pt[0] * sx, pt[1] * sy]);
+    const sm = smoothPasses > 0 ? chaikinSmooth(scaled, smoothPasses) : scaled;
+    const first = sm[0];
+    const segs = [`M ${first[0].toFixed(1)} ${first[1].toFixed(1)}`];
+    for (let i = 1; i < sm.length; i++) {
+      segs.push(`L ${sm[i][0].toFixed(1)} ${sm[i][1].toFixed(1)}`);
+    }
+    segs.push('Z');
+    pathParts.push(segs.join(' '));
+  }
+  return pathParts.join(' ');
+}
+
+// ─── Circle packing ───────────────────────────────────────────────────────────
+
+interface CirclePackOptions {
+  count?: number;
+  minRadius?: number;
+  maxRadius?: number;
+  padding?: number;
+  maxAttempts?: number;
+}
+
+function circlePack(
+  width: number,
+  height: number,
+  options?: CirclePackOptions,
+): { x: number; y: number; r: number }[] {
+  const {
+    count = 100,
+    minRadius = 2,
+    maxRadius = 50,
+    padding = 1,
+    maxAttempts = 10000,
+  } = options || {};
+
+  const circles: { x: number; y: number; r: number }[] = [];
+  const cellSize = maxRadius * 2 + padding;
+  const grid = new Map<string, { x: number; y: number; r: number }[]>();
+
+  function gk(x: number, y: number): string {
+    return `${Math.floor(x / cellSize)},${Math.floor(y / cellSize)}`;
+  }
+  function addG(c: { x: number; y: number; r: number }): void {
+    const k = gk(c.x, c.y);
+    let arr = grid.get(k);
+    if (!arr) { arr = []; grid.set(k, arr); }
+    arr.push(c);
+  }
+  function overlaps(x: number, y: number, r: number): boolean {
+    const ci = Math.floor(x / cellSize);
+    const cj = Math.floor(y / cellSize);
+    for (let di = -2; di <= 2; di++) {
+      for (let dj = -2; dj <= 2; dj++) {
+        const arr = grid.get(`${ci + di},${cj + dj}`);
+        if (!arr) continue;
+        for (const c of arr) {
+          const dx = c.x - x, dy = c.y - y;
+          const md = c.r + r + padding;
+          if (dx * dx + dy * dy < md * md) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  let attempts = 0;
+  while (circles.length < count && attempts < maxAttempts) {
+    attempts++;
+    const r = minRadius + mulberry32() * (maxRadius - minRadius);
+    const x = r + mulberry32() * (width - 2 * r);
+    const y = r + mulberry32() * (height - 2 * r);
+    if (!overlaps(x, y, r)) {
+      const c = { x, y, r };
+      circles.push(c);
+      addG(c);
+    }
+  }
+  return circles;
+}
+
+// ─── Strange attractors ───────────────────────────────────────────────────────
+
+interface StrangeAttractorOptions {
+  type?: 'clifford' | 'dejong';
+  a?: number;
+  b?: number;
+  c?: number;
+  d?: number;
+  iterations?: number;
+  skip?: number;
+}
+
+function strangeAttractor(
+  width: number,
+  height: number,
+  options?: StrangeAttractorOptions,
+): string {
+  const {
+    type = 'clifford',
+    a = -1.4, b = 1.6, c = 1.0, d = 0.7,
+    iterations = 50000,
+    skip = 100,
+  } = options || {};
+
+  let x = 0.1, y = 0.1;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  const pts: { x: number; y: number }[] = [];
+
+  for (let i = 0; i < iterations + skip; i++) {
+    let nx: number, ny: number;
+    if (type === 'dejong') {
+      nx = Math.sin(a * y) - Math.cos(b * x);
+      ny = Math.sin(c * x) - Math.cos(d * y);
+    } else {
+      nx = Math.sin(a * y) + c * Math.cos(a * x);
+      ny = Math.sin(b * x) + d * Math.cos(b * y);
+    }
+    x = nx; y = ny;
+    if (i >= skip) {
+      pts.push({ x, y });
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+    }
+  }
+
+  const rangeX = maxX - minX || 1;
+  const rangeY = maxY - minY || 1;
+  const margin = 10;
+  const sw = width - 2 * margin, sh = height - 2 * margin;
+
+  const segments: string[] = [];
+  let prevSx = -Infinity, prevSy = -Infinity;
+  let inPath = false;
+
+  for (const pt of pts) {
+    const sx = margin + ((pt.x - minX) / rangeX) * sw;
+    const sy = margin + ((pt.y - minY) / rangeY) * sh;
+    const dx = sx - prevSx, dy = sy - prevSy;
+    if (dx * dx + dy * dy < 0.25) continue;
+    segments.push(`${inPath ? 'L' : 'M'} ${sx.toFixed(1)} ${sy.toFixed(1)}`);
+    inPath = true;
+    prevSx = sx; prevSy = sy;
+  }
+  return segments.join(' ');
+}
+
+// ─── Metaballs ────────────────────────────────────────────────────────────────
+
+interface MetaballsOptions {
+  count?: number;
+  minRadius?: number;
+  maxRadius?: number;
+  gridSize?: number;
+  smoothing?: number;
+}
+
+function metaballs(
+  width: number,
+  height: number,
+  options?: MetaballsOptions,
+): string {
+  const {
+    count = 5,
+    minRadius = 30,
+    maxRadius = 80,
+    gridSize = 100,
+    smoothing = 2,
+  } = options || {};
+
+  const N = gridSize;
+  const scale = width / N;
+
+  const blobs: { cx: number; cy: number; r: number }[] = [];
+  for (let i = 0; i < count; i++) {
+    const r = (minRadius + mulberry32() * (maxRadius - minRadius)) / scale;
+    blobs.push({
+      cx: r + mulberry32() * (N - 2 * r),
+      cy: r + mulberry32() * (N - 2 * r),
+      r,
+    });
+  }
+
+  const field: number[][] = [];
+  for (let y = 0; y < N; y++) {
+    const row: number[] = [];
+    for (let x = 0; x < N; x++) {
+      let val = 0;
+      for (const bl of blobs) {
+        const dx = x - bl.cx, dy = y - bl.cy;
+        const distSq = dx * dx + dy * dy;
+        val += (bl.r * bl.r) / (distSq || 0.001);
+      }
+      row.push(val);
+    }
+    field.push(row);
+  }
+
+  const contours: number[][][] = isoLines(field, [1.0]);
+  const rings = contours[0] || [];
+  const sx = width / (N - 1);
+  const sy = height / (N - 1);
+
+  const pathParts: string[] = [];
+  for (const ring of rings) {
+    if (ring.length < 3) continue;
+    const scaled: number[][] = ring.map((pt: number[]) => [pt[0] * sx, pt[1] * sy]);
+    const sm = smoothing > 0 ? chaikinSmooth(scaled, smoothing) : scaled;
+    const first = sm[0];
+    const segs = [`M ${first[0].toFixed(1)} ${first[1].toFixed(1)}`];
+    for (let i = 1; i < sm.length; i++) {
+      segs.push(`L ${sm[i][0].toFixed(1)} ${sm[i][1].toFixed(1)}`);
+    }
+    segs.push('Z');
+    pathParts.push(segs.join(' '));
+  }
+  return pathParts.join(' ');
+}
+
+// ─── Diffusion-Limited Aggregation (DLA) ──────────────────────────────────────
+
+interface DlaOptions {
+  count?: number;
+  stepSize?: number;
+  stickDistance?: number;
+}
+
+function dla(
+  width: number,
+  height: number,
+  options?: DlaOptions,
+): { x: number; y: number; parent: number }[] {
+  const {
+    count = 200,
+    stepSize = 1,
+    stickDistance = 3,
+  } = options || {};
+
+  const particles: { x: number; y: number; parent: number }[] = [];
+  particles.push({ x: width / 2, y: height / 2, parent: -1 });
+
+  const cellSize = stickDistance * 2;
+  const grid = new Map<string, number[]>();
+
+  function gk(x: number, y: number): string {
+    return `${Math.floor(x / cellSize)},${Math.floor(y / cellSize)}`;
+  }
+  function addG(idx: number): void {
+    const k = gk(particles[idx].x, particles[idx].y);
+    let arr = grid.get(k);
+    if (!arr) { arr = []; grid.set(k, arr); }
+    arr.push(idx);
+  }
+  addG(0);
+
+  function findNearest(x: number, y: number): number {
+    const ci = Math.floor(x / cellSize), cj = Math.floor(y / cellSize);
+    let bestDist = Infinity, bestIdx = -1;
+    for (let di = -1; di <= 1; di++) {
+      for (let dj = -1; dj <= 1; dj++) {
+        const arr = grid.get(`${ci + di},${cj + dj}`);
+        if (!arr) continue;
+        for (const idx of arr) {
+          const p = particles[idx];
+          const dx = p.x - x, dy = p.y - y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < bestDist) { bestDist = dist; bestIdx = idx; }
+        }
+      }
+    }
+    return bestDist <= stickDistance ? bestIdx : -1;
+  }
+
+  const maxWalkSteps = 5000;
+  const margin = stickDistance * 2;
+
+  while (particles.length < count) {
+    const side = Math.floor(mulberry32() * 4);
+    let wx: number, wy: number;
+    if (side === 0) { wx = mulberry32() * width; wy = margin; }
+    else if (side === 1) { wx = mulberry32() * width; wy = height - margin; }
+    else if (side === 2) { wx = margin; wy = mulberry32() * height; }
+    else { wx = width - margin; wy = mulberry32() * height; }
+
+    for (let s = 0; s < maxWalkSteps; s++) {
+      const angle = mulberry32() * Math.PI * 2;
+      wx += Math.cos(angle) * stepSize;
+      wy += Math.sin(angle) * stepSize;
+      if (wx < 0 || wx > width || wy < 0 || wy > height) break;
+
+      const nearest = findNearest(wx, wy);
+      if (nearest >= 0) {
+        const idx = particles.length;
+        particles.push({ x: wx, y: wy, parent: nearest });
+        addG(idx);
+        break;
+      }
+    }
+  }
+  return particles;
+}
+
+// ─── Cellular Automata ────────────────────────────────────────────────────────
+
+interface CellularAutomataOptions {
+  type?: 'life' | 'wolfram';
+  rule?: number;
+  gridSize?: number;
+  steps?: number;
+  fillRatio?: number;
+  surviveMin?: number;
+  surviveMax?: number;
+  birthMin?: number;
+  birthMax?: number;
+  smooth?: boolean;
+  smoothing?: number;
+}
+
+function cellularAutomata(
+  width: number,
+  height: number,
+  options?: CellularAutomataOptions,
+): string {
+  const {
+    type = 'life',
+    rule = 30,
+    gridSize = 80,
+    steps = 50,
+    fillRatio = 0.4,
+    surviveMin = 2,
+    surviveMax = 3,
+    birthMin = 3,
+    birthMax = 3,
+    smoothing = 2,
+  } = options || {};
+
+  const useSmooth = options?.smooth ?? (type === 'life');
+
+  if (type === 'wolfram') {
+    const cols = gridSize;
+    const rows = steps > 0 ? steps : gridSize;
+    const grid = new Uint8Array(rows * cols);
+    grid[Math.floor(cols / 2)] = 1;
+
+    for (let y = 1; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const left = x > 0 ? grid[(y - 1) * cols + x - 1] : 0;
+        const center = grid[(y - 1) * cols + x];
+        const right = x < cols - 1 ? grid[(y - 1) * cols + x + 1] : 0;
+        const pattern = (left << 2) | (center << 1) | right;
+        grid[y * cols + x] = (rule >> pattern) & 1;
+      }
+    }
+
+    if (useSmooth) {
+      const field: number[][] = [];
+      for (let y = 0; y < rows; y++) {
+        const row: number[] = [];
+        for (let x = 0; x < cols; x++) row.push(grid[y * cols + x]);
+        field.push(row);
+      }
+      return contoursToSvg(field, width, height, cols, rows, smoothing);
+    }
+    return cellsToRectSvg(grid, cols, rows, width, height);
+  }
+
+  // Game of Life
+  const N = gridSize;
+  let grid = new Uint8Array(N * N);
+  for (let i = 0; i < N * N; i++) grid[i] = mulberry32() < fillRatio ? 1 : 0;
+
+  const next = new Uint8Array(N * N);
+  for (let step = 0; step < steps; step++) {
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        let neighbors = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            neighbors += grid[((y + dy + N) % N) * N + ((x + dx + N) % N)];
+          }
+        }
+        const alive = grid[y * N + x];
+        next[y * N + x] = alive
+          ? (neighbors >= surviveMin && neighbors <= surviveMax ? 1 : 0)
+          : (neighbors >= birthMin && neighbors <= birthMax ? 1 : 0);
+      }
+    }
+    grid.set(next);
+  }
+
+  if (useSmooth) {
+    const field: number[][] = [];
+    for (let y = 0; y < N; y++) {
+      const row: number[] = [];
+      for (let x = 0; x < N; x++) row.push(grid[y * N + x]);
+      field.push(row);
+    }
+    return contoursToSvg(field, width, height, N, N, smoothing);
+  }
+  return cellsToRectSvg(grid, N, N, width, height);
+}
+
+function cellsToRectSvg(
+  grid: Uint8Array,
+  cols: number,
+  rows: number,
+  width: number,
+  height: number,
+): string {
+  const cw = width / cols;
+  const ch = height / rows;
+  const parts: string[] = [];
+
+  for (let y = 0; y < rows; y++) {
+    let runStart = -1;
+    for (let x = 0; x <= cols; x++) {
+      const alive = x < cols ? grid[y * cols + x] : 0;
+      if (alive && runStart < 0) {
+        runStart = x;
+      } else if (!alive && runStart >= 0) {
+        const rx = runStart * cw;
+        const ry = y * ch;
+        const rw = (x - runStart) * cw;
+        parts.push(`M ${rx.toFixed(1)} ${ry.toFixed(1)} h ${rw.toFixed(1)} v ${ch.toFixed(1)} h ${(-rw).toFixed(1)} Z`);
+        runStart = -1;
+      }
+    }
+  }
+  return parts.join(' ');
+}
+
+// ─── Wave Function Collapse ───────────────────────────────────────────────────
+
+interface WfcTileDef {
+  edges: [string, string, string, string]; // [top, right, bottom, left]
+}
+
+const WFC_TILES: Record<string, WfcTileDef[]> = {
+  truchet: [
+    { edges: ['a', 'a', 'a', 'a'] },
+    { edges: ['a', 'a', 'a', 'a'] },
+  ],
+  lines: [
+    { edges: ['0', '0', '0', '0'] },
+    { edges: ['0', '1', '0', '1'] },
+    { edges: ['1', '0', '1', '0'] },
+    { edges: ['1', '1', '0', '0'] },
+    { edges: ['0', '1', '1', '0'] },
+    { edges: ['0', '0', '1', '1'] },
+    { edges: ['1', '0', '0', '1'] },
+    { edges: ['1', '1', '1', '1'] },
+  ],
+  arcs: [
+    { edges: ['0', '0', '0', '0'] },
+    { edges: ['a', 'a', '0', '0'] },
+    { edges: ['0', 'a', 'a', '0'] },
+    { edges: ['0', '0', 'a', 'a'] },
+    { edges: ['a', '0', '0', 'a'] },
+    { edges: ['a', '0', 'a', '0'] },
+    { edges: ['0', 'a', '0', 'a'] },
+  ],
+};
+
+function wfcTileSvg(
+  set: string,
+  tileIdx: number,
+  ox: number,
+  oy: number,
+  ts: number,
+): string {
+  const h = ts / 2;
+  const mx = ox + h, my = oy + h;
+  const r = ox + ts, b = oy + ts;
+  const f = (n: number) => n.toFixed(1);
+
+  if (set === 'truchet') {
+    if (tileIdx === 0) {
+      return `M ${f(mx)} ${f(oy)} A ${f(h)} ${f(h)} 0 0 0 ${f(ox)} ${f(my)} M ${f(r)} ${f(my)} A ${f(h)} ${f(h)} 0 0 0 ${f(mx)} ${f(b)}`;
+    }
+    return `M ${f(mx)} ${f(oy)} A ${f(h)} ${f(h)} 0 0 1 ${f(r)} ${f(my)} M ${f(ox)} ${f(my)} A ${f(h)} ${f(h)} 0 0 1 ${f(mx)} ${f(b)}`;
+  }
+
+  if (set === 'lines') {
+    switch (tileIdx) {
+      case 0: return '';
+      case 1: return `M ${f(ox)} ${f(my)} L ${f(r)} ${f(my)}`;
+      case 2: return `M ${f(mx)} ${f(oy)} L ${f(mx)} ${f(b)}`;
+      case 3: return `M ${f(mx)} ${f(oy)} L ${f(mx)} ${f(my)} L ${f(r)} ${f(my)}`;
+      case 4: return `M ${f(r)} ${f(my)} L ${f(mx)} ${f(my)} L ${f(mx)} ${f(b)}`;
+      case 5: return `M ${f(mx)} ${f(b)} L ${f(mx)} ${f(my)} L ${f(ox)} ${f(my)}`;
+      case 6: return `M ${f(ox)} ${f(my)} L ${f(mx)} ${f(my)} L ${f(mx)} ${f(oy)}`;
+      case 7: return `M ${f(mx)} ${f(oy)} L ${f(mx)} ${f(b)} M ${f(ox)} ${f(my)} L ${f(r)} ${f(my)}`;
+      default: return '';
+    }
+  }
+
+  // arcs
+  switch (tileIdx) {
+    case 0: return '';
+    case 1: return `M ${f(mx)} ${f(oy)} Q ${f(mx)} ${f(my)} ${f(r)} ${f(my)}`;
+    case 2: return `M ${f(r)} ${f(my)} Q ${f(mx)} ${f(my)} ${f(mx)} ${f(b)}`;
+    case 3: return `M ${f(mx)} ${f(b)} Q ${f(mx)} ${f(my)} ${f(ox)} ${f(my)}`;
+    case 4: return `M ${f(ox)} ${f(my)} Q ${f(mx)} ${f(my)} ${f(mx)} ${f(oy)}`;
+    case 5: return `M ${f(mx)} ${f(oy)} L ${f(mx)} ${f(b)}`;
+    case 6: return `M ${f(ox)} ${f(my)} L ${f(r)} ${f(my)}`;
+    default: return '';
+  }
+}
+
+interface WfcOptions {
+  tileSet?: 'truchet' | 'lines' | 'arcs';
+  cols?: number;
+  rows?: number;
+  tileSize?: number;
+  maxRetries?: number;
+}
+
+function waveFunctionCollapse(
+  width: number,
+  height: number,
+  options?: WfcOptions,
+): string {
+  const {
+    tileSet = 'truchet',
+    maxRetries = 10,
+  } = options || {};
+
+  const tiles = WFC_TILES[tileSet] || WFC_TILES.truchet;
+
+  let cols: number, rows: number, ts: number;
+  if (options?.cols && options?.rows) {
+    cols = options.cols;
+    rows = options.rows;
+    ts = Math.min(width / cols, height / rows);
+  } else if (options?.tileSize) {
+    ts = options.tileSize;
+    cols = Math.max(1, Math.floor(width / ts));
+    rows = Math.max(1, Math.floor(height / ts));
+  } else {
+    cols = 10; rows = 10;
+    ts = Math.min(width / cols, height / rows);
+  }
+
+  const oppEdge = [2, 3, 0, 1];
+  const dCol = [0, 1, 0, -1];
+  const dRow = [-1, 0, 1, 0];
+  const total = cols * rows;
+
+  for (let retry = 0; retry < maxRetries; retry++) {
+    const possible: boolean[][] = [];
+    const collapsed: number[] = new Array(total).fill(-1);
+    for (let i = 0; i < total; i++) possible.push(new Array(tiles.length).fill(true));
+
+    function entropy(idx: number): number {
+      if (collapsed[idx] >= 0) return Infinity;
+      let c = 0;
+      for (let t = 0; t < tiles.length; t++) if (possible[idx][t]) c++;
+      return c;
+    }
+
+    function propagate(idx: number): boolean {
+      const stack = [idx];
+      while (stack.length > 0) {
+        const cur = stack.pop()!;
+        const cr = Math.floor(cur / cols), cc = cur % cols;
+        for (let dir = 0; dir < 4; dir++) {
+          const nr = cr + dRow[dir], nc = cc + dCol[dir];
+          if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
+          const nIdx = nr * cols + nc;
+          if (collapsed[nIdx] >= 0) continue;
+
+          const validEdges: Record<string, boolean> = {};
+          for (let t = 0; t < tiles.length; t++) {
+            if (possible[cur][t]) validEdges[tiles[t].edges[dir]] = true;
+          }
+
+          let changed = false;
+          for (let t = 0; t < tiles.length; t++) {
+            if (possible[nIdx][t] && !validEdges[tiles[t].edges[oppEdge[dir]]]) {
+              possible[nIdx][t] = false;
+              changed = true;
+            }
+          }
+          if (changed) {
+            if (entropy(nIdx) === 0) return false;
+            stack.push(nIdx);
+          }
+        }
+      }
+      return true;
+    }
+
+    let ok = true;
+    for (let step = 0; step < total; step++) {
+      let minE = Infinity, minIdx = -1;
+      for (let i = 0; i < total; i++) {
+        const e = entropy(i);
+        if (e < minE) { minE = e; minIdx = i; }
+      }
+      if (minIdx < 0 || minE === Infinity) break;
+      if (minE === 0) { ok = false; break; }
+
+      const valid: number[] = [];
+      for (let t = 0; t < tiles.length; t++) if (possible[minIdx][t]) valid.push(t);
+      const chosen = valid[Math.floor(mulberry32() * valid.length)];
+      collapsed[minIdx] = chosen;
+      for (let t = 0; t < tiles.length; t++) possible[minIdx][t] = (t === chosen);
+
+      if (!propagate(minIdx)) { ok = false; break; }
+    }
+
+    if (ok) {
+      const pathParts: string[] = [];
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const ti = collapsed[r * cols + c];
+          if (ti < 0) continue;
+          const svg = wfcTileSvg(tileSet, ti, c * ts, r * ts, ts);
+          if (svg) pathParts.push(svg);
+        }
+      }
+      return pathParts.join(' ');
+    }
+  }
+  return '';
+}
 
 // ─── Canvas rendering helper (for pattern tiles, no source image needed) ──────
 
@@ -717,6 +1856,10 @@ const generatorLib = {
   torus: (major: number, minor: number, segments?: number) => make3DTorus(major, minor, segments),
   pointsToSvgPath,
 
+  // --- SVG path sampling ---
+  samplePath,
+  pathBounds,
+
   // --- Superformula organic shapes ---
   superformula,
   superformulaPath,
@@ -760,6 +1903,18 @@ const generatorLib = {
     Waterfall: PathsWaterfall,
     Sankey: PathsSankey,
   },
+
+  // --- Reaction-diffusion (Turing patterns) ---
+  reactionDiffusion,
+  reactionDiffusionSVG,
+
+  // --- Computational design helpers ---
+  circlePack,
+  strangeAttractor,
+  metaballs,
+  dla,
+  cellularAutomata,
+  waveFunctionCollapse,
 
   // --- Canvas rendering (blank canvas, for pattern tiles etc.) ---
   renderCanvas,
