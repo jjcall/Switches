@@ -65,7 +65,9 @@ export function GradientBar({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const dragStartX = useRef(0);
   const dragStartY = useRef(0);
+  const didDrag = useRef(false);
 
   const sorted = sortStops(value);
   const gradientCSS = buildGradientCSS(sorted);
@@ -97,11 +99,12 @@ export function GradientBar({
 
   const handleHandlePointerDown = useCallback(
     (e: React.PointerEvent, stopId: string) => {
-      e.preventDefault();
       e.stopPropagation();
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
       setDraggingId(stopId);
+      dragStartX.current = e.clientX;
       dragStartY.current = e.clientY;
+      didDrag.current = false;
       setSelectedId(stopId);
     },
     [],
@@ -113,7 +116,11 @@ export function GradientBar({
       const rect = barRef.current?.getBoundingClientRect();
       if (!rect) return;
 
+      const dx = Math.abs(e.clientX - dragStartX.current);
       const dy = Math.abs(e.clientY - dragStartY.current);
+
+      if (dx > 3 || dy > 3) didDrag.current = true;
+
       if (dy > REMOVE_THRESHOLD && value.length > minStops) {
         const next = value.filter(s => s.id !== draggingId);
         onChange(sortStops(next));
@@ -133,21 +140,15 @@ export function GradientBar({
   );
 
   const handleHandlePointerUp = useCallback(() => {
-    setDraggingId(null);
-  }, []);
-
-  const handleHandleClick = useCallback(
-    (e: React.MouseEvent, stopId: string) => {
-      e.stopPropagation();
-      if (selectedId === stopId && pickerOpen) {
+    if (draggingId && !didDrag.current) {
+      if (selectedId === draggingId && pickerOpen) {
         setPickerOpen(false);
       } else {
-        setSelectedId(stopId);
         setPickerOpen(true);
       }
-    },
-    [selectedId, pickerOpen],
-  );
+    }
+    setDraggingId(null);
+  }, [draggingId, selectedId, pickerOpen]);
 
   const handlePickerChange = useCallback(
     (color: string) => {
@@ -185,7 +186,6 @@ export function GradientBar({
               backgroundColor: stop.color,
             }}
             onPointerDown={(e) => handleHandlePointerDown(e, stop.id)}
-            onClick={(e) => handleHandleClick(e, stop.id)}
           />
         ))}
       </div>

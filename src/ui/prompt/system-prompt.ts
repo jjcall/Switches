@@ -91,7 +91,10 @@ Supported methods:
 When referencing a node created in the same batch, use its tempId as nodeId in later actions.
 
 ### Paint object
-  Solid: { "type": "SOLID", "color": { "r": 0-1, "g": 0-1, "b": 0-1 }, "opacity": 0-1 }
+  Solid:    { "type": "SOLID", "color": { "r": 0-1, "g": 0-1, "b": 0-1 }, "opacity": 0-1 }
+  Gradient: { "type": "GRADIENT_LINEAR", "gradientStops": [{ "position": 0, "color": { "r": 0-1, "g": 0-1, "b": 0-1, "a": 1 } }, ...], "gradientTransform": [[1,0,0],[0,1,0]], "opacity": 1 }
+  Gradient types: GRADIENT_LINEAR, GRADIENT_RADIAL, GRADIENT_ANGULAR, GRADIENT_DIAMOND.
+  gradientTransform is a 2x3 affine matrix controlling angle/position. Use [[1,0,0],[0,1,0]] for default left-to-right linear.
 
 ### setFill / setStroke — two forms (same pattern as setEffect)
 
@@ -107,6 +110,14 @@ When referencing a node created in the same batch, use its tempId as nodeId in l
 
    Example control action for stroke weight slider:
    { "method": "setStroke", "nodeId": "10:5", "args": { "property": "weight" } }
+
+### gradient-bar → setFill wiring (direct action mode)
+When a gradient-bar control targets setFill, the stop array is automatically converted to a
+GRADIENT_LINEAR fill. The executor preserves any existing gradientTransform.
+Just wire the gradient-bar action to setFill with no property — the array value is handled:
+  { "method": "setFill", "nodeId": "10:5", "args": {} }
+This replaces the entire fill with a GRADIENT_LINEAR built from the stop positions and colors.
+Use this for any "apply a gradient" direct-action scenario (no generator needed).
 
 ### Effect objects
   Shadow: { "type": "DROP_SHADOW", "color": { "r":0,"g":0,"b":0,"a":0.25 }, "offset": { "x":0,"y":4 }, "radius":8, "spread":0, "visible":true }
@@ -177,9 +188,11 @@ CRITICAL RULES:
    randomness, loops, computed values, color manipulation (saturate, desaturate, darken, lighten,
    hue shift, color mixing, color scales, contrast), noise, easing, or any logic beyond simple
    property patching. Signs: "grid", "pattern", "generate", "create N items", "layout",
-   "arrange", "distribute", "carousel", "randomize", "gradient", "spiral", "animate",
+   "arrange", "distribute", "carousel", "randomize", "spiral", "animate",
    "saturate", "desaturate", "darken", "lighten", "palette", "color scale", "noise",
    "organic", "scatter", "wavy", "easing", or any scenario needing computation.
+   Exception: a simple gradient fill on an existing node does NOT need a generator — use a
+   gradient-bar control with a direct setFill action instead (see gradient-bar docs).
 
    IMPORTANT: Figma's fill API only stores { r, g, b } colors — there is no "saturation",
    "hue", or "lightness" property on a Figma paint. If a control needs to manipulate color
@@ -336,7 +349,12 @@ point. These are defaults — the user can override any of them.
   slider for density/count/spacing/size. range for size variation. curve for distribution
   (e.g. size falloff across the grid). color or gradient-bar for coloring.
 
-- **Gradient & color work** (color ramps, heatmaps, palettes):
+- **Gradient fill on a shape** (apply gradient to a rectangle, circle, etc.):
+  gradient-bar with a direct setFill action (no generator needed). The stop array auto-converts
+  to GRADIENT_LINEAR. Use top-level setFill to apply the initial gradient, then the gradient-bar
+  control's action updates it live.
+
+- **Gradient & color work** (color ramps across generated elements, heatmaps, palettes):
   gradient-bar for multi-stop gradients with movable positions. color for fixed palette
   endpoints. slider for saturation/brightness adjustments.
 
@@ -463,6 +481,9 @@ Example: { "id": "gradient", "type": "gradient-bar", "label": "Gradient",
 Generator access: params.gradient is an array of { id, position, color } sorted by position.
 Use lib.chroma.scale(params.gradient.map(s => s.color)).domain(params.gradient.map(s => s.position))
 to create a smooth chroma scale from the stops.
+Direct-action access: wire a setFill action with no property — the stop array is automatically
+converted to a GRADIENT_LINEAR fill:
+  "actions": [{ "method": "setFill", "nodeId": "TARGET_ID", "args": {} }]
 
 ### curve
 Bezier curve editor for controlling distribution, falloff, or value remapping. Displays an

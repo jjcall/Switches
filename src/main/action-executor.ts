@@ -775,6 +775,39 @@ function execSetFill(node: SceneNode, args: Args): void {
     return;
   }
 
+  // Gradient-bar stop array → GRADIENT_LINEAR fill.
+  if (Array.isArray(args.value)) {
+    const stops = args.value as { id?: string; position?: number; color?: string }[];
+    const validStops = stops.filter(s => typeof s.color === 'string' && s.color.startsWith('#'));
+    if (validStops.length >= 2) {
+      const geoNode = node as GeometryMixin;
+      const gradientStops: ColorStop[] = validStops.map(s => {
+        const h = (s.color as string).replace('#', '');
+        return {
+          position: typeof s.position === 'number' ? s.position : 0,
+          color: {
+            r: parseInt(h.slice(0, 2), 16) / 255,
+            g: parseInt(h.slice(2, 4), 16) / 255,
+            b: parseInt(h.slice(4, 6), 16) / 255,
+            a: 1,
+          },
+        };
+      });
+      const fills = (geoNode.fills as readonly Paint[]).map(clonePaint);
+      const firstFill = fills[0] as Record<string, unknown> | undefined;
+      const existingTransform = firstFill && typeof firstFill.type === 'string' && firstFill.type.startsWith('GRADIENT_')
+        ? firstFill.gradientTransform as Transform
+        : [[1, 0, 0], [0, 1, 0]] as unknown as Transform;
+      geoNode.fills = [{
+        type: 'GRADIENT_LINEAR',
+        gradientTransform: existingTransform,
+        gradientStops,
+        opacity: 1,
+      } as GradientPaint];
+      return;
+    }
+  }
+
   // Multi-stop color map (from gradient color control) → update gradient stops.
   if (typeof args.value === 'object' && args.value !== null && !Array.isArray(args.value)) {
     const colorMap = args.value as Record<string, unknown>;
@@ -1261,7 +1294,15 @@ export async function executeActions(
     }
   }
 
-  const isReapply = actions.length > 0 && actions[0].method === 'deleteChildren';
+  const isReapply = actions.length > 0 && actions.some(
+    (a, i) => a.method === 'deleteChildren' && i < 3,
+  );
+
+  // A generator re-apply that includes an explicit resize means the generator
+  // already computed the frame dimensions — skip child scaling post-processing.
+  const generatorHandledSize = isReapply && actions.some(
+    (a, i) => a.method === 'resize' && i < 3,
+  );
 
   // Post-process the root frame after all children are placed.
   if (rootFrameId) {
@@ -1275,7 +1316,7 @@ export async function executeActions(
             frame.primaryAxisSizingMode = 'AUTO';
             frame.counterAxisSizingMode = 'AUTO';
           }
-        } else if (frame.children.length > 0) {
+        } else if (frame.children.length > 0 && !generatorHandledSize) {
           let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
           for (const child of frame.children) {
             minX = Math.min(minX, child.x);
@@ -1283,27 +1324,7 @@ export async function executeActions(
             maxX = Math.max(maxX, child.x + child.width);
             maxY = Math.max(maxY, child.y + child.height);
           }
-          // On first run, resize frame to hug children.
-          // On re-apply, keep the user's frame size but scale children to fit.
-          if (isReapply) {
-            const contentW = maxX - minX;
-            const contentH = maxY - minY;
-            if (contentW > 0 && contentH > 0) {
-              const scaleX = frame.width / contentW;
-              const scaleY = frame.height / contentH;
-              const scale = Math.min(scaleX, scaleY);
-              const offsetX = (frame.width - contentW * scale) / 2;
-              const offsetY = (frame.height - contentH * scale) / 2;
-              for (const child of frame.children) {
-                child.x = (child.x - minX) * scale + offsetX;
-                child.y = (child.y - minY) * scale + offsetY;
-                if ('resize' in child) {
-                  (child as SceneNode & { resize(w: number, h: number): void })
-                    .resize(child.width * scale, child.height * scale);
-                }
-              }
-            }
-          } else {
+          if (!isReapply) {
             frame.resize(maxX - minX, maxY - minY);
             if (minX !== 0 || minY !== 0) {
               for (const child of frame.children) {

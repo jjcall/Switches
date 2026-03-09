@@ -1142,7 +1142,7 @@ function strangeAttractor(
   const {
     type = 'clifford',
     a = -1.4, b = 1.6, c = 1.0, d = 0.7,
-    iterations = 50000,
+    iterations = 20000,
     skip = 100,
   } = options || {};
 
@@ -1169,20 +1169,25 @@ function strangeAttractor(
 
   const rangeX = maxX - minX || 1;
   const rangeY = maxY - minY || 1;
-  const margin = 10;
-  const sw = width - 2 * margin, sh = height - 2 * margin;
+  const margin = Math.min(20, Math.floor(Math.min(width, height) * 0.05));
+  const sw = Math.max(width - 2 * margin, 1);
+  const sh = Math.max(height - 2 * margin, 1);
+
+  const minDistSq = 2.25;  // skip points closer than 1.5px
+  const maxJumpSq = (Math.min(sw, sh) * 0.08) ** 2;  // break path on jumps > 8% of frame
 
   const segments: string[] = [];
   let prevSx = -Infinity, prevSy = -Infinity;
-  let inPath = false;
 
   for (const pt of pts) {
     const sx = margin + ((pt.x - minX) / rangeX) * sw;
     const sy = margin + ((pt.y - minY) / rangeY) * sh;
     const dx = sx - prevSx, dy = sy - prevSy;
-    if (dx * dx + dy * dy < 0.25) continue;
-    segments.push(`${inPath ? 'L' : 'M'} ${sx.toFixed(1)} ${sy.toFixed(1)}`);
-    inPath = true;
+    const distSq = dx * dx + dy * dy;
+    if (distSq < minDistSq) continue;
+
+    const cmd = (prevSx === -Infinity || distSq > maxJumpSq) ? 'M' : 'L';
+    segments.push(`${cmd} ${sx.toFixed(1)} ${sy.toFixed(1)}`);
     prevSx = sx; prevSy = sy;
   }
   return segments.join(' ');

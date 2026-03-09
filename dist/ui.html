@@ -30621,7 +30621,10 @@ Supported methods:
 When referencing a node created in the same batch, use its tempId as nodeId in later actions.
 
 ### Paint object
-  Solid: { "type": "SOLID", "color": { "r": 0-1, "g": 0-1, "b": 0-1 }, "opacity": 0-1 }
+  Solid:    { "type": "SOLID", "color": { "r": 0-1, "g": 0-1, "b": 0-1 }, "opacity": 0-1 }
+  Gradient: { "type": "GRADIENT_LINEAR", "gradientStops": [{ "position": 0, "color": { "r": 0-1, "g": 0-1, "b": 0-1, "a": 1 } }, ...], "gradientTransform": [[1,0,0],[0,1,0]], "opacity": 1 }
+  Gradient types: GRADIENT_LINEAR, GRADIENT_RADIAL, GRADIENT_ANGULAR, GRADIENT_DIAMOND.
+  gradientTransform is a 2x3 affine matrix controlling angle/position. Use [[1,0,0],[0,1,0]] for default left-to-right linear.
 
 ### setFill / setStroke \u2014 two forms (same pattern as setEffect)
 
@@ -30637,6 +30640,14 @@ When referencing a node created in the same batch, use its tempId as nodeId in l
 
    Example control action for stroke weight slider:
    { "method": "setStroke", "nodeId": "10:5", "args": { "property": "weight" } }
+
+### gradient-bar \u2192 setFill wiring (direct action mode)
+When a gradient-bar control targets setFill, the stop array is automatically converted to a
+GRADIENT_LINEAR fill. The executor preserves any existing gradientTransform.
+Just wire the gradient-bar action to setFill with no property \u2014 the array value is handled:
+  { "method": "setFill", "nodeId": "10:5", "args": {} }
+This replaces the entire fill with a GRADIENT_LINEAR built from the stop positions and colors.
+Use this for any "apply a gradient" direct-action scenario (no generator needed).
 
 ### Effect objects
   Shadow: { "type": "DROP_SHADOW", "color": { "r":0,"g":0,"b":0,"a":0.25 }, "offset": { "x":0,"y":4 }, "radius":8, "spread":0, "visible":true }
@@ -30707,9 +30718,11 @@ CRITICAL RULES:
    randomness, loops, computed values, color manipulation (saturate, desaturate, darken, lighten,
    hue shift, color mixing, color scales, contrast), noise, easing, or any logic beyond simple
    property patching. Signs: "grid", "pattern", "generate", "create N items", "layout",
-   "arrange", "distribute", "carousel", "randomize", "gradient", "spiral", "animate",
+   "arrange", "distribute", "carousel", "randomize", "spiral", "animate",
    "saturate", "desaturate", "darken", "lighten", "palette", "color scale", "noise",
    "organic", "scatter", "wavy", "easing", or any scenario needing computation.
+   Exception: a simple gradient fill on an existing node does NOT need a generator \u2014 use a
+   gradient-bar control with a direct setFill action instead (see gradient-bar docs).
 
    IMPORTANT: Figma's fill API only stores { r, g, b } colors \u2014 there is no "saturation",
    "hue", or "lightness" property on a Figma paint. If a control needs to manipulate color
@@ -30866,7 +30879,12 @@ point. These are defaults \u2014 the user can override any of them.
   slider for density/count/spacing/size. range for size variation. curve for distribution
   (e.g. size falloff across the grid). color or gradient-bar for coloring.
 
-- **Gradient & color work** (color ramps, heatmaps, palettes):
+- **Gradient fill on a shape** (apply gradient to a rectangle, circle, etc.):
+  gradient-bar with a direct setFill action (no generator needed). The stop array auto-converts
+  to GRADIENT_LINEAR. Use top-level setFill to apply the initial gradient, then the gradient-bar
+  control's action updates it live.
+
+- **Gradient & color work** (color ramps across generated elements, heatmaps, palettes):
   gradient-bar for multi-stop gradients with movable positions. color for fixed palette
   endpoints. slider for saturation/brightness adjustments.
 
@@ -30993,6 +31011,9 @@ Example: { "id": "gradient", "type": "gradient-bar", "label": "Gradient",
 Generator access: params.gradient is an array of { id, position, color } sorted by position.
 Use lib.chroma.scale(params.gradient.map(s => s.color)).domain(params.gradient.map(s => s.position))
 to create a smooth chroma scale from the stops.
+Direct-action access: wire a setFill action with no property \u2014 the stop array is automatically
+converted to a GRADIENT_LINEAR fill:
+  "actions": [{ "method": "setFill", "nodeId": "TARGET_ID", "args": {} }]
 
 ### curve
 Bezier curve editor for controlling distribution, falloff, or value remapping. Displays an
@@ -31632,6 +31653,10 @@ editable on the canvas after generation.
    The frame MUST grow/shrink when the user changes count, size, or spacing controls.
    Grid: width = cols * (size + spacing). Row/palette: width = count * (size + gap) - gap.
    For single-axis rows, use layoutMode 'HORIZONTAL' with itemSpacing for automatic sizing.
+   **Minimum frame size**: when generating self-contained artwork (attractors, metaballs,
+   cellular automata, circle packing, DLA, Turing patterns, etc.) ALWAYS provide a
+   size/width/height slider (default 400, range 200\u2013800) and use it for the frame dimensions.
+   If no size control exists, default to at least 400\xD7400. Never create frames smaller than 200px.
 4. Use tempId on created nodes and reference them in subsequent actions via nodeId or parentId.
 5. Use "__prev" as nodeId to target the most recently created node.
 6. For 2D grids, compute x/y positions explicitly using row and column math.
@@ -31774,7 +31799,7 @@ Key points for the direct-actions example above:
   etc.), ALWAYS use a generator with imageNodeId, set imageMaxWidth to 400+, use
   lib.processImage for Canvas2D manipulation, and emit applyImageFill with the result bytes.
   This pipeline processes from the original source every time \u2014 non-destructive by design.`;
-  var MODULE_COMPUTATIONAL = "#### Computational design helpers\n\nSix native helpers for generative/computational design. All use lib.random() for deterministic\nresults. Most return vector data (SVG path strings or coordinate arrays for createVector/createEllipse).\n\n##### Circle packing (lib.circlePack)\n\nFills a rectangle with non-overlapping circles. Returns Array<{ x, y, r }>.\nEmit one createEllipse per circle \u2014 native Figma shapes, no path conversion needed.\n\n  lib.circlePack(width, height, options?) \u2192 { x, y, r }[]\n\n  Options:\n  - count: target number of circles (default 100, max ~500)\n  - minRadius: minimum circle radius in px (default 2)\n  - maxRadius: maximum circle radius in px (default 50)\n  - padding: gap between circles in px (default 1)\n  - maxAttempts: placement attempts before giving up (default 10000)\n\n  Usage:\n    const circles = lib.circlePack(params.size, params.size, {\n      count: params.count, minRadius: params.minR, maxRadius: params.maxR, padding: params.gap\n    });\n    circles.forEach((c, i) => {\n      actions.push({ method: 'createEllipse', parentId: 'root',\n        args: { x: c.x - c.r, y: c.y - c.r, width: c.r * 2, height: c.r * 2 } });\n      actions.push({ method: 'setFill', nodeId: '__prev',\n        args: { fills: [{ type: 'SOLID', color: lib.randomColor() }] } });\n    });\n\n  Recommended controls:\n  - count: slider 10\u2013500, default 100\n  - minRadius: slider 1\u201320, default 2\n  - maxRadius: slider 10\u201380, default 50\n  - padding: slider 0\u201310, default 1\n  - size: slider 200\u2013800, default 400\n\n##### Strange attractors (lib.strangeAttractor)\n\nTraces chaotic orbital paths from iterative equations. Returns an SVG path string.\nProduce with a single createVector \u2014 the attractor IS the path.\n\n  lib.strangeAttractor(width, height, options?) \u2192 string (SVG path)\n\n  Options:\n  - type: 'clifford' (default) or 'dejong'\n  - a, b, c, d: equation parameters (defaults: -1.4, 1.6, 1.0, 0.7)\n    Different values produce wildly different shapes. Try ranges -3 to 3.\n  - iterations: point count (default 50000). 10K = sparse, 200K = dense.\n  - skip: transient steps to discard (default 100)\n\n  Equations:\n  - Clifford: x' = sin(a*y) + c*cos(a*x),  y' = sin(b*x) + d*cos(b*y)\n  - De Jong:  x' = sin(a*y) - cos(b*x),     y' = sin(c*x) - cos(d*y)\n\n  Usage:\n    const path = lib.strangeAttractor(params.size, params.size, {\n      type: params.type, a: params.a, b: params.b, c: params.c, d: params.d,\n      iterations: params.iterations\n    });\n    actions.push({ method: 'createVector', parentId: 'root',\n      args: { data: path, name: 'Attractor' } });\n    actions.push({ method: 'setStroke', nodeId: '__prev',\n      args: { strokes: [{ type: 'SOLID', color: lib.hexToRgb(params.color) }], weight: 0.5 } });\n    actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [] } });\n\n  IMPORTANT: Attractors are open stroke paths. Set fills to [] and apply a thin stroke.\n\n  Recommended controls:\n  - type: segmented ['clifford', 'dejong']\n  - a, b, c, d: sliders -3 to 3, step 0.1\n  - iterations: slider 10000\u2013200000, step 5000, default 50000\n  - size: slider 200\u2013800, default 400\n\n##### Metaballs (lib.metaballs)\n\nOrganic blobs that merge smoothly when close together (lava lamp / biological look).\nReturns an SVG path string via marching squares + Chaikin smoothing.\n\n  lib.metaballs(width, height, options?) \u2192 string (SVG path)\n\n  Options:\n  - count: number of blobs (default 5)\n  - minRadius: minimum blob radius in px (default 30)\n  - maxRadius: maximum blob radius in px (default 80)\n  - gridSize: field resolution (default 100). Higher = smoother contours, slower.\n  - smoothing: Chaikin smoothing passes (default 2). 0 = angular, 2\u20133 = organic.\n\n  Usage:\n    const path = lib.metaballs(params.size, params.size, {\n      count: params.count, minRadius: params.minR, maxRadius: params.maxR, smoothing: params.smooth\n    });\n    actions.push({ method: 'createVector', parentId: 'root',\n      args: { data: path, windingRule: 'EVENODD', name: 'Metaballs' } });\n    actions.push({ method: 'setFill', nodeId: '__prev',\n      args: { fills: [{ type: 'SOLID', color: lib.hexToRgb(params.color) }] } });\n\n  Recommended controls:\n  - count: slider 2\u201312, default 5\n  - minRadius: slider 10\u201350, default 30\n  - maxRadius: slider 30\u2013120, default 80\n  - smoothing: slider 0\u20134, step 1, default 2\n\n##### Diffusion-Limited Aggregation (lib.dla)\n\nBranching fractal growth \u2014 coral, frost, lightning, mineral veins.\nReturns Array<{ x, y, parent }>. Each particle knows its parent index for branch tracing.\nConnect particles to parents as line segments in a single SVG path.\n\n  lib.dla(width, height, options?) \u2192 { x, y, parent: number }[]\n\n  Options:\n  - count: number of particles (default 200, max ~500)\n  - stepSize: random walk step in px (default 1)\n  - stickDistance: how close to stick in px (default 3)\n\n  Usage \u2014 as a connected branch path (recommended for dense trees):\n    const particles = lib.dla(params.size, params.size, {\n      count: params.count, stickDistance: params.stickDist\n    });\n    const segs = [];\n    for (const p of particles) {\n      if (p.parent >= 0) {\n        const pp = particles[p.parent];\n        segs.push('M ' + pp.x.toFixed(1) + ' ' + pp.y.toFixed(1) +\n                  ' L ' + p.x.toFixed(1) + ' ' + p.y.toFixed(1));\n      }\n    }\n    actions.push({ method: 'createVector', parentId: 'root',\n      args: { data: segs.join(' '), name: 'DLA' } });\n    actions.push({ method: 'setStroke', nodeId: '__prev',\n      args: { strokes: [{ type: 'SOLID', color: lib.hexToRgb(params.color) }], weight: 1 } });\n    actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [] } });\n\n  Usage \u2014 as individual circles (for sparse trees with visible particles):\n    particles.forEach(p => {\n      const r = params.particleSize / 2;\n      actions.push({ method: 'createEllipse', parentId: 'root',\n        args: { x: p.x - r, y: p.y - r, width: r * 2, height: r * 2 } });\n    });\n\n  IMPORTANT: DLA branch paths are open stroked lines. Set fills to [] and apply stroke.\n\n  Recommended controls:\n  - count: slider 50\u2013500, default 200\n  - stickDistance: slider 1\u201310, default 3\n  - size: slider 200\u2013600, default 400\n\n##### Cellular Automata (lib.cellularAutomata)\n\nGame of Life and Wolfram elementary automata \u2014 evolving grid textures.\nReturns an SVG path string. Two output modes: smooth contours (marching squares)\nor blocky rectangles (run-length encoded).\n\n  lib.cellularAutomata(width, height, options?) \u2192 string (SVG path)\n\n  Options:\n  - type: 'life' (default) or 'wolfram'\n  - rule: Wolfram rule number 0\u2013255 (default 30). Classic rules:\n      Rule 30 = chaotic, Rule 90 = Sierpinski triangle, Rule 110 = complex/Turing-complete\n  - gridSize: cell count per axis (default 80)\n  - steps: simulation steps (default 50). For Wolfram, also sets the number of rows.\n  - fillRatio: initial random fill for Life (default 0.4)\n  - surviveMin/surviveMax: Life survive range (default 2/3 = standard B3/S23)\n  - birthMin/birthMax: Life birth range (default 3/3 = standard B3/S23)\n  - smooth: true = marching squares contours (default for Life),\n            false = blocky rectangles (default for Wolfram)\n  - smoothing: Chaikin passes when smooth=true (default 2)\n\n  Usage:\n    const path = lib.cellularAutomata(params.size, params.size, {\n      type: params.type, rule: params.rule, gridSize: params.grid,\n      steps: params.steps, smooth: params.smooth\n    });\n    actions.push({ method: 'createVector', parentId: 'root',\n      args: { data: path, windingRule: 'EVENODD', name: 'Cellular Automata' } });\n    actions.push({ method: 'setFill', nodeId: '__prev',\n      args: { fills: [{ type: 'SOLID', color: lib.hexToRgb(params.color) }] } });\n\n  Recommended controls:\n  - type: segmented ['life', 'wolfram']\n  - rule: slider 0\u2013255, step 1, default 30 (only relevant for wolfram)\n  - gridSize: slider 20\u2013150, default 80\n  - steps: slider 10\u2013200, default 50\n  - smooth: toggle, default true\n\n##### Wave Function Collapse (lib.waveFunctionCollapse)\n\nConstraint-based tile generation. Produces coherent tiled patterns from adjacency rules.\nReturns an SVG path string combining all tile geometries. Single createVector.\n\n  lib.waveFunctionCollapse(width, height, options?) \u2192 string (SVG path)\n\n  Options:\n  - tileSet: 'truchet' (default), 'lines', or 'arcs'\n      truchet: quarter-circle arcs \u2014 beautiful flowing curved patterns\n      lines: straight line segments \u2014 maze-like connected networks\n      arcs: quadratic curve segments \u2014 organic pipe-like patterns\n  - cols: grid columns (default 10)\n  - rows: grid rows (default 10)\n  - tileSize: tile size in px (alternative to cols/rows \u2014 auto-computes grid)\n  - maxRetries: restart attempts on contradiction (default 10)\n\n  Usage:\n    const path = lib.waveFunctionCollapse(params.size, params.size, {\n      tileSet: params.tileSet, cols: params.cols, rows: params.rows\n    });\n    actions.push({ method: 'createVector', parentId: 'root',\n      args: { data: path, name: 'WFC Pattern' } });\n    actions.push({ method: 'setStroke', nodeId: '__prev',\n      args: { strokes: [{ type: 'SOLID', color: lib.hexToRgb(params.color) }], weight: params.weight } });\n    actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [] } });\n\n  IMPORTANT: WFC tiles are stroke paths (lines/arcs). Set fills to [] and apply stroke.\n  For truchet tiles, a thicker stroke (2\u20134px) looks best.\n\n  Recommended controls:\n  - tileSet: segmented ['truchet', 'lines', 'arcs']\n  - cols: slider 5\u201330, default 10\n  - rows: slider 5\u201330, default 10\n  - weight: slider 0.5\u20136, step 0.5, default 2\n  - size: slider 200\u2013800, default 400";
+  var MODULE_COMPUTATIONAL = "#### Computational design helpers\n\nSix native helpers for generative/computational design. All use lib.random() for deterministic\nresults. Most return vector data (SVG path strings or coordinate arrays for createVector/createEllipse).\n\n##### Circle packing (lib.circlePack)\n\nFills a rectangle with non-overlapping circles. Returns Array<{ x, y, r }>.\nEmit one createEllipse per circle \u2014 native Figma shapes, no path conversion needed.\n\n  lib.circlePack(width, height, options?) \u2192 { x, y, r }[]\n\n  Options:\n  - count: target number of circles (default 100, max ~500)\n  - minRadius: minimum circle radius in px (default 2)\n  - maxRadius: maximum circle radius in px (default 50)\n  - padding: gap between circles in px (default 1)\n  - maxAttempts: placement attempts before giving up (default 10000)\n\n  Usage:\n    const circles = lib.circlePack(params.size, params.size, {\n      count: params.count, minRadius: params.minR, maxRadius: params.maxR, padding: params.gap\n    });\n    circles.forEach((c, i) => {\n      actions.push({ method: 'createEllipse', parentId: 'root',\n        args: { x: c.x - c.r, y: c.y - c.r, width: c.r * 2, height: c.r * 2 } });\n      actions.push({ method: 'setFill', nodeId: '__prev',\n        args: { fills: [{ type: 'SOLID', color: lib.randomColor() }] } });\n    });\n\n  Recommended controls:\n  - count: slider 10\u2013500, default 100\n  - minRadius: slider 1\u201320, default 2\n  - maxRadius: slider 10\u201380, default 50\n  - padding: slider 0\u201310, default 1\n  - size: slider 200\u2013800, default 400\n\n##### Strange attractors (lib.strangeAttractor)\n\nTraces chaotic orbital paths from iterative equations. Returns an SVG path string.\nProduce with a single createVector \u2014 the attractor IS the path.\n\n  lib.strangeAttractor(width, height, options?) \u2192 string (SVG path)\n\n  Options:\n  - type: 'clifford' (default) or 'dejong'\n  - a, b, c, d: equation parameters (defaults: -1.4, 1.6, 1.0, 0.7)\n    Different values produce wildly different shapes. Try ranges -3 to 3.\n  - iterations: point count (default 20000). 5K = very sparse, 50K = dense.\n    Start low (10K\u201320K) for visible structure; going above 50K fills the frame solid.\n  - skip: transient steps to discard (default 100)\n\n  The helper automatically breaks the path when consecutive points jump too far,\n  eliminating crossing lines and revealing the orbital structure.\n\n  Equations:\n  - Clifford: x' = sin(a*y) + c*cos(a*x),  y' = sin(b*x) + d*cos(b*y)\n  - De Jong:  x' = sin(a*y) - cos(b*x),     y' = sin(c*x) - cos(d*y)\n\n  Usage:\n    const path = lib.strangeAttractor(params.size, params.size, {\n      type: params.type, a: params.a, b: params.b, c: params.c, d: params.d,\n      iterations: params.iterations\n    });\n    actions.push({ method: 'createVector', parentId: 'root',\n      args: { data: path, name: 'Attractor' } });\n    actions.push({ method: 'setStroke', nodeId: '__prev',\n      args: { strokes: [{ type: 'SOLID', color: lib.hexToRgb(params.color) }], weight: 0.5 } });\n    actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [] } });\n\n  IMPORTANT: Attractors are open stroke paths. Set fills to [] and apply a thin stroke (0.3\u20131px).\n  Use 10K\u201320K iterations for a visible wispy look; higher values fill more of the frame.\n\n  Recommended controls:\n  - type: segmented ['clifford', 'dejong']\n  - a, b, c, d: sliders -3 to 3, step 0.1\n  - iterations: slider 5000\u201380000, step 5000, default 20000\n  - size: slider 200\u2013800, default 400\n\n##### Metaballs (lib.metaballs)\n\nOrganic blobs that merge smoothly when close together (lava lamp / biological look).\nReturns an SVG path string via marching squares + Chaikin smoothing.\n\n  lib.metaballs(width, height, options?) \u2192 string (SVG path)\n\n  Options:\n  - count: number of blobs (default 5)\n  - minRadius: minimum blob radius in px (default 30)\n  - maxRadius: maximum blob radius in px (default 80)\n  - gridSize: field resolution (default 100). Higher = smoother contours, slower.\n  - smoothing: Chaikin smoothing passes (default 2). 0 = angular, 2\u20133 = organic.\n\n  Usage:\n    const path = lib.metaballs(params.size, params.size, {\n      count: params.count, minRadius: params.minR, maxRadius: params.maxR, smoothing: params.smooth\n    });\n    actions.push({ method: 'createVector', parentId: 'root',\n      args: { data: path, windingRule: 'EVENODD', name: 'Metaballs' } });\n    actions.push({ method: 'setFill', nodeId: '__prev',\n      args: { fills: [{ type: 'SOLID', color: lib.hexToRgb(params.color) }] } });\n\n  Recommended controls:\n  - count: slider 2\u201312, default 5\n  - minRadius: slider 10\u201350, default 30\n  - maxRadius: slider 30\u2013120, default 80\n  - smoothing: slider 0\u20134, step 1, default 2\n\n##### Diffusion-Limited Aggregation (lib.dla)\n\nBranching fractal growth \u2014 coral, frost, lightning, mineral veins.\nReturns Array<{ x, y, parent }>. Each particle knows its parent index for branch tracing.\nConnect particles to parents as line segments in a single SVG path.\n\n  lib.dla(width, height, options?) \u2192 { x, y, parent: number }[]\n\n  Options:\n  - count: number of particles (default 200, max ~500)\n  - stepSize: random walk step in px (default 1)\n  - stickDistance: how close to stick in px (default 3)\n\n  Usage \u2014 as a connected branch path (recommended for dense trees):\n    const particles = lib.dla(params.size, params.size, {\n      count: params.count, stickDistance: params.stickDist\n    });\n    const segs = [];\n    for (const p of particles) {\n      if (p.parent >= 0) {\n        const pp = particles[p.parent];\n        segs.push('M ' + pp.x.toFixed(1) + ' ' + pp.y.toFixed(1) +\n                  ' L ' + p.x.toFixed(1) + ' ' + p.y.toFixed(1));\n      }\n    }\n    actions.push({ method: 'createVector', parentId: 'root',\n      args: { data: segs.join(' '), name: 'DLA' } });\n    actions.push({ method: 'setStroke', nodeId: '__prev',\n      args: { strokes: [{ type: 'SOLID', color: lib.hexToRgb(params.color) }], weight: 1 } });\n    actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [] } });\n\n  Usage \u2014 as individual circles (for sparse trees with visible particles):\n    particles.forEach(p => {\n      const r = params.particleSize / 2;\n      actions.push({ method: 'createEllipse', parentId: 'root',\n        args: { x: p.x - r, y: p.y - r, width: r * 2, height: r * 2 } });\n    });\n\n  IMPORTANT: DLA branch paths are open stroked lines. Set fills to [] and apply stroke.\n\n  Recommended controls:\n  - count: slider 50\u2013500, default 200\n  - stickDistance: slider 1\u201310, default 3\n  - size: slider 200\u2013600, default 400\n\n##### Cellular Automata (lib.cellularAutomata)\n\nGame of Life and Wolfram elementary automata \u2014 evolving grid textures.\nReturns an SVG path string. Two output modes: smooth contours (marching squares)\nor blocky rectangles (run-length encoded).\n\n  lib.cellularAutomata(width, height, options?) \u2192 string (SVG path)\n\n  Options:\n  - type: 'life' (default) or 'wolfram'\n  - rule: Wolfram rule number 0\u2013255 (default 30). Classic rules:\n      Rule 30 = chaotic, Rule 90 = Sierpinski triangle, Rule 110 = complex/Turing-complete\n  - gridSize: cell count per axis (default 80)\n  - steps: simulation steps (default 50). For Wolfram, also sets the number of rows.\n  - fillRatio: initial random fill for Life (default 0.4)\n  - surviveMin/surviveMax: Life survive range (default 2/3 = standard B3/S23)\n  - birthMin/birthMax: Life birth range (default 3/3 = standard B3/S23)\n  - smooth: true = marching squares contours (default for Life),\n            false = blocky rectangles (default for Wolfram)\n  - smoothing: Chaikin passes when smooth=true (default 2)\n\n  Usage:\n    const path = lib.cellularAutomata(params.size, params.size, {\n      type: params.type, rule: params.rule, gridSize: params.grid,\n      steps: params.steps, smooth: params.smooth\n    });\n    actions.push({ method: 'createVector', parentId: 'root',\n      args: { data: path, windingRule: 'EVENODD', name: 'Cellular Automata' } });\n    actions.push({ method: 'setFill', nodeId: '__prev',\n      args: { fills: [{ type: 'SOLID', color: lib.hexToRgb(params.color) }] } });\n\n  Recommended controls:\n  - type: segmented ['life', 'wolfram']\n  - rule: slider 0\u2013255, step 1, default 30 (only relevant for wolfram)\n  - gridSize: slider 20\u2013150, default 80\n  - steps: slider 10\u2013200, default 50\n  - smooth: toggle, default true\n\n##### Wave Function Collapse (lib.waveFunctionCollapse)\n\nConstraint-based tile generation. Produces coherent tiled patterns from adjacency rules.\nReturns an SVG path string combining all tile geometries. Single createVector.\n\n  lib.waveFunctionCollapse(width, height, options?) \u2192 string (SVG path)\n\n  Options:\n  - tileSet: 'truchet' (default), 'lines', or 'arcs'\n      truchet: quarter-circle arcs \u2014 beautiful flowing curved patterns\n      lines: straight line segments \u2014 maze-like connected networks\n      arcs: quadratic curve segments \u2014 organic pipe-like patterns\n  - cols: grid columns (default 10)\n  - rows: grid rows (default 10)\n  - tileSize: tile size in px (alternative to cols/rows \u2014 auto-computes grid)\n  - maxRetries: restart attempts on contradiction (default 10)\n\n  Usage:\n    const path = lib.waveFunctionCollapse(params.size, params.size, {\n      tileSet: params.tileSet, cols: params.cols, rows: params.rows\n    });\n    actions.push({ method: 'createVector', parentId: 'root',\n      args: { data: path, name: 'WFC Pattern' } });\n    actions.push({ method: 'setStroke', nodeId: '__prev',\n      args: { strokes: [{ type: 'SOLID', color: lib.hexToRgb(params.color) }], weight: params.weight } });\n    actions.push({ method: 'setFill', nodeId: '__prev', args: { fills: [] } });\n\n  IMPORTANT: WFC tiles are stroke paths (lines/arcs). Set fills to [] and apply stroke.\n  For truchet tiles, a thicker stroke (2\u20134px) looks best.\n\n  Recommended controls:\n  - tileSet: segmented ['truchet', 'lines', 'arcs']\n  - cols: slider 5\u201330, default 10\n  - rows: slider 5\u201330, default 10\n  - weight: slider 0.5\u20136, step 0.5, default 2\n  - size: slider 200\u2013800, default 400";
   var MODULE_EXAMPLES = `### Generator example: colorful circle grid
 
 {
@@ -46484,7 +46509,9 @@ void main() {
     const [selectedId, setSelectedId] = (0, import_react43.useState)(null);
     const [pickerOpen, setPickerOpen] = (0, import_react43.useState)(false);
     const [draggingId, setDraggingId] = (0, import_react43.useState)(null);
+    const dragStartX = (0, import_react43.useRef)(0);
     const dragStartY = (0, import_react43.useRef)(0);
+    const didDrag = (0, import_react43.useRef)(false);
     const sorted = sortStops(value);
     const gradientCSS = buildGradientCSS(sorted);
     (0, import_react43.useEffect)(() => {
@@ -46512,11 +46539,12 @@ void main() {
     );
     const handleHandlePointerDown = (0, import_react43.useCallback)(
       (e3, stopId) => {
-        e3.preventDefault();
         e3.stopPropagation();
         e3.target.setPointerCapture(e3.pointerId);
         setDraggingId(stopId);
+        dragStartX.current = e3.clientX;
         dragStartY.current = e3.clientY;
+        didDrag.current = false;
         setSelectedId(stopId);
       },
       []
@@ -46526,7 +46554,9 @@ void main() {
         if (!draggingId) return;
         const rect = barRef.current?.getBoundingClientRect();
         if (!rect) return;
+        const dx = Math.abs(e3.clientX - dragStartX.current);
         const dy = Math.abs(e3.clientY - dragStartY.current);
+        if (dx > 3 || dy > 3) didDrag.current = true;
         if (dy > REMOVE_THRESHOLD && value.length > minStops) {
           const next2 = value.filter((s3) => s3.id !== draggingId);
           onChange(sortStops(next2));
@@ -46544,20 +46574,15 @@ void main() {
       [draggingId, value, onChange, minStops, selectedId]
     );
     const handleHandlePointerUp = (0, import_react43.useCallback)(() => {
-      setDraggingId(null);
-    }, []);
-    const handleHandleClick = (0, import_react43.useCallback)(
-      (e3, stopId) => {
-        e3.stopPropagation();
-        if (selectedId === stopId && pickerOpen) {
+      if (draggingId && !didDrag.current) {
+        if (selectedId === draggingId && pickerOpen) {
           setPickerOpen(false);
         } else {
-          setSelectedId(stopId);
           setPickerOpen(true);
         }
-      },
-      [selectedId, pickerOpen]
-    );
+      }
+      setDraggingId(null);
+    }, [draggingId, selectedId, pickerOpen]);
     const handlePickerChange = (0, import_react43.useCallback)(
       (color2) => {
         if (!selectedId) return;
@@ -46592,8 +46617,7 @@ void main() {
                 left: `calc(${stop.position * 100}% - ${HANDLE_SIZE / 2}px)`,
                 backgroundColor: stop.color
               },
-              onPointerDown: (e3) => handleHandlePointerDown(e3, stop.id),
-              onClick: (e3) => handleHandleClick(e3, stop.id)
+              onPointerDown: (e3) => handleHandlePointerDown(e3, stop.id)
             },
             stop.id
           ))
@@ -54932,7 +54956,7 @@ void main() {
       b: b3 = 1.6,
       c: c3 = 1,
       d: d3 = 0.7,
-      iterations = 5e4,
+      iterations = 2e4,
       skip = 100
     } = options || {};
     let x3 = 0.1, y3 = 0.1;
@@ -54959,18 +54983,21 @@ void main() {
     }
     const rangeX = maxX - minX || 1;
     const rangeY = maxY - minY || 1;
-    const margin = 10;
-    const sw = width - 2 * margin, sh = height - 2 * margin;
+    const margin = Math.min(20, Math.floor(Math.min(width, height) * 0.05));
+    const sw = Math.max(width - 2 * margin, 1);
+    const sh = Math.max(height - 2 * margin, 1);
+    const minDistSq = 2.25;
+    const maxJumpSq = (Math.min(sw, sh) * 0.08) ** 2;
     const segments = [];
     let prevSx = -Infinity, prevSy = -Infinity;
-    let inPath = false;
     for (const pt of pts) {
       const sx = margin + (pt.x - minX) / rangeX * sw;
       const sy = margin + (pt.y - minY) / rangeY * sh;
       const dx = sx - prevSx, dy = sy - prevSy;
-      if (dx * dx + dy * dy < 0.25) continue;
-      segments.push(`${inPath ? "L" : "M"} ${sx.toFixed(1)} ${sy.toFixed(1)}`);
-      inPath = true;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < minDistSq) continue;
+      const cmd = prevSx === -Infinity || distSq > maxJumpSq ? "M" : "L";
+      segments.push(`${cmd} ${sx.toFixed(1)} ${sy.toFixed(1)}`);
       prevSx = sx;
       prevSy = sy;
     }

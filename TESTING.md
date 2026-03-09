@@ -203,44 +203,44 @@ These test the six new native helpers. Each should produce vector output.
 
 ### K2. Strange attractor
 - **Setup:** No selection needed
-- **Prompt:** `Generate a Clifford strange attractor`
-- **Expect:** Wispy orbital path as a single vector, controls for a/b/c/d params and iterations
-- **Verify:** Changing a/b/c/d sliders produces wildly different shapes. Output is a stroked path (not filled).
+- **Prompt:** `Generate a Clifford strange attractor in a 500px frame with a thin 0.5px white stroke on a dark background. Use a=−1.4 b=1.6 c=1.0 d=0.7 and 80000 iterations. Add sliders for a, b, c, d (range −3 to 3), iterations, and stroke weight, plus a color picker for the stroke.`
+- **Expect:** Dense, wispy orbital path as a single stroked vector inside a dark frame. Controls for a/b/c/d params, iterations, stroke weight, and stroke color.
+- **Verify:** Changing a/b/c/d sliders produces wildly different shapes. Output is a stroked path with no fill. Increasing iterations makes the path denser.
 - **Status:**
 
 ### K3. Metaballs
 - **Setup:** No selection needed
-- **Prompt:** `Create organic metaballs that merge together`
-- **Expect:** Smooth blob shapes that merge where close, controls for count/radius/smoothing
-- **Verify:** Output is a single filled vector with smooth organic contours. Increasing count adds more blobs.
+- **Prompt:** `Create 6 organic metaballs that merge together in a 500px frame. Use radius range 40–90px, 2 smoothing passes, and a teal fill color. Add sliders for blob count (2–12), min radius, max radius, and smoothing, plus a color picker.`
+- **Expect:** 6 smooth organic blobs that fuse where they overlap, rendered as a single filled vector with clean contours. Controls for count, min/max radius, smoothing passes, and fill color.
+- **Verify:** Output is a single filled vector (not multiple shapes). Increasing count adds more blobs. Changing smoothing from 0 to 3 visibly affects contour smoothness. Blobs that are close merge into continuous outlines.
 - **Status:**
 
 ### K4. Circle packing
 - **Setup:** No selection needed
-- **Prompt:** `Fill a frame with packed circles of varying sizes`
-- **Expect:** Non-overlapping circles of different radii, controls for count/min/max radius
-- **Verify:** Circles are native Figma ellipses (not vectors). No circles overlap.
+- **Prompt:** `Fill a 500px frame with 150 tightly packed circles, sizes ranging from 3px to 40px radius, 1px padding between them. Color each circle randomly. Add sliders for count (10–400), min radius, max radius, padding, and frame size.`
+- **Expect:** Non-overlapping circles of varying radii filling the frame, each with a random color. Controls for count, min/max radius, padding, and size.
+- **Verify:** Circles are native Figma ellipses (not vectors). No circles overlap. Increasing count packs more circles in. Changing min/max radius visibly shifts the size distribution.
 - **Status:**
 
 ### K5. DLA / fractal growth
 - **Setup:** No selection needed
-- **Prompt:** `Generate a coral-like DLA growth pattern`
-- **Expect:** Branching fractal tree structure growing from center, controls for particle count
-- **Verify:** Output has organic branching structure, not random scatter.
+- **Prompt:** `Generate a coral-like DLA fractal growth pattern in a 400px frame using 300 particles with a stick distance of 3px. Render as connected branch lines with a 1px white stroke on a dark background. Add sliders for particle count (50–500), stick distance (1–10), and stroke weight.`
+- **Expect:** Branching fractal tree structure growing outward from the center, rendered as connected line segments (parent-to-child) in a single stroked vector. Controls for particle count, stick distance, and stroke weight.
+- **Verify:** Output has organic branching structure, not random scatter. More particles = denser tree. Larger stick distance = chunkier branches.
 - **Status:**
 
 ### K6. Cellular automata - Wolfram
 - **Setup:** No selection needed
-- **Prompt:** `Create a Wolfram Rule 90 cellular automaton pattern`
-- **Expect:** Sierpinski triangle-like pattern, controls for rule number/grid size/steps
-- **Verify:** Changing the rule number (try 30, 90, 110) produces different patterns. Output is a single vector.
+- **Prompt:** `Create a Wolfram Rule 90 cellular automaton in a 500px frame, 100-cell grid, 80 steps, blocky rectangle style. Black fill on white. Add sliders for rule number (0–255), grid size (20–150), and steps (10–200), plus a toggle for smooth vs blocky output.`
+- **Expect:** Sierpinski triangle-like pattern with crisp rectangular cells. Controls for rule number, grid size, steps, and smooth toggle.
+- **Verify:** Changing the rule number produces different patterns (try 30 = chaotic, 90 = Sierpinski, 110 = complex). Toggling smooth on/off switches between marching-squares contours and blocky rectangles. Output is a single vector.
 - **Status:**
 
 ### K7. Cellular automata - Game of Life
 - **Setup:** No selection needed
-- **Prompt:** `Generate a Game of Life pattern with smooth organic contours`
-- **Expect:** Organic blob shapes from evolved Life grid, controls for grid size/steps/fill ratio
-- **Verify:** Smooth contours (not blocky pixels). Output is a filled vector.
+- **Prompt:** `Generate a Game of Life pattern in a 500px frame — 60-cell grid, 40 steps of evolution, 0.35 fill ratio, smooth marching-squares contours with 2 Chaikin passes. Dark green fill. Add sliders for grid size (20–120), steps (10–100), fill ratio (0.1–0.7), and smoothing (0–4).`
+- **Expect:** Organic blob-like shapes from an evolved Life grid, rendered as smooth filled vector contours. Controls for grid size, steps, fill ratio, and smoothing.
+- **Verify:** Smooth contours (not blocky pixels). Increasing steps evolves the pattern further. Higher fill ratio starts with more cells. Smoothing 0 = angular, 3+ = very organic. Output is a filled vector.
 - **Status:**
 
 ### K8. Turing pattern (vector)

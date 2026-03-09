@@ -6205,6 +6205,35 @@
       node.fills = [{ type: "SOLID", color: { r, g, b }, opacity: 1 }];
       return;
     }
+    if (Array.isArray(args.value)) {
+      const stops = args.value;
+      const validStops = stops.filter((s) => typeof s.color === "string" && s.color.startsWith("#"));
+      if (validStops.length >= 2) {
+        const geoNode = node;
+        const gradientStops = validStops.map((s) => {
+          const h = s.color.replace("#", "");
+          return {
+            position: typeof s.position === "number" ? s.position : 0,
+            color: {
+              r: parseInt(h.slice(0, 2), 16) / 255,
+              g: parseInt(h.slice(2, 4), 16) / 255,
+              b: parseInt(h.slice(4, 6), 16) / 255,
+              a: 1
+            }
+          };
+        });
+        const fills = geoNode.fills.map(clonePaint);
+        const firstFill = fills[0];
+        const existingTransform = firstFill && typeof firstFill.type === "string" && firstFill.type.startsWith("GRADIENT_") ? firstFill.gradientTransform : [[1, 0, 0], [0, 1, 0]];
+        geoNode.fills = [{
+          type: "GRADIENT_LINEAR",
+          gradientTransform: existingTransform,
+          gradientStops,
+          opacity: 1
+        }];
+        return;
+      }
+    }
     if (typeof args.value === "object" && args.value !== null && !Array.isArray(args.value)) {
       const colorMap = args.value;
       const hexValues = Object.values(colorMap).filter(
@@ -6595,7 +6624,12 @@
         console.error(`[action-executor] action[${i}] ${action.method} failed:`, msg);
       }
     }
-    const isReapply = actions.length > 0 && actions[0].method === "deleteChildren";
+    const isReapply = actions.length > 0 && actions.some(
+      (a, i) => a.method === "deleteChildren" && i < 3
+    );
+    const generatorHandledSize = isReapply && actions.some(
+      (a, i) => a.method === "resize" && i < 3
+    );
     if (rootFrameId) {
       try {
         const rootNode = (_a = tempMap.get(rootFrameId)) != null ? _a : await figma.getNodeByIdAsync(rootFrameId);
@@ -6606,7 +6640,7 @@
               frame.primaryAxisSizingMode = "AUTO";
               frame.counterAxisSizingMode = "AUTO";
             }
-          } else if (frame.children.length > 0) {
+          } else if (frame.children.length > 0 && !generatorHandledSize) {
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             for (const child of frame.children) {
               minX = Math.min(minX, child.x);
@@ -6614,24 +6648,7 @@
               maxX = Math.max(maxX, child.x + child.width);
               maxY = Math.max(maxY, child.y + child.height);
             }
-            if (isReapply) {
-              const contentW = maxX - minX;
-              const contentH = maxY - minY;
-              if (contentW > 0 && contentH > 0) {
-                const scaleX = frame.width / contentW;
-                const scaleY = frame.height / contentH;
-                const scale = Math.min(scaleX, scaleY);
-                const offsetX = (frame.width - contentW * scale) / 2;
-                const offsetY = (frame.height - contentH * scale) / 2;
-                for (const child of frame.children) {
-                  child.x = (child.x - minX) * scale + offsetX;
-                  child.y = (child.y - minY) * scale + offsetY;
-                  if ("resize" in child) {
-                    child.resize(child.width * scale, child.height * scale);
-                  }
-                }
-              }
-            } else {
+            if (!isReapply) {
               frame.resize(maxX - minX, maxY - minY);
               if (minX !== 0 || minY !== 0) {
                 for (const child of frame.children) {
