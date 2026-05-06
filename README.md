@@ -107,7 +107,7 @@ Request lifecycle:
 8. `UIRenderer.tsx` renders the returned control spec.
 9. Control changes either send direct `CONTROL_CHANGE` patches or re-run the generator from `codegen.ts`.
 
-More diagrams are in `ARCHITECTURE.md`.
+More diagrams are in `docs/ARCHITECTURE.md`.
 
 ## Prompt System
 
@@ -232,9 +232,9 @@ Generated files in `dist/` are build artifacts. `dist/code.js`, `dist/ui.html`, 
 
 ## Testing And References
 
-Manual regression coverage lives in `TESTING.md`. It contains 32 tests across direct actions, generators, image processing, vector paths, 3D, Voronoi, fractals, sketchy style, pattern fills, computational helpers, multi-turn conversation, and edge cases.
+Manual regression coverage lives in `docs/TESTING.md`. It contains 32 tests across direct actions, generators, image processing, vector paths, 3D, Voronoi, fractals, sketchy style, pattern fills, computational helpers, multi-turn conversation, and edge cases.
 
-`SHOWCASE.md` contains a prompt catalog with 54+ single-effect prompts and 29 advanced compositions.
+`docs/SHOWCASE.md` contains a prompt catalog with 54+ single-effect prompts and 29 advanced compositions.
 
 Run a build check before loading or sharing changes:
 
